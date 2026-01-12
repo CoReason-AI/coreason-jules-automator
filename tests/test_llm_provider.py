@@ -29,6 +29,24 @@ def test_init_api_strategy_with_key(mock_settings: None, monkeypatch: pytest.Mon
         assert provider.client is not None
 
 
+def test_init_api_strategy_with_deepseek_key(mock_settings: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test initialization with API strategy and DeepSeek key present (no OpenAI key)."""
+    monkeypatch.delenv("VIBE_OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("VIBE_DEEPSEEK_API_KEY", "sk-deepseek")
+    get_settings.cache_clear()
+
+    mock_openai_module = MagicMock()
+    with patch.dict(sys.modules, {"openai": mock_openai_module}):
+        provider = LLMProvider()
+        assert provider.strategy == "api"
+        # OpenAI class is instantiated with base_url
+        mock_openai_module.OpenAI.assert_called_once()
+        call_kwargs = mock_openai_module.OpenAI.call_args[1]
+        assert call_kwargs["api_key"] == "sk-deepseek"
+        assert call_kwargs["base_url"] == "https://api.deepseek.com"
+        assert provider.client is not None
+
+
 def test_init_api_strategy_openai_import_error(mock_settings: None, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test initialization with API strategy but openai package is missing."""
     monkeypatch.setenv("VIBE_OPENAI_API_KEY", "sk-test")
