@@ -1,3 +1,4 @@
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -5,7 +6,18 @@ import pytest
 from coreason_jules_automator.llm.provider import LLMProvider
 
 
-def test_sanitize_commit() -> None:
+@pytest.fixture
+def mock_settings() -> Any:
+    with patch("coreason_jules_automator.llm.provider.get_settings") as mock_get_settings:
+        mock_settings = MagicMock()
+        mock_settings.llm_strategy = "api"
+        # Set default behavior for secrets
+        mock_settings.OPENAI_API_KEY.get_secret_value.return_value = "sk-test"
+        mock_get_settings.return_value = mock_settings
+        yield mock_settings
+
+
+def test_sanitize_commit(mock_settings: Any) -> None:
     """Test commit message sanitization."""
     with patch("coreason_jules_automator.llm.provider.LLMProvider._initialize_client", return_value=None):
         provider = LLMProvider()
@@ -19,108 +31,92 @@ def test_sanitize_commit() -> None:
         assert provider.sanitize_commit(original) == expected
 
 
-def test_init_api_success(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_init_api_success(mock_settings: Any) -> None:
     """Test initialization with API strategy and key."""
-    # Patch settings via get_settings
-    with patch("coreason_jules_automator.llm.provider.get_settings") as mock_get_settings:
-        mock_settings = MagicMock()
-        mock_settings.llm_strategy = "api"
-        mock_settings.OPENAI_API_KEY.get_secret_value.return_value = "sk-test"
-        mock_get_settings.return_value = mock_settings
+    mock_settings.llm_strategy = "api"
+    mock_settings.OPENAI_API_KEY.get_secret_value.return_value = "sk-test"
 
-        with patch("openai.OpenAI") as MockOpenAI:
-            provider = LLMProvider()
-            assert provider.client is not None
-            MockOpenAI.assert_called_once_with(api_key="sk-test")
+    with patch("openai.OpenAI") as MockOpenAI:
+        provider = LLMProvider()
+        assert provider.client is not None
+        MockOpenAI.assert_called_once_with(api_key="sk-test")
 
 
-def test_init_api_import_error() -> None:
+def test_init_api_import_error(mock_settings: Any) -> None:
     """Test fallback to local if openai not installed."""
-    with patch("coreason_jules_automator.llm.provider.get_settings") as mock_get_settings:
-        mock_settings = MagicMock()
-        mock_settings.llm_strategy = "api"
-        mock_settings.OPENAI_API_KEY.get_secret_value.return_value = "sk-test"
-        mock_get_settings.return_value = mock_settings
+    mock_settings.llm_strategy = "api"
+    mock_settings.OPENAI_API_KEY.get_secret_value.return_value = "sk-test"
 
-        # Simulate ImportError
-        with patch.dict("sys.modules", {"openai": None}):
-            with patch.object(LLMProvider, "_initialize_local") as mock_local:
-                LLMProvider()
-                mock_local.assert_called_once()
-
-
-def test_init_fallback_to_local_no_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Test fallback to local if API key missing."""
-    with patch("coreason_jules_automator.llm.provider.get_settings") as mock_get_settings:
-        mock_settings = MagicMock()
-        mock_settings.llm_strategy = "api"
-        mock_settings.OPENAI_API_KEY = None
-        mock_get_settings.return_value = mock_settings
-
+    # Simulate ImportError
+    with patch.dict("sys.modules", {"openai": None}):
         with patch.object(LLMProvider, "_initialize_local") as mock_local:
             LLMProvider()
             mock_local.assert_called_once()
 
 
-def test_init_local_success() -> None:
+def test_init_fallback_to_local_no_key(mock_settings: Any) -> None:
+    """Test fallback to local if API key missing."""
+    mock_settings.llm_strategy = "api"
+    mock_settings.OPENAI_API_KEY = None
+
+    with patch.object(LLMProvider, "_initialize_local") as mock_local:
+        LLMProvider()
+        mock_local.assert_called_once()
+
+
+def test_init_local_success(mock_settings: Any) -> None:
     """Test local initialization."""
-    with patch("coreason_jules_automator.llm.provider.get_settings") as mock_get_settings:
-        mock_settings = MagicMock()
-        mock_settings.llm_strategy = "local"
-        mock_get_settings.return_value = mock_settings
+    mock_settings.llm_strategy = "local"
 
-        with patch("llama_cpp.Llama") as MockLlama:
-            provider = LLMProvider()
-            assert provider.client is not None
-            MockLlama.assert_called_once()
+    # Mock llama_cpp module existence and Llama class
+    mock_llama_module = MagicMock()
+    with patch.dict("sys.modules", {"llama_cpp": mock_llama_module}):
+        provider = LLMProvider()
+        assert provider.client is not None
+        mock_llama_module.Llama.assert_called_once()
 
 
-def test_init_local_import_error() -> None:
+def test_init_local_import_error(mock_settings: Any) -> None:
     """Test local initialization failure due to missing dependency."""
-    with patch("coreason_jules_automator.llm.provider.get_settings") as mock_get_settings:
-        mock_settings = MagicMock()
-        mock_settings.llm_strategy = "local"
-        mock_get_settings.return_value = mock_settings
+    mock_settings.llm_strategy = "local"
 
-        with patch.dict("sys.modules", {"llama_cpp": None}):
-            with pytest.raises(RuntimeError) as excinfo:
-                LLMProvider()
-            assert "llama-cpp-python not installed" in str(excinfo.value)
+    # Simulate missing llama_cpp
+    with patch.dict("sys.modules", {"llama_cpp": None}):
+        with pytest.raises(RuntimeError) as excinfo:
+            LLMProvider()
+        assert "llama-cpp-python not installed" in str(excinfo.value)
 
 
-def test_init_local_exception() -> None:
+def test_init_local_exception(mock_settings: Any) -> None:
     """Test local initialization failure due to other error (e.g. model missing)."""
-    with patch("coreason_jules_automator.llm.provider.get_settings") as mock_get_settings:
-        mock_settings = MagicMock()
-        mock_settings.llm_strategy = "local"
-        mock_get_settings.return_value = mock_settings
+    mock_settings.llm_strategy = "local"
 
-        # We need llama_cpp to be present but raising exception
-        with patch("llama_cpp.Llama", side_effect=Exception("Model not found")):
-            provider = LLMProvider()
-            assert provider.client is None
-            # Should log warning
+    mock_llama_module = MagicMock()
+    # Configure Llama to raise Exception
+    mock_llama_module.Llama.side_effect = Exception("Model not found")
+
+    with patch.dict("sys.modules", {"llama_cpp": mock_llama_module}):
+        provider = LLMProvider()
+        assert provider.client is None
+        # Should log warning
 
 
-def test_summarize_logs_openai() -> None:
+def test_summarize_logs_openai(mock_settings: Any) -> None:
     """Test summarize_logs with OpenAI client."""
-    with patch("coreason_jules_automator.llm.provider.get_settings") as mock_get_settings:
-        mock_settings = MagicMock()
-        mock_settings.llm_strategy = "api"
-        mock_settings.OPENAI_API_KEY.get_secret_value.return_value = "sk-test"
-        mock_get_settings.return_value = mock_settings
+    mock_settings.llm_strategy = "api"
+    mock_settings.OPENAI_API_KEY.get_secret_value.return_value = "sk-test"
 
-        with patch("openai.OpenAI") as MockOpenAI:
-            mock_client = MagicMock()
-            mock_client.chat.completions.create.return_value.choices[0].message.content = "Summary."
-            MockOpenAI.return_value = mock_client
+    with patch("openai.OpenAI") as MockOpenAI:
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.return_value.choices[0].message.content = "Summary."
+        MockOpenAI.return_value = mock_client
 
-            provider = LLMProvider()
-            summary = provider.summarize_logs("long error log")
-            assert summary == "Summary."
+        provider = LLMProvider()
+        summary = provider.summarize_logs("long error log")
+        assert summary == "Summary."
 
 
-def test_summarize_logs_llama() -> None:
+def test_summarize_logs_llama(mock_settings: Any) -> None:
     """Test summarize_logs with Llama client."""
     with patch("coreason_jules_automator.llm.provider.LLMProvider._initialize_client") as mock_init:
         mock_client = MagicMock()
@@ -135,7 +131,7 @@ def test_summarize_logs_llama() -> None:
         assert summary == "Local Summary."
 
 
-def test_summarize_logs_exception() -> None:
+def test_summarize_logs_exception(mock_settings: Any) -> None:
     """Test exception during summarization."""
     with patch("coreason_jules_automator.llm.provider.LLMProvider._initialize_client") as mock_init:
         mock_client = MagicMock()
@@ -146,7 +142,7 @@ def test_summarize_logs_exception() -> None:
         assert provider.summarize_logs("err") == "Log summarization failed. Please check the logs directly."
 
 
-def test_summarize_logs_failure() -> None:
+def test_summarize_logs_failure(mock_settings: Any) -> None:
     """Test failure in summarization (no client)."""
     with patch("coreason_jules_automator.llm.provider.LLMProvider._initialize_client", return_value=None):
         provider = LLMProvider()

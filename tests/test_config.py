@@ -115,3 +115,23 @@ def test_config_settings_init_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     # Reload the module. Settings() instantiation should fail.
     # The try/except block in config.py should catch it.
     importlib.reload(coreason_jules_automator.config)
+
+
+def test_get_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test get_settings returns a Settings instance."""
+    monkeypatch.setenv("VIBE_GITHUB_TOKEN", "dummy")
+    monkeypatch.setenv("VIBE_GOOGLE_API_KEY", "dummy")
+
+    # Reload module to get fresh classes/functions
+    importlib.reload(coreason_jules_automator.config)
+    from coreason_jules_automator.config import Settings as FreshSettings
+    from coreason_jules_automator.config import get_settings as fresh_get_settings
+
+    # clear lru_cache
+    fresh_get_settings.cache_clear()
+
+    s1 = fresh_get_settings()
+    assert isinstance(s1, FreshSettings)
+
+    s2 = fresh_get_settings()
+    assert s1 is s2
