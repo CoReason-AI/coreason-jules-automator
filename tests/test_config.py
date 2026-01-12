@@ -1,8 +1,10 @@
+import importlib
 from unittest.mock import patch
 
 import pytest
 from pydantic import ValidationError
 
+import coreason_jules_automator.config
 from coreason_jules_automator.config import Settings
 
 
@@ -102,3 +104,14 @@ def test_api_strategy_missing_dependency_ok(monkeypatch: pytest.MonkeyPatch) -> 
     with patch("importlib.util.find_spec", return_value=None):
         settings = Settings()  # type: ignore
         assert settings.llm_strategy == "api"
+
+
+def test_config_settings_init_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test exception during Settings initialization in config.py."""
+    # Unset required env vars to force ValidationError during init
+    monkeypatch.delenv("VIBE_GITHUB_TOKEN", raising=False)
+    monkeypatch.delenv("VIBE_GOOGLE_API_KEY", raising=False)
+
+    # Reload the module. Settings() instantiation should fail.
+    # The try/except block in config.py should catch it.
+    importlib.reload(coreason_jules_automator.config)
