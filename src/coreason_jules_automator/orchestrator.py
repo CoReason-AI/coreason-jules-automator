@@ -82,13 +82,18 @@ class Orchestrator:
         """
         settings = get_settings()
         logger.info("Executing Line 1: Local Defense")
+        passed = True
 
         # Security Scan
         if "security" in settings.extensions_enabled:
             try:
                 self.gemini.security_scan()
-            except RuntimeError:  # pragma: no cover
-                return False
+            except RuntimeError:
+                # logger.error is implicitly tested via side effect
+                passed = False
+
+        if not passed:
+            return False
 
         # Code Review
         if "code-review" in settings.extensions_enabled:
@@ -96,9 +101,9 @@ class Orchestrator:
                 self.gemini.code_review()
             except RuntimeError as e:  # pragma: no cover
                 logger.error(f"Code review failed: {e}")  # pragma: no cover
-                return False
+                passed = False
 
-        return True
+        return passed
 
     def _line_2_defense(self, branch_name: str) -> bool:
         """
