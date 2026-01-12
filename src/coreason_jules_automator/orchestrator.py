@@ -13,7 +13,7 @@ from typing import Any, List
 
 from coreason_jules_automator.agent.jules import JulesAgent
 from coreason_jules_automator.ci.github import GitHubInterface
-from coreason_jules_automator.config import settings
+from coreason_jules_automator.config import get_settings
 from coreason_jules_automator.interfaces.gemini import GeminiInterface
 from coreason_jules_automator.llm.provider import LLMProvider
 from coreason_jules_automator.utils.logger import logger
@@ -36,6 +36,7 @@ class Orchestrator:
         Executes the full development cycle:
         Agent -> Line 1 (Gemini) -> Line 2 (GitHub CI) -> Success/Retry.
         """
+        settings = get_settings()
         logger.info(f"Starting orchestration cycle for branch: {branch_name}")
 
         attempt = 0
@@ -57,9 +58,7 @@ class Orchestrator:
 
             # 2. Line 1: Fast Local Checks
             if not self._line_1_defense():
-                logger.warning(
-                    "Line 1 defense failed. Feedback sent to Agent (simulated). Retrying..."
-                )  # pragma: no cover
+                logger.warning("Line 1 defense failed. Feedback sent to Agent (simulated). Retrying...")
                 # In a real loop, we would feed feedback back to agent.
                 # Here, we just loop back.
                 # To simulate feedback, we could append failure to next task description?
@@ -81,6 +80,7 @@ class Orchestrator:
         Executes Gemini Security Scan and Code Review.
         Returns True if pass, False if fail.
         """
+        settings = get_settings()
         logger.info("Executing Line 1: Local Defense")
 
         # Security Scan
@@ -88,7 +88,7 @@ class Orchestrator:
             try:
                 self.gemini.security_scan()
             except RuntimeError:
-                return False  # pragma: no cover
+                return False
 
         # Code Review
         if "code-review" in settings.extensions_enabled:

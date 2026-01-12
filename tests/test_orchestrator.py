@@ -1,5 +1,5 @@
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -15,33 +15,44 @@ def orchestrator() -> Any:
         patch("coreason_jules_automator.orchestrator.LLMProvider"),
         patch("coreason_jules_automator.orchestrator.JulesAgent"),
     ):
+        # We need to ensure settings is also mocked or valid during init if it calls get_settings
+        # Orchestrator doesn't call get_settings in init, but methods do.
         return Orchestrator()
 
 
 def test_line_1_defense_success(orchestrator: Any) -> None:
     """Test Line 1 passes when checks succeed."""
-    # Mocks are already set up by fixture init
-    # Configure them to not raise exceptions
-    assert orchestrator._line_1_defense() is True
-    orchestrator.gemini.security_scan.assert_called_once()
-    orchestrator.gemini.code_review.assert_called_once()
+    with patch("coreason_jules_automator.orchestrator.get_settings") as mock_get_settings:
+        mock_settings = MagicMock()
+        mock_settings.extensions_enabled = ["security", "code-review"]
+        mock_get_settings.return_value = mock_settings
+
+        assert orchestrator._line_1_defense() is True
+        orchestrator.gemini.security_scan.assert_called_once()
+        orchestrator.gemini.code_review.assert_called_once()
 
 
 def test_line_1_defense_security_fail(orchestrator: Any) -> None:
     """Test Line 1 fails when security scan fails."""
-    orchestrator.gemini.security_scan.side_effect = RuntimeError("Security Fail")
-    assert orchestrator._line_1_defense() is False
-    orchestrator.gemini.code_review.assert_not_called()  # Short circuits? No, separate checks in implementation logic.
-    # Actually logic is: if security fails, return False immediately?
-    # Let's check implementation:
-    # if security: try... except return False.
-    # So yes, it returns False immediately.
+    with patch("coreason_jules_automator.orchestrator.get_settings") as mock_get_settings:
+        mock_settings = MagicMock()
+        mock_settings.extensions_enabled = ["security", "code-review"]
+        mock_get_settings.return_value = mock_settings
+
+        orchestrator.gemini.security_scan.side_effect = RuntimeError("Security Fail")
+        assert orchestrator._line_1_defense() is False
+        orchestrator.gemini.code_review.assert_not_called()
 
 
 def test_line_1_defense_review_fail(orchestrator: Any) -> None:
     """Test Line 1 fails when code review fails."""
-    orchestrator.gemini.code_review.side_effect = RuntimeError("Review Fail")
-    assert orchestrator._line_1_defense() is False
+    with patch("coreason_jules_automator.orchestrator.get_settings") as mock_get_settings:
+        mock_settings = MagicMock()
+        mock_settings.extensions_enabled = ["security", "code-review"]
+        mock_get_settings.return_value = mock_settings
+
+        orchestrator.gemini.code_review.side_effect = RuntimeError("Review Fail")
+        assert orchestrator._line_1_defense() is False
 
 
 def test_line_2_defense_success(orchestrator: Any) -> None:
@@ -89,38 +100,55 @@ def test_line_2_defense_timeout(orchestrator: Any) -> None:
 
 def test_run_cycle_success(orchestrator: Any) -> None:
     """Test full cycle success."""
-    with (
-        patch.object(orchestrator, "_line_1_defense", return_value=True),
-        patch.object(orchestrator, "_line_2_defense", return_value=True),
-    ):
-        assert orchestrator.run_cycle("task", "branch") is True
-        orchestrator.agent.start.assert_called_with("task")
+    with patch("coreason_jules_automator.orchestrator.get_settings") as mock_get_settings:
+        mock_settings = MagicMock()
+        mock_settings.max_retries = 5
+        mock_get_settings.return_value = mock_settings
+
+        with (
+            patch.object(orchestrator, "_line_1_defense", return_value=True),
+            patch.object(orchestrator, "_line_2_defense", return_value=True),
+        ):
+            assert orchestrator.run_cycle("task", "branch") is True
+            orchestrator.agent.start.assert_called_with("task")
 
 
 def test_run_cycle_agent_fail(orchestrator: Any) -> None:
     """Test cycle aborts if agent fails."""
-    orchestrator.agent.start.side_effect = Exception("Agent died")
-    assert orchestrator.run_cycle("task", "branch") is False
+    with patch("coreason_jules_automator.orchestrator.get_settings") as mock_get_settings:
+        mock_settings = MagicMock()
+        mock_settings.max_retries = 5
+        mock_get_settings.return_value = mock_settings
+
+        orchestrator.agent.start.side_effect = Exception("Agent died")
+        assert orchestrator.run_cycle("task", "branch") is False
 
 
 def test_run_cycle_line_1_retry(orchestrator: Any) -> None:
     """Test retry loop on Line 1 failure."""
     # Fail once, then pass
-    with (
-        patch.object(orchestrator, "_line_1_defense", side_effect=[False, True]),
-        patch.object(orchestrator, "_line_2_defense", return_value=True),
-    ):
-        assert orchestrator.run_cycle("task", "branch") is True
-        assert orchestrator.agent.start.call_count == 2
+    with patch("coreason_jules_automator.orchestrator.get_settings") as mock_get_settings:
+        mock_settings = MagicMock()
+        mock_settings.max_retries = 5
+        mock_get_settings.return_value = mock_settings
+
+        with (
+            patch.object(orchestrator, "_line_1_defense", side_effect=[False, True]),
+            patch.object(orchestrator, "_line_2_defense", return_value=True),
+        ):
+            assert orchestrator.run_cycle("task", "branch") is True
+            assert orchestrator.agent.start.call_count == 2
 
 
 def test_run_cycle_max_retries(orchestrator: Any) -> None:
     """Test max retries reached."""
     # Always fail Line 1
-    with patch.object(orchestrator, "_line_1_defense", return_value=False):
-        # Mock settings max_retries to 2 for speed
-        with patch("coreason_jules_automator.orchestrator.settings") as mock_settings:
-            mock_settings.max_retries = 2
+    with patch("coreason_jules_automator.orchestrator.get_settings") as mock_get_settings:
+        mock_settings = MagicMock()
+        mock_settings.max_retries = 2
+        mock_get_settings.return_value = mock_settings
+
+        with patch.object(orchestrator, "_line_1_defense", return_value=False):
             assert orchestrator.run_cycle("task", "branch") is False
             assert orchestrator.agent.start.call_count == 2
 
@@ -149,9 +177,11 @@ def test_orchestrator_line_1_defense_review_fail_coverage() -> None:
     """Explicit test to hit orchestrator.py line 70."""
     from coreason_jules_automator.orchestrator import Orchestrator
 
-    with patch("coreason_jules_automator.orchestrator.settings") as mock_settings:
+    with patch("coreason_jules_automator.orchestrator.get_settings") as mock_get_settings:
+        mock_settings = MagicMock()
         mock_settings.extensions_enabled = ["code-review"]
-        mock_settings.max_retries = 1
+        # mock_settings.max_retries = 1
+        mock_get_settings.return_value = mock_settings
 
         with patch("coreason_jules_automator.orchestrator.GeminiInterface") as MockGemini:
             mock_gemini = MockGemini.return_value

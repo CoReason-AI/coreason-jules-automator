@@ -11,7 +11,7 @@
 import re
 from typing import Any, Optional
 
-from coreason_jules_automator.config import settings
+from coreason_jules_automator.config import get_settings
 from coreason_jules_automator.utils.logger import logger
 
 
@@ -22,11 +22,13 @@ class LLMProvider:
     """
 
     def __init__(self) -> None:
+        settings = get_settings()
         self.strategy: str = settings.llm_strategy
         self.client: Optional[Any] = self._initialize_client()
 
     def _initialize_client(self) -> Optional[Any]:
         """Initializes the LLM client based on strategy and available keys."""
+        settings = get_settings()
         if self.strategy == "api":
             if settings.OPENAI_API_KEY:
                 try:
