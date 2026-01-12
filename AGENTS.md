@@ -19,6 +19,7 @@
 
 ## **1. Project Overview**
 
+* **Name:** coreason-jules-automator (The "Vibe Runner")
 * **Type:** Python Application / Library
 * **Language:** Python 3.12, 3.13, 3.14 (Latest 3 versions)
 * **Package Manager:** Poetry
@@ -29,11 +30,11 @@
 
 The project is managed via Poetry. Do not use pip directly unless inside a Docker build stage.
 
-* **Install Dependencies:** poetry install
-* **Run Linter (Pre-commit):** poetry run pre-commit run --all-files
-* **Run Tests:** poetry run pytest
-* **Build Docs:** poetry run mkdocs build --strict
-* **Build Package:** poetry build (or python -m build in CI)
+* **Install Dependencies:** `poetry install`
+* **Run Linter (Pre-commit):** `poetry run pre-commit run --all-files`
+* **Run Tests:** `poetry run pytest`
+* **Run Application:** `poetry run vibe-runner`
+* **Build Package:** `poetry build` (or `python -m build` in CI)
 
 ## **3. Development Rules**
 
@@ -41,126 +42,103 @@ The project is managed via Poetry. Do not use pip directly unless inside a Docke
 
 This project uses **Ruff** for Python linting/formatting, **Mypy** for typing, and **Hadolint** for Dockerfiles.
 
-* **Formatting:** Do not manually format. Run poetry run ruff format .
-* **Linting:** Fix violations automatically where possible: poetry run ruff check --fix .
+* **Formatting:** Do not manually format. Run `poetry run ruff format .`
+* **Linting:** Fix violations automatically where possible: `poetry run ruff check --fix .`
 * **Docker Linting:** Checked via pre-commit (hadolint).
 * **Typing:**
   * Strict static typing is encouraged.
-  * Run checks with: poetry run mypy .
-  * Avoid Any wherever possible.
+  * Run checks with: `poetry run mypy .`
+  * Avoid `Any` wherever possible.
 * **Logging:** Use the project's centralized logging configuration.
-  * *Good:* from src.utils.logger import logger -> logger.info("...")
+  * *Good:* `from src.coreason_jules_automator.utils.logger import logger -> logger.info("...")`
 * **Licensing:** Every .py file must start with the standard license header.
 
 ### **Legal & Intellectual Property**
 
-Strict Prohibition on External Code:
-You are strictly forbidden from copying, reproducing, imitating, or drawing from any external codebases, especially GPL, AGPL, or other non-permissive licenses or copy left licenses. All generated logic must be original or derived from permissively licensed (e.g., MIT, Apache 2.0) sources and properly attributed.
+**Strict Prohibition on External Code:**
+You are strictly forbidden from copying, reproducing, imitating, or drawing from any external codebases, especially GPL, AGPL, or other non-permissive/copyleft licenses. All generated logic must be original or derived from permissively licensed (e.g., MIT, Apache 2.0) sources and properly attributed.
 
 ### **File Structure**
 
-* **Source Code:** src/coreason_jules_automator/
-  * main.py: Entry point.
-  * __init__.py: Package definition.
-* **Tests:** tests/
-  * Test files must start with test_.
-  * Use pytest fixtures where appropriate.
+* **Source Code:** `src/coreason_jules_automator/`
+  * `cli.py`: Entry point (Typer/Click).
+  * `config.py`: Pydantic settings.
+  * `orchestrator.py`: Main State Machine.
+  * `agent/`: Interfaces for external agents (Jules).
+  * `ci/`: Interfaces for GitHub/CI.
+  * `llm/`: Local and API Hybrid providers.
+  * `interfaces/`: Wrappers for "Borrowed" tools (Gemini extensions).
+* **Tests:** `tests/`
+  * Test files must start with `test_`.
 
 ### **Testing Guidelines**
 
 **Mandatory Requirement: 100% Test Coverage.**
 
-* **Test Strategy (Redundancy & Depth):**
-  * **Redundant Coverage:** Verify critical logic via multiple vectors (e.g., unit tests for isolation AND integration tests for workflow). Overlap is desired.
-  * **Simple Tests:** Verify happy paths and basic functionality.
-  * **Complex Tests:** Verify multi-step workflows, state mutations, and heavy computation.
-  * **Edge Cases:** Explicitly test boundary values, empty inputs, null states, and error handling.
-  * **Exclusions:** Use # pragma: no cover sparingly and **only** for defensive code that is unreachable in standard execution.
-  * **No Throwaway Scripts:** Never create temporary test files (e.g., temp.py). Always add proper tests to the tests/ directory.
-* **External Services & APIs:**
-  * **Scenario A (Default):** Use mocks (unittest.mock, pytest-mock, or respx) for ALL external calls.
-  * **Scenario B (Credentials Provided):** If the user provides API keys or connection strings:
-    * **DO NOT** remove the mocks.
-    * **ADD** a separate suite of live integration tests marked with @pytest.mark.live.
-    * **Standard Env Vars:** Expect Postgres credentials in PGHOST, PGPORT, PGUSER, PGPASSWORD, PGDATABASE.
+* **Strategy:**
+  * **Mocking is Mandatory for Agents/LLMs:** You **MUST** mock `pexpect` sessions, `llama_cpp.Llama` objects, and API calls during standard unit tests. **Never load a 4GB GGUF model during a test run.**
+  * **State Machine Verification:** Tests must verify the logic of the "Red-Green-Refactor" transitions (e.g., verify that a CI failure triggers the Remediation Loop).
 * **Safety:** Never hardcode credentials in tests. Use environment variables.
 
-## **4. Architecture & Security**
+## **4. Vibe Runner Architecture (Specific Mandates)**
 
-### **Logging & Observability**
+This project implements a **Hybrid "Two-Line" Defense** architecture.
 
-This project enforces a centralized logging architecture using the `loguru` library.
+### **A. The "Borrowed" Tools (Line 1 - Fast/Local)**
+We leverage existing Gemini CLI Extensions as the first line of defense. The Orchestrator must enforce their presence:
+* **Jules:** The Worker Agent (Required).
+* **Conductor:** Context Provider (Optional/Supported).
+* **Security:** Vulnerability Scanner (Required).
+* **Code Review:** Linter/Style Checker (Required).
 
-*   **Standard:** `loguru` is the exclusive logging library. Do not use the built-in `logging` module or `print` statements.
-*   **Outputs (Sinks):**
-    *   **Console:** `stderr` (Human-readable text).
-    *   **File:** `logs/app.log` (JSON-formatted, rotated every 500 MB or 1 day, retained for 10 days).
-*   **Usage Example:**
+### **B. The Orchestrator (Line 2 - Slow/Authoritative)**
+The Python logic (`orchestrator.py`) acts as the "Supervisor". It strictly enforces the **Red-Green-Refactor** TDD loop:
+1.  **Red:** Command Jules to reproduce the bug/feature with a failing test.
+2.  **Green:** Command Jules to implement the fix.
+3.  **Refactor/Verify:** Push to GitHub and poll CI/CD.
 
-    ```python
-    from src.utils.logger import logger
+### **C. The "Janitor" LLM Strategy**
+We employ a **Hybrid LLM Strategy** for sanitization and summarization:
+* **Primary:** API-based (DeepSeek/OpenAI) for speed and quality (if keys present).
+* **Fallback:** Local embedded LLM (`llama-cpp-python` with `DeepSeek-Coder-1.3B-Instruct-GGUF`) for offline capability.
+* **Tasks:** Rewriting commit messages (removing "Co-authored-by") and summarizing CI logs.
 
-    # Inside an Agent or Module
-    logger.info("Agent started task", task_id="123")
-    try:
-        ...
-    except Exception:
-        logger.exception("Agent failed to execute task")
-    ```
+## **5. Configuration Standards**
 
-### **Configuration Standards (Environment Variables)**
-
-Adhere to 12-Factor App principles. Use these standard variable names:
+Adhere to 12-Factor App principles. Use `pydantic-settings` with the `VIBE_` prefix.
 
 * **Core:**
-  * APP_ENV: development, testing, production.
-  * DEBUG: true or false.
-  * SECRET_KEY: For cryptographic signing/sessions.
-* **Logging:**
-  * LOG_LEVEL: DEBUG, INFO, WARNING, ERROR (Configure loguru with this).
-* **Infrastructure (if applicable):**
-  * DOCKER_HOST: If interacting with the Docker engine.
-  * SSH_PRIVATE_KEY / SSH_USER: If managing remote connections.
-  * AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY: For AWS services.
+  * `VIBE_RUN_ID`: Unique run identifier.
+  * `VIBE_MAX_RETRIES`: Max loops for CI fixes (Default: 5).
+  * `VIBE_REPO_PATH`: Path to target repo.
+* **Strategies:**
+  * `VIBE_LLM_STRATEGY`: `local` or `api`.
+  * `VIBE_EXTENSIONS_ENABLED`: List of required Gemini extensions.
+* **Secrets:**
+  * `OPENAI_API_KEY` / `DEEPSEEK_API_KEY`: For API strategy.
+  * `SSH_PRIVATE_KEY`: For remote operations.
 
-### **CI/CD Context**
-
-* **CI Environment:** GitHub Actions (Matrix testing on Ubuntu, Windows, MacOS).
-* **Python Versions:** Tests run against Python 3.12, 3.13, and 3.14.
-
-### **Docker Strategy**
+## **6. Docker & Deployment**
 
 * **Multi-stage Build:** The Dockerfile has a builder stage and a runtime stage.
-* **User:** The app runs as a non-root user (appuser). **DO NOT** change this to root.
-* **Base Image:** Uses python:3.12-slim.
+* **User:** The app runs as a non-root user (`appuser`).
+* **Base Image:** `python:3.12-slim` (Must support compiling `llama-cpp-python`).
 
-### **Dependencies**
-
-* **Management:** Always add dependencies via poetry add <package>.
-* **Lock File:** poetry.lock must be committed.
-* **Vulnerability Scanning:** CI uses Trivy. Ensure no Critical/High vulnerabilities are introduced.
-
-## **5. Documentation**
-
-* Documentation is built with **MkDocs Material**.
-* Update docs/index.md or add new markdown files in docs/ when adding features.
-* Ensure all public functions have docstrings (Google or NumPy style).
-
-## **6. Workflow & Debugging Protocol**
+## **7. Workflow & Debugging Protocol**
 
 If you encounter an error (e.g., test failure, linting error), follow this STRICT sequence:
 
 1. **Read the Logs:** Do not guess. Read the complete error message.
 2. **Isolate:** If multiple tests fail, focus on the simplest failure first.
-3. **Reproduction:** If the error is obscure, create a minimal reproduction case within the test suite (not a temp file).
+3. **Reproduction:** If the error is obscure, create a minimal reproduction case within the test suite.
 4. **Fix:** Apply the fix.
 5. **Verify:** Run the specific test case again.
 
-## **7. Human-in-the-Loop Triggers**
+## **8. Human-in-the-Loop Triggers**
 
 STOP and ASK the user before:
 
 * Modifying database migrations or schema files.
-* Deleting any file outside of src/ or tests/.
-* Adding a dependency that requires OS-level libraries (e.g., libpq-dev).
-* Committing any secrets or API keys (even for testing).
+* Deleting any file outside of `src/` or `tests/`.
+* Adding a dependency that requires OS-level libraries (beyond those needed for `llama-cpp-python` build).
+* Committing any secrets.
