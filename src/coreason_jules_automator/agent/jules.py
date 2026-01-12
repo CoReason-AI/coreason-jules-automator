@@ -77,28 +77,28 @@ class JulesAgent:
             pexpect.TIMEOUT,
         ]
 
-        while True:
+        running = True
+        while running:
             try:
                 index = self.child.expect(patterns, timeout=60)
 
                 if index == 0:  # "Should I" matched
                     logger.info("Detected question from Jules. Auto-replying.")
                     self.child.sendline("Use your best judgment.")
-                elif index == 1:  # EOF  # pragma: no cover
-                    break  # pragma: no cover
+                elif index == 1:  # EOF
+                    running = False
                 elif index == 2:  # TIMEOUT
                     # Check if process is still alive. If so, continue waiting.
                     if not self.child.isalive():
-                        break
+                        running = False
                     # Just continue loop
-                    continue
 
             except pexpect.EOF:
-                break
+                running = False
             except pexpect.TIMEOUT:
                 # Check explicitly if alive
                 if not self.child.isalive():
-                    break
+                    running = False
 
         self.child.close()
         if self.child.exitstatus != 0:  # pragma: no cover
