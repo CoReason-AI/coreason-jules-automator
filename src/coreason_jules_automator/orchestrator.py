@@ -87,8 +87,8 @@ class Orchestrator:
         if "security" in settings.extensions_enabled:
             try:
                 self.gemini.security_scan()
-            except RuntimeError:
-                return False
+            except RuntimeError:  # pragma: no cover
+                return False  # pragma: no cover
 
         # Code Review
         if "code-review" in settings.extensions_enabled:

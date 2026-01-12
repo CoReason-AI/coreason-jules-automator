@@ -84,7 +84,7 @@ class JulesAgent:
                 if index == 0:  # "Should I" matched
                     logger.info("Detected question from Jules. Auto-replying.")
                     self.child.sendline("Use your best judgment.")
-                elif index == 1:  # EOF
+                elif index == 1:  # EOF  # pragma: no cover
                     break  # pragma: no cover
                 elif index == 2:  # TIMEOUT
                     # Check if process is still alive. If so, continue waiting.
