@@ -9,6 +9,7 @@
 # Source Code: https://github.com/CoReason-AI/coreason_jules_automator
 
 import importlib.util
+from functools import lru_cache
 from typing import List, Literal, Optional
 
 from pydantic import Field, SecretStr, field_validator, model_validator
@@ -64,8 +65,10 @@ class Settings(BaseSettings):
         return self
 
 
-# Global settings instance
-try:
-    settings = Settings()  # type: ignore
-except Exception:
-    pass
+@lru_cache
+def get_settings() -> Settings:
+    """
+    Returns a cached instance of Settings.
+    This allows for lazy loading and easier patching in tests.
+    """
+    return Settings()  # type: ignore[call-arg]
