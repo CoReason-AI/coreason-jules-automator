@@ -3,22 +3,36 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from coreason_jules_automator.config import get_settings
 from coreason_jules_automator.llm.provider import LLMProvider
 
 
 @pytest.fixture
 def mock_settings() -> Any:
-    with patch("coreason_jules_automator.llm.provider.get_settings") as mock_get_settings:
-        mock_settings = MagicMock()
-        mock_settings.llm_strategy = "api"
+    """
+    Fixture to mock Settings class and clear get_settings cache.
+    This prevents ValidationError when env vars are missing.
+    """
+    with patch("coreason_jules_automator.config.Settings") as MockSettings:
+        settings_instance = MagicMock()
+        settings_instance.llm_strategy = "api"
         # Set default behavior for secrets
-        mock_settings.OPENAI_API_KEY.get_secret_value.return_value = "sk-test"
-        mock_get_settings.return_value = mock_settings
-        yield mock_settings
+        settings_instance.OPENAI_API_KEY.get_secret_value.return_value = "sk-test"
+        MockSettings.return_value = settings_instance
+
+        # Clear cache to ensure get_settings uses the mocked Settings class
+        get_settings.cache_clear()
+
+        yield settings_instance
+
+        get_settings.cache_clear()
 
 
 def test_sanitize_commit(mock_settings: Any) -> None:
     """Test commit message sanitization."""
+    # We need to ensure _initialize_client doesn't fail or return something that breaks
+    # But since we mock settings, initialization should proceed fine.
+    # However, to be safe/fast, we can mock _initialize_client too.
     with patch("coreason_jules_automator.llm.provider.LLMProvider._initialize_client", return_value=None):
         provider = LLMProvider()
         original = (
@@ -47,7 +61,7 @@ def test_init_api_import_error(mock_settings: Any) -> None:
     mock_settings.llm_strategy = "api"
     mock_settings.OPENAI_API_KEY.get_secret_value.return_value = "sk-test"
 
-    # Simulate ImportError
+    # Simulate ImportError for openai
     with patch.dict("sys.modules", {"openai": None}):
         with patch.object(LLMProvider, "_initialize_local") as mock_local:
             LLMProvider()
@@ -70,9 +84,13 @@ def test_init_local_success(mock_settings: Any) -> None:
 
     # Mock llama_cpp module existence and Llama class
     mock_llama_module = MagicMock()
+    # When instantiated, Llama class returns a mock client
+    mock_llama_client = MagicMock()
+    mock_llama_module.Llama.return_value = mock_llama_client
+
     with patch.dict("sys.modules", {"llama_cpp": mock_llama_module}):
         provider = LLMProvider()
-        assert provider.client is not None
+        assert provider.client is mock_llama_client
         mock_llama_module.Llama.assert_called_once()
 
 
