@@ -8,7 +8,10 @@
 #
 # Source Code: https://github.com/CoReason-AI/coreason_jules_automator
 
-import importlib.util
+"""
+Configuration management for the Hybrid Vibe Runner.
+"""
+
 from functools import lru_cache
 from typing import List, Literal, Optional
 
@@ -18,8 +21,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     """
-    Application settings for the Hybrid Vibe Runner.
-    Environment variables are prefixed with VIBE_.
+    Application configuration using environment variables.
     """
 
     model_config = SettingsConfigDict(
@@ -30,45 +32,65 @@ class Settings(BaseSettings):
     )
 
     # Tunable Settings
-    llm_strategy: Literal["local", "api"] = Field(default="api", description="Strategy to use for LLM (local or api)")
-    extensions_enabled: List[str] = Field(
-        default_factory=lambda: ["security", "code-review"],
-        description="List of enabled extensions",
+    llm_strategy: Literal["local", "api"] = Field(
+        default="api", description="LLM strategy: 'local' (Llama) or 'api' (OpenAI/DeepSeek)."
     )
-    max_retries: int = Field(default=5, description="Maximum number of retries")
+    extensions_enabled: List[str] = Field(
+        default=["security", "code-review"], description="List of enabled extensions."
+    )
+    max_retries: int = Field(default=5, description="Maximum number of retries for operations.")
 
     # Secrets (Validation Only)
-    # Using SecretStr ensures they are not logged in repr
-    GITHUB_TOKEN: SecretStr = Field(..., description="GitHub Token for gh CLI")
-    GOOGLE_API_KEY: SecretStr = Field(..., description="Google API Key for Gemini")
+    # Using uppercase to match existing code usage (settings.OPENAI_API_KEY)
+    GITHUB_TOKEN: SecretStr = Field(..., validation_alias="GITHUB_TOKEN")
+    GOOGLE_API_KEY: SecretStr = Field(..., validation_alias="GOOGLE_API_KEY")
 
     # Optional Secrets
-    OPENAI_API_KEY: Optional[SecretStr] = Field(None, description="OpenAI API Key")
-    DEEPSEEK_API_KEY: Optional[SecretStr] = Field(None, description="DeepSeek API Key")
-    SSH_PRIVATE_KEY: Optional[SecretStr] = Field(None, description="SSH Private Key")
+    OPENAI_API_KEY: Optional[SecretStr] = Field(default=None, validation_alias="OPENAI_API_KEY")
+    DEEPSEEK_API_KEY: Optional[SecretStr] = Field(default=None, validation_alias="DEEPSEEK_API_KEY")
+    SSH_PRIVATE_KEY: Optional[SecretStr] = Field(default=None, validation_alias="SSH_PRIVATE_KEY")
 
     @field_validator("GITHUB_TOKEN", "GOOGLE_API_KEY")
     @classmethod
-    def validate_secrets(cls, v: SecretStr) -> SecretStr:
-        if not v.get_secret_value():
-            raise ValueError("Secret must not be empty")
+    def validate_secrets(cls, v: SecretStr, info: object) -> SecretStr:
+        """
+        Validate that critical secrets are present and not empty.
+        """
+        if not v or not v.get_secret_value():
+            field_name = "unknown"
+            if hasattr(info, "field_name"):
+                field_name = info.field_name
+            raise ValueError(f"{field_name} must be set and not empty.")
         return v
 
     @model_validator(mode="after")
     def validate_local_strategy(self) -> "Settings":
+        """
+        Ensure llama-cpp-python is installed if strategy is local.
+        """
         if self.llm_strategy == "local":
-            if not importlib.util.find_spec("llama_cpp"):
+            try:
+                import llama_cpp  # noqa: F401
+            except ImportError as e:
+                # We raise a ValueError configuration error, not RuntimeError, as it's config validation
                 raise ValueError(
-                    "llm_strategy='local' requires 'llama-cpp-python' to be installed. "
-                    "Install with 'poetry install -E local'."
-                )
+                    "strategy='local' requires 'llama-cpp-python' to be installed. "
+                    "Install with 'poetry install -E local' or pip install llama-cpp-python."
+                ) from e
         return self
 
 
 @lru_cache
 def get_settings() -> Settings:
     """
-    Returns a cached instance of Settings.
-    This allows for lazy loading and easier patching in tests.
+    Returns a cached instance of the Settings class.
     """
+    # We allow instantiation to fail if environment variables are missing
+    # This is handled by pydantic raising ValidationError
+    # Mypy complains about missing args because it thinks we need to pass them,
+    # but BaseSettings loads them from env.
     return Settings()  # type: ignore[call-arg]
+
+
+# Alias for backward compatibility if needed
+Config = Settings
