@@ -41,10 +41,10 @@ def test_init_api_strategy_openai_import_error(mock_settings: None, monkeypatch:
             # We must mock llama_cpp module first so LLMProvider can import it inside _initialize_local
             with patch.dict(sys.modules, {"llama_cpp": mock_llama_module}):
                 with patch("coreason_jules_automator.llm.provider.hf_hub_download", return_value="/tmp/model.gguf"):
-                     provider = LLMProvider()
-                     mock_logger.warning.assert_any_call("openai package not installed. Falling back to local.")
-                     # Falls back to local, uses Llama from mocked module
-                     mock_llama_module.Llama.assert_called_once()
+                    _ = LLMProvider()
+                    mock_logger.warning.assert_any_call("openai package not installed. Falling back to local.")
+                    # Falls back to local, uses Llama from mocked module
+                    mock_llama_module.Llama.assert_called_once()
 
 
 def test_init_api_strategy_no_key_fallback(mock_settings: None, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -55,7 +55,7 @@ def test_init_api_strategy_no_key_fallback(mock_settings: None, monkeypatch: pyt
     mock_llama_module = MagicMock()
     with patch.dict(sys.modules, {"llama_cpp": mock_llama_module}):
         with patch("coreason_jules_automator.llm.provider.hf_hub_download", return_value="/tmp/model.gguf"):
-            provider = LLMProvider()
+            _ = LLMProvider()
             mock_llama_module.Llama.assert_called_once()
 
 
@@ -65,11 +65,13 @@ def test_init_local_strategy_success(mock_settings: None, monkeypatch: pytest.Mo
 
     # Mock find_spec to pass Settings validation
     with patch("importlib.util.find_spec", return_value=True):
-        get_settings.cache_clear() # Re-load settings with local strategy
+        get_settings.cache_clear()  # Re-load settings with local strategy
 
         mock_llama_module = MagicMock()
         with patch.dict(sys.modules, {"llama_cpp": mock_llama_module}):
-            with patch("coreason_jules_automator.llm.provider.hf_hub_download", return_value="/tmp/model.gguf") as mock_dl:
+            with patch(
+                "coreason_jules_automator.llm.provider.hf_hub_download", return_value="/tmp/model.gguf"
+            ) as mock_dl:
                 provider = LLMProvider()
                 assert provider.strategy == "local"
                 mock_dl.assert_called_once()
@@ -85,16 +87,22 @@ def test_init_local_download_failure(mock_settings: None, monkeypatch: pytest.Mo
 
         mock_llama_module = MagicMock()
         with patch.dict(sys.modules, {"llama_cpp": mock_llama_module}):
-            with patch("coreason_jules_automator.llm.provider.hf_hub_download", side_effect=Exception("Download failed")):
+            with patch(
+                "coreason_jules_automator.llm.provider.hf_hub_download", side_effect=Exception("Download failed")
+            ):
                 with patch("coreason_jules_automator.llm.provider.logger") as mock_logger:
                     provider = LLMProvider()
                     # Should log warning and set client to None
                     assert provider.client is None
-                    mock_logger.warning.assert_called_with("Could not download model: Failed to download model: Download failed")
+                    mock_logger.warning.assert_called_with(
+                        "Could not download model: Failed to download model: Download failed"
+                    )
                     mock_llama_module.Llama.assert_not_called()
 
 
-def test_init_local_strategy_missing_package_runtime_error(mock_settings: None, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_init_local_strategy_missing_package_runtime_error(
+    mock_settings: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """
     Test error when llama-cpp-python is missing (RuntimeError from Provider).
     """
@@ -109,6 +117,7 @@ def test_init_local_strategy_missing_package_runtime_error(mock_settings: None, 
             with pytest.raises(RuntimeError) as excinfo:
                 LLMProvider()
             assert "llama-cpp-python not installed" in str(excinfo.value)
+
 
 def test_init_local_llama_fail(mock_settings: None, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test initialization when Llama class raises exception."""
@@ -155,9 +164,7 @@ def test_summarize_logs_local(mock_settings: None) -> None:
     with patch.object(LLMProvider, "_initialize_client") as mock_init:
         mock_client = MagicMock()
         # Llama-cpp-python style response
-        mock_client.create_chat_completion.return_value = {
-            "choices": [{"message": {"content": "Local Summary"}}]
-        }
+        mock_client.create_chat_completion.return_value = {"choices": [{"message": {"content": "Local Summary"}}]}
         # Simulate it does NOT have 'chat' attribute (so it looks like Llama)
         del mock_client.chat
         mock_init.return_value = mock_client

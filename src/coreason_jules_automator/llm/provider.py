@@ -9,7 +9,6 @@
 # Source Code: https://github.com/CoReason-AI/coreason_jules_automator
 
 import re
-import shutil
 from pathlib import Path
 from typing import Any, Optional
 
@@ -66,7 +65,8 @@ class LLMProvider:
                 local_dir=cache_dir,  # Force download to specific dir for simplicity
                 local_dir_use_symlinks=False,
             )
-            return model_path
+            # Explicitly cast to str for mypy, as hf_hub_download returns str | None in some versions or Any
+            return str(model_path)
         except Exception as e:
             raise RuntimeError(f"Failed to download model: {e}") from e
 
