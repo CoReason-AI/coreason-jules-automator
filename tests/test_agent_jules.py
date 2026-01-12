@@ -1,9 +1,12 @@
+import sys
 from unittest.mock import MagicMock, patch
 
 import pexpect
 import pytest
 
 from coreason_jules_automator.agent.jules import JulesAgent
+
+SPAWN_TARGET = "coreason_jules_automator.agent.jules.Spawn"
 
 
 @pytest.fixture
@@ -15,7 +18,7 @@ def test_start_with_spec(agent: JulesAgent) -> None:
     """Test start injects SPEC.md context."""
     with patch("pathlib.Path.exists", return_value=True):
         with patch("pathlib.Path.read_text", return_value="Spec content"):
-            with patch("pexpect.spawn") as mock_spawn:
+            with patch(SPAWN_TARGET) as mock_spawn:
                 mock_child = MagicMock()
                 mock_child.exitstatus = 0
                 mock_spawn.return_value = mock_child
@@ -35,7 +38,7 @@ def test_start_with_spec(agent: JulesAgent) -> None:
 def test_start_without_spec(agent: JulesAgent) -> None:
     """Test start without SPEC.md."""
     with patch("pathlib.Path.exists", return_value=False):
-        with patch("pexpect.spawn") as mock_spawn:
+        with patch(SPAWN_TARGET) as mock_spawn:
             mock_child = MagicMock()
             mock_child.exitstatus = 0
             mock_spawn.return_value = mock_child
@@ -51,7 +54,7 @@ def test_start_without_spec(agent: JulesAgent) -> None:
 def test_interaction_loop_auto_reply(agent: JulesAgent) -> None:
     """Test auto-reply logic."""
     with patch("pathlib.Path.exists", return_value=False):
-        with patch("pexpect.spawn") as mock_spawn:
+        with patch(SPAWN_TARGET) as mock_spawn:
             mock_child = MagicMock()
             mock_child.exitstatus = 0
             mock_spawn.return_value = mock_child
@@ -67,7 +70,7 @@ def test_interaction_loop_auto_reply(agent: JulesAgent) -> None:
 
 def test_start_spawn_failure(agent: JulesAgent) -> None:
     """Test failure to spawn."""
-    with patch("pexpect.spawn", side_effect=pexpect.ExceptionPexpect("Failed")):
+    with patch(SPAWN_TARGET, side_effect=pexpect.ExceptionPexpect("Failed")):
         with pytest.raises(RuntimeError) as excinfo:
             agent.start("Task")
         assert "Failed to start Jules" in str(excinfo.value)
@@ -77,7 +80,7 @@ def test_spec_read_failure(agent: JulesAgent) -> None:
     """Test SPEC.md read failure handled gracefully."""
     with patch("pathlib.Path.exists", return_value=True):
         with patch("pathlib.Path.read_text", side_effect=OSError("Read error")):
-            with patch("pexpect.spawn") as mock_spawn:
+            with patch(SPAWN_TARGET) as mock_spawn:
                 mock_child = MagicMock()
                 mock_child.exitstatus = 0
                 mock_spawn.return_value = mock_child
@@ -94,7 +97,7 @@ def test_spec_read_failure(agent: JulesAgent) -> None:
 def test_interaction_loop_timeout(agent: JulesAgent) -> None:
     """Test timeout handling in loop."""
     with patch("pathlib.Path.exists", return_value=False):
-        with patch("pexpect.spawn") as mock_spawn:
+        with patch(SPAWN_TARGET) as mock_spawn:
             mock_child = MagicMock()
             mock_child.exitstatus = 0
             mock_spawn.return_value = mock_child
@@ -111,7 +114,7 @@ def test_interaction_loop_timeout(agent: JulesAgent) -> None:
 def test_interaction_loop_eof_exception(agent: JulesAgent) -> None:
     """Test EOF exception handling."""
     with patch("pathlib.Path.exists", return_value=False):
-        with patch("pexpect.spawn") as mock_spawn:
+        with patch(SPAWN_TARGET) as mock_spawn:
             mock_child = MagicMock()
             mock_child.exitstatus = 0
             mock_spawn.return_value = mock_child
@@ -124,7 +127,7 @@ def test_interaction_loop_eof_exception(agent: JulesAgent) -> None:
 def test_interaction_loop_timeout_exception_dead(agent: JulesAgent) -> None:
     """Test TIMEOUT exception handling when child is dead."""
     with patch("pathlib.Path.exists", return_value=False):
-        with patch("pexpect.spawn") as mock_spawn:
+        with patch(SPAWN_TARGET) as mock_spawn:
             mock_child = MagicMock()
             mock_child.exitstatus = 0
             mock_spawn.return_value = mock_child
@@ -138,7 +141,7 @@ def test_interaction_loop_timeout_exception_dead(agent: JulesAgent) -> None:
 def test_interaction_loop_eof_return(agent: JulesAgent) -> None:
     """Test EOF return value handling."""
     with patch("pathlib.Path.exists", return_value=False):
-        with patch("pexpect.spawn") as mock_spawn:
+        with patch(SPAWN_TARGET) as mock_spawn:
             mock_child = MagicMock()
             mock_child.exitstatus = 0
             mock_spawn.return_value = mock_child
@@ -152,7 +155,7 @@ def test_interaction_loop_eof_return(agent: JulesAgent) -> None:
 def test_interaction_loop_timeout_exception(agent: JulesAgent) -> None:
     """Test TIMEOUT exception handling (not return value)."""
     with patch("pathlib.Path.exists", return_value=False):
-        with patch("pexpect.spawn") as mock_spawn:
+        with patch(SPAWN_TARGET) as mock_spawn:
             mock_child = MagicMock()
             mock_child.exitstatus = 0
             mock_spawn.return_value = mock_child
@@ -166,7 +169,7 @@ def test_interaction_loop_timeout_exception(agent: JulesAgent) -> None:
 def test_interaction_loop_exit_status(agent: JulesAgent) -> None:
     """Test logging warning on non-zero exit status."""
     with patch("pathlib.Path.exists", return_value=False):
-        with patch("pexpect.spawn") as mock_spawn:
+        with patch(SPAWN_TARGET) as mock_spawn:
             mock_child = MagicMock()
             mock_child.exitstatus = 1  # Non-zero
             mock_spawn.return_value = mock_child
@@ -200,7 +203,7 @@ def test_interaction_loop_no_child(agent: JulesAgent) -> None:
 def test_agent_exit_status_warning() -> None:
     """Test JulesAgent logging warning when exit status is non-zero."""
     agent = JulesAgent()
-    with patch("pexpect.spawn") as mock_spawn:
+    with patch(SPAWN_TARGET) as mock_spawn:
         mock_child = MagicMock()
         mock_child.exitstatus = 1
         mock_spawn.return_value = mock_child

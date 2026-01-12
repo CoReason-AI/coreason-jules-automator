@@ -10,9 +10,15 @@
 
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import pexpect
+
+# Windows support
+if sys.platform == "win32":
+    from pexpect.popen_spawn import PopenSpawn as Spawn  # pragma: no cover
+else:
+    from pexpect import spawn as Spawn  # pragma: no cover
 
 from coreason_jules_automator.utils.logger import logger
 
@@ -25,7 +31,7 @@ class JulesAgent:
 
     def __init__(self, executable: str = "jules") -> None:
         self.executable = executable
-        self.child: Optional[pexpect.spawn] = None
+        self.child: Optional[Any] = None
 
     def start(self, task: str) -> None:
         """
@@ -50,7 +56,7 @@ class JulesAgent:
         logger.info(f"Starting Jules with task: {task[:50]}...")
 
         try:
-            self.child = pexpect.spawn(self.executable, encoding="utf-8", timeout=300)
+            self.child = Spawn(self.executable, encoding="utf-8", timeout=300)
             # ignore logging to stdout in production or configure properly
             self.child.logfile = sys.stdout
 
