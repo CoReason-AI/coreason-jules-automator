@@ -74,9 +74,8 @@ def test_main() -> None:
 
 def test_main_execution() -> None:
     """Test executing the module as a script."""
-    import sys
     import subprocess
-    from pathlib import Path
+    import sys
 
     # Use coverage run to ensure we capture the coverage
     cmd = [sys.executable, "-m", "coverage", "run", "--append", "-m", "coreason_jules_automator.cli", "--help"]
@@ -85,10 +84,11 @@ def test_main_execution() -> None:
     assert result.returncode == 0
     assert "Usage: vibe-runner" in result.stdout or "Usage: python -m coreason_jules_automator.cli" in result.stdout
 
+
 def test_cli_file_execution() -> None:
     """Test executing the cli.py file directly."""
-    import sys
     import subprocess
+    import sys
     from pathlib import Path
 
     # Locate the cli.py file

@@ -35,6 +35,7 @@ logger.add(
     format=LOG_FORMAT,
 )
 
+
 # Ensure logs directory exists
 def _ensure_log_directory() -> None:
     log_path = Path("logs")

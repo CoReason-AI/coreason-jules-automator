@@ -177,6 +177,7 @@ def test_interaction_loop_exit_status(agent: JulesAgent) -> None:
                 agent.start("Task")
                 mock_logger.warning.assert_called_with("Jules exited with status 1")
 
+
 def test_interaction_loop_exit_status_explicit(agent: JulesAgent) -> None:
     """Explicitly cover the non-zero exit status check."""
     agent.child = MagicMock()

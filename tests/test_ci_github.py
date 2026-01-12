@@ -109,6 +109,7 @@ def test_push_to_branch_failure(gh: GitHubInterface) -> None:
             gh.push_to_branch("feature/test", "msg")
         assert "Git push failed" in str(excinfo.value)
 
+
 def test_push_to_branch_failure_with_stderr(gh: GitHubInterface) -> None:
     """Test push_to_branch failure with stderr to cover error decoding."""
     err = subprocess.CalledProcessError(1, ["git", "push"])

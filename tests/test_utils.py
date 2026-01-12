@@ -9,6 +9,7 @@
 # Source Code: https://github.com/CoReason-AI/coreason_jules_automator
 
 from pathlib import Path
+
 import pytest
 
 from coreason_jules_automator.utils.logger import logger
@@ -31,7 +32,7 @@ def test_logger_initialization() -> None:
 
 def test_ensure_log_directory(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test _ensure_log_directory logic explicitly."""
-    from unittest.mock import MagicMock, patch
+    from unittest.mock import patch
 
     from coreason_jules_automator.utils.logger import _ensure_log_directory
 
