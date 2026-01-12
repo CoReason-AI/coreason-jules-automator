@@ -9,6 +9,7 @@
 # Source Code: https://github.com/CoReason-AI/coreason_jules_automator
 
 from pathlib import Path
+import pytest
 
 from coreason_jules_automator.utils.logger import logger
 
@@ -26,6 +27,18 @@ def test_logger_initialization() -> None:
         log_path.mkdir(parents=True, exist_ok=True)
     assert log_path.exists()
     assert log_path.is_dir()
+
+
+def test_ensure_log_directory(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test _ensure_log_directory logic explicitly."""
+    from unittest.mock import MagicMock, patch
+
+    from coreason_jules_automator.utils.logger import _ensure_log_directory
+
+    with patch("pathlib.Path.exists", return_value=False):
+        with patch("pathlib.Path.mkdir") as mock_mkdir:
+            _ensure_log_directory()
+            mock_mkdir.assert_called_with(parents=True, exist_ok=True)
 
 
 def test_logger_exports() -> None:

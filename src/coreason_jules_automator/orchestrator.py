@@ -99,8 +99,8 @@ class Orchestrator:
         if "code-review" in settings.extensions_enabled:
             try:
                 self.gemini.code_review()
-            except RuntimeError as e:  # pragma: no cover
-                logger.error(f"Code review failed: {e}")  # pragma: no cover
+            except RuntimeError as e:
+                logger.error(f"Code review failed: {e}")
                 passed = False
 
         return passed
@@ -175,5 +175,5 @@ class Orchestrator:
             # Here we simulate by using the check name/url
             log_snippet = f"Check {failed_check['name']} failed. URL: {failed_check['url']}"
             summary = self.janitor.summarize_logs(log_snippet)
-            logger.info(f"Janitor Summary: {summary}")  # pragma: no cover
+            logger.info(f"Janitor Summary: {summary}")
             # This summary would normally be fed back to Agent.

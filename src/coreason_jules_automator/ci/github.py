@@ -62,7 +62,7 @@ class GitHubInterface:
             # We explicitly type the result of json.loads
             parsed: Any = json.loads(output)
             if not isinstance(parsed, list):
-                raise RuntimeError(f"Unexpected format from gh: expected list, got {type(parsed)}")  # pragma: no cover
+                raise RuntimeError(f"Unexpected format from gh: expected list, got {type(parsed)}")
             # We assume it's a list of dicts based on gh documentation
             return parsed
         except json.JSONDecodeError as e:
@@ -89,7 +89,7 @@ class GitHubInterface:
             subprocess.run(["git", "push", "origin", branch_name], check=True, capture_output=True)
         except subprocess.CalledProcessError as e:
             # Captured output is bytes, so we decode it. stderr might be None.
-            error_output = e.stderr.decode() if e.stderr else str(e)  # pragma: no cover
+            error_output = e.stderr.decode() if e.stderr else str(e)
             logger.error(f"Git push failed: {error_output}")
             # Include the output in the raised error so it can be asserted on
             raise RuntimeError(f"Git push failed: {error_output}") from e
