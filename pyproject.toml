@@ -14,6 +14,7 @@ typer = "^0.21.1"
 pydantic-settings = "^2.12.0"
 openai = "^2.15.0"
 llama-cpp-python = { version = "^0.3.16", optional = true }
+pexpect = "^4.9.0"
 
 [tool.poetry.extras]
 local = ["llama-cpp-python"]
@@ -72,3 +73,12 @@ testpaths = ["tests"]
 
 [tool.coverage.run]
 omit = ["tests/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+]
