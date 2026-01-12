@@ -9,7 +9,10 @@
 # Source Code: https://github.com/CoReason-AI/coreason_jules_automator
 
 import re
+from pathlib import Path
 from typing import Any, Optional
+
+from huggingface_hub import hf_hub_download
 
 from coreason_jules_automator.config import get_settings
 from coreason_jules_automator.utils.logger import logger
@@ -44,25 +47,48 @@ class LLMProvider:
         # Fallback to local
         return self._initialize_local()
 
+    def _ensure_model_downloaded(self) -> str:
+        """
+        Ensures the local GGUF model is downloaded to ~/.cache/coreason/.
+        Returns the path to the model file.
+        """
+        repo_id = "TheBloke/DeepSeek-Coder-1.3B-Instruct-GGUF"
+        filename = "deepseek-coder-1.3b-instruct.Q4_K_M.gguf"
+        cache_dir = Path.home() / ".cache" / "coreason"
+
+        logger.info(f"Ensuring model {repo_id}/{filename} is present in {cache_dir}")
+        try:
+            model_path = hf_hub_download(
+                repo_id=repo_id,
+                filename=filename,
+                cache_dir=cache_dir,
+                local_dir=cache_dir,  # Force download to specific dir for simplicity
+                local_dir_use_symlinks=False,
+            )
+            # Explicitly cast to str for mypy, as hf_hub_download returns str | None in some versions or Any
+            return str(model_path)
+        except Exception as e:
+            raise RuntimeError(f"Failed to download model: {e}") from e
+
     def _initialize_local(self) -> Optional[Any]:
         """Initializes the local Llama client."""
         logger.info("Initializing Local Llama client")
         try:
             from llama_cpp import Llama
 
-            # Mocking model path logic for now as we don't want to download 1.3GB in sandbox
-            # In a real scenario, we would check ~/.cache/coreason/ and download if missing.
-            model_path = "/tmp/deepseek-coder-1.3b-instruct.gguf"
+            # Download or locate model
+            try:
+                model_path = self._ensure_model_downloaded()
+            except RuntimeError as e:
+                logger.warning(f"Could not download model: {e}")
+                return None
 
-            # We assume the user has handled model download or we mock Llama entirely in tests
-            # For the purpose of this implementation, we try to instantiate
-            # but expect it might fail if model is missing.
-            # However, since we mock Llama in tests, this code is structurally correct.
             return Llama(model_path=model_path, verbose=False)
+
         except ImportError as e:
             raise RuntimeError("llama-cpp-python not installed. Cannot use local LLM.") from e
         except Exception as e:
-            # If model is missing, we log it.
+            # If model loading fails
             logger.warning(f"Failed to load local model: {e}")
             return None
 
