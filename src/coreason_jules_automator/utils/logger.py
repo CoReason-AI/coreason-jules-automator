@@ -14,21 +14,25 @@ from pathlib import Path
 from loguru import logger as _logger
 
 # Export logger
+__all__ = ["logger"]
 logger = _logger
 
 # Remove default handler
 logger.remove()
 
+# Define log format
+LOG_FORMAT = (
+    "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
+    "<level>{level: <8}</level> | "
+    "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - "
+    "<level>{message}</level>"
+)
+
 # Sink 1: Stdout (Human-readable)
 logger.add(
     sys.stderr,
     level="INFO",
-    format=(
-        "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
-        "<level>{level: <8}</level> | "
-        "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - "
-        "<level>{message}</level>"
-    ),
+    format=LOG_FORMAT,
 )
 
 # Ensure logs directory exists
