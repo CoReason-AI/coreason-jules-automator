@@ -350,9 +350,10 @@ toml = ["tomli ; python_full_version <= \"3.11.0a6\""]
 name = "diskcache"
 version = "5.6.3"
 description = "Disk Cache -- Disk and file backed persistent cache."
-optional = false
+optional = true
 python-versions = ">=3"
 groups = ["main"]
+markers = "extra == \"local\""
 files = [
     {file = "diskcache-5.6.3-py3-none-any.whl", hash = "sha256:5e31b2d5fbad117cc363ebaf6b689474db18a1f6438bc82358b024abd4c2ca19"},
     {file = "diskcache-5.6.3.tar.gz", hash = "sha256:2c3a3fa2743d8535d832ec61c2054a1641f41775aa7c556758a109941e33e4fc"},
@@ -524,6 +525,7 @@ files = [
     {file = "jinja2-3.1.6-py3-none-any.whl", hash = "sha256:85ece4451f492d0c13c5dd7c13a64681a86afae63a5f347908daf103ce6d2f67"},
     {file = "jinja2-3.1.6.tar.gz", hash = "sha256:0137fb05990d35f1275a587e9aee6d56da821fc83491a0fb838183be43f66d6d"},
 ]
+markers = {main = "extra == \"local\""}
 
 [package.dependencies]
 MarkupSafe = ">=2.0"
@@ -734,9 +736,10 @@ files = [
 name = "llama-cpp-python"
 version = "0.3.16"
 description = "Python bindings for the llama.cpp library"
-optional = false
+optional = true
 python-versions = ">=3.8"
 groups = ["main"]
+markers = "extra == \"local\""
 files = [
     {file = "llama_cpp_python-0.3.16.tar.gz", hash = "sha256:34ed0f9bd9431af045bb63d9324ae620ad0536653740e9bb163a2e1fcb973be6"},
 ]
@@ -910,6 +913,7 @@ files = [
     {file = "markupsafe-3.0.3-cp39-cp39-win_arm64.whl", hash = "sha256:38664109c14ffc9e7437e86b4dceb442b0096dfe3541d7864d9cbe1da4cf36c8"},
     {file = "markupsafe-3.0.3.tar.gz", hash = "sha256:722695808f4b6457b320fdc131280796bdceb04ab50fe1795cd540799ebe1698"},
 ]
+markers = {main = "extra == \"local\""}
 
 [[package]]
 name = "mdurl"
@@ -1114,9 +1118,10 @@ files = [
 name = "numpy"
 version = "2.4.1"
 description = "Fundamental package for array computing in Python"
-optional = false
+optional = true
 python-versions = ">=3.11"
 groups = ["main"]
+markers = "extra == \"local\""
 files = [
     {file = "numpy-2.4.1-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:0cce2a669e3c8ba02ee563c7835f92c153cf02edff1ae05e1823f1dde21b16a5"},
     {file = "numpy-2.4.1-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:899d2c18024984814ac7e83f8f49d8e8180e2fbe1b2e252f2e7f1d06bea92425"},
@@ -1970,7 +1975,10 @@ files = [
 [package.extras]
 dev = ["black (>=19.3b0) ; python_version >= \"3.6\"", "pytest (>=4.6.2)"]
 
+[extras]
+local = ["llama-cpp-python"]
+
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12, <3.15"
-content-hash = "905abb8fa0b2a02e149e3b84d5e63bc572f5423bdaf7ea1298f8f136463f95c9"
+content-hash = "b47ca3c3bbc543f64f315f081d2154539b5f363a21c2d2e435e9e36a86a7610f"
