@@ -33,16 +33,23 @@ class LLMProvider:
         """Initializes the LLM client based on strategy and available keys."""
         settings = get_settings()
         if self.strategy == "api":
-            if settings.OPENAI_API_KEY:
-                try:
-                    from openai import OpenAI
+            try:
+                from openai import OpenAI
+            except ImportError:
+                logger.warning("openai package not installed. Falling back to local.")
+                return self._initialize_local()
 
-                    logger.info("Initializing OpenAI client")
-                    return OpenAI(api_key=settings.OPENAI_API_KEY.get_secret_value())
-                except ImportError:
-                    logger.warning("openai package not installed. Falling back to local.")
+            if settings.OPENAI_API_KEY:
+                logger.info("Initializing OpenAI client")
+                return OpenAI(api_key=settings.OPENAI_API_KEY.get_secret_value())
+            elif settings.DEEPSEEK_API_KEY:
+                logger.info("Initializing DeepSeek client")
+                return OpenAI(
+                    api_key=settings.DEEPSEEK_API_KEY.get_secret_value(),
+                    base_url="https://api.deepseek.com",
+                )
             else:
-                logger.warning("OPENAI_API_KEY not found. Falling back to local.")
+                logger.warning("No valid API key found (OPENAI_API_KEY or DEEPSEEK_API_KEY). Falling back to local.")
 
         # Fallback to local
         return self._initialize_local()
