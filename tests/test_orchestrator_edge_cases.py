@@ -96,8 +96,8 @@ def test_line_2_defense_mixed_statuses_and_failures(orchestrator: Any) -> None:
         ],
         [
             {"name": "check1", "status": "completed", "conclusion": "success"},
-            {"name": "check2", "status": "completed", "conclusion": "failure", "url": "url2"}
-        ]
+            {"name": "check2", "status": "completed", "conclusion": "failure", "url": "url2"},
+        ],
     ]
 
     orchestrator.janitor.summarize_logs.return_value = "Fix check2."
