@@ -63,8 +63,11 @@ def test_empty_secrets(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("VIBE_GITHUB_TOKEN", "")
     monkeypatch.setenv("VIBE_GOOGLE_API_KEY", "")
 
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError) as excinfo:
         Settings()  # type: ignore
+
+    # Verify the specific error message from the validator
+    assert "Secret must not be empty" in str(excinfo.value)
 
 
 def test_secrets_not_logged(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -135,3 +138,15 @@ def test_get_settings(monkeypatch: pytest.MonkeyPatch) -> None:
 
     s2 = fresh_get_settings()
     assert s1 is s2
+
+
+def test_invalid_llm_strategy(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test that an invalid llm_strategy raises ValidationError."""
+    monkeypatch.setenv("VIBE_GITHUB_TOKEN", "dummy")
+    monkeypatch.setenv("VIBE_GOOGLE_API_KEY", "dummy")
+    monkeypatch.setenv("VIBE_LLM_STRATEGY", "invalid_strategy")
+
+    with pytest.raises(ValidationError) as excinfo:
+        Settings()  # type: ignore
+
+    assert "Input should be 'local' or 'api'" in str(excinfo.value)
