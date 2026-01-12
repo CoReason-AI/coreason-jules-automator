@@ -8,9 +8,10 @@
 #
 # Source Code: https://github.com/CoReason-AI/coreason_jules_automator
 
+import importlib.util
 from typing import List, Literal, Optional
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -51,6 +52,16 @@ class Settings(BaseSettings):
         if not v.get_secret_value():
             raise ValueError("Secret must not be empty")
         return v
+
+    @model_validator(mode="after")
+    def validate_local_strategy(self) -> "Settings":
+        if self.llm_strategy == "local":
+            if not importlib.util.find_spec("llama_cpp"):
+                raise ValueError(
+                    "llm_strategy='local' requires 'llama-cpp-python' to be installed. "
+                    "Install with 'poetry install -E local'."
+                )
+        return self
 
 
 # Global settings instance

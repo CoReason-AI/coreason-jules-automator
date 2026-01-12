@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import pytest
 from pydantic import ValidationError
 
@@ -29,10 +31,12 @@ def test_settings_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("VIBE_EXTENSIONS_ENABLED", '["security"]')
     monkeypatch.setenv("VIBE_MAX_RETRIES", "10")
 
-    settings = Settings()  # type: ignore
-    assert settings.llm_strategy == "local"
-    assert settings.extensions_enabled == ["security"]
-    assert settings.max_retries == 10
+    # Mock find_spec to return True (simulating installed)
+    with patch("importlib.util.find_spec", return_value=True):
+        settings = Settings()  # type: ignore
+        assert settings.llm_strategy == "local"
+        assert settings.extensions_enabled == ["security"]
+        assert settings.max_retries == 10
 
 
 def test_missing_secrets(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -70,3 +74,31 @@ def test_secrets_not_logged(monkeypatch: pytest.MonkeyPatch) -> None:
     repr_str = repr(settings)
     assert "secret_token_value" not in repr_str
     assert "secret_key_value" not in repr_str
+
+
+def test_local_strategy_missing_dependency(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test that selecting 'local' strategy without llama_cpp installed raises ValueError."""
+    monkeypatch.setenv("VIBE_GITHUB_TOKEN", "dummy_token")
+    monkeypatch.setenv("VIBE_GOOGLE_API_KEY", "dummy_key")
+    monkeypatch.setenv("VIBE_LLM_STRATEGY", "local")
+
+    # Mock find_spec to return None (simulating NOT installed)
+    with patch("importlib.util.find_spec", return_value=None):
+        with pytest.raises(ValidationError) as excinfo:
+            Settings()  # type: ignore
+
+        # Check that the error message contains the expected hint
+        # Note: Pydantic wraps the ValueError in ValidationError
+        assert "requires 'llama-cpp-python' to be installed" in str(excinfo.value)
+
+
+def test_api_strategy_missing_dependency_ok(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test that selecting 'api' strategy works even if llama_cpp is missing."""
+    monkeypatch.setenv("VIBE_GITHUB_TOKEN", "dummy_token")
+    monkeypatch.setenv("VIBE_GOOGLE_API_KEY", "dummy_key")
+    monkeypatch.setenv("VIBE_LLM_STRATEGY", "api")
+
+    # Mock find_spec to return None (simulating NOT installed)
+    with patch("importlib.util.find_spec", return_value=None):
+        settings = Settings()  # type: ignore
+        assert settings.llm_strategy == "api"
