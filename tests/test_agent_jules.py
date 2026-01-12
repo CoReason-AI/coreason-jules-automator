@@ -121,6 +121,34 @@ def test_interaction_loop_eof_exception(agent: JulesAgent) -> None:
             assert mock_child.close.called
 
 
+def test_interaction_loop_timeout_exception_dead(agent: JulesAgent) -> None:
+    """Test TIMEOUT exception handling when child is dead."""
+    with patch("pathlib.Path.exists", return_value=False):
+        with patch("pexpect.spawn") as mock_spawn:
+            mock_child = MagicMock()
+            mock_child.exitstatus = 0
+            mock_spawn.return_value = mock_child
+            mock_child.expect.side_effect = pexpect.TIMEOUT("Time")
+            mock_child.isalive.return_value = False  # Dead
+
+            agent.start("Task")
+            assert mock_child.close.called
+
+
+def test_interaction_loop_eof_return(agent: JulesAgent) -> None:
+    """Test EOF return value handling."""
+    with patch("pathlib.Path.exists", return_value=False):
+        with patch("pexpect.spawn") as mock_spawn:
+            mock_child = MagicMock()
+            mock_child.exitstatus = 0
+            mock_spawn.return_value = mock_child
+            # Return index 1 for EOF
+            mock_child.expect.return_value = 1
+
+            agent.start("Task")
+            assert mock_child.close.called
+
+
 def test_interaction_loop_timeout_exception(agent: JulesAgent) -> None:
     """Test TIMEOUT exception handling (not return value)."""
     with patch("pathlib.Path.exists", return_value=False):
@@ -148,6 +176,18 @@ def test_interaction_loop_exit_status(agent: JulesAgent) -> None:
             with patch("coreason_jules_automator.agent.jules.logger") as mock_logger:
                 agent.start("Task")
                 mock_logger.warning.assert_called_with("Jules exited with status 1")
+
+
+def test_interaction_loop_exit_status_explicit(agent: JulesAgent) -> None:
+    """Explicitly cover the non-zero exit status check."""
+    agent.child = MagicMock()
+    agent.child.exitstatus = 1
+    # Mock expect to raise EOF or return to exit loop
+    agent.child.expect.return_value = 1
+
+    with patch("coreason_jules_automator.agent.jules.logger") as mock_logger:
+        agent._interaction_loop()
+        mock_logger.warning.assert_called_with("Jules exited with status 1")
 
 
 def test_interaction_loop_no_child(agent: JulesAgent) -> None:

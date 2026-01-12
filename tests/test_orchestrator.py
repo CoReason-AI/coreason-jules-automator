@@ -140,6 +140,23 @@ def test_run_cycle_line_1_retry(orchestrator: Any) -> None:
             assert orchestrator.agent.start.call_count == 2
 
 
+def test_run_cycle_line_2_retry(orchestrator: Any) -> None:
+    """Test retry loop on Line 2 failure."""
+    # Line 1 passes, Line 2 fails once then passes
+    with patch("coreason_jules_automator.orchestrator.get_settings") as mock_get_settings:
+        mock_settings = MagicMock()
+        mock_settings.max_retries = 5
+        mock_get_settings.return_value = mock_settings
+
+        with (
+            patch.object(orchestrator, "_line_1_defense", return_value=True),
+            patch.object(orchestrator, "_line_2_defense", side_effect=[False, True]),
+        ):
+            assert orchestrator.run_cycle("task", "branch") is True
+            # Should retry, so start called twice
+            assert orchestrator.agent.start.call_count == 2
+
+
 def test_run_cycle_max_retries(orchestrator: Any) -> None:
     """Test max retries reached."""
     # Always fail Line 1
@@ -171,6 +188,16 @@ def test_handle_ci_failure_no_check_found(orchestrator: Any) -> None:
 
     orchestrator._handle_ci_failure([{"conclusion": "success"}])
     orchestrator.janitor.summarize_logs.assert_not_called()
+
+
+def test_handle_ci_failure_summary(orchestrator: Any) -> None:
+    """Test failure handler logs Janitor summary."""
+    checks = [{"name": "test", "conclusion": "failure", "url": "http://fail"}]
+    orchestrator.janitor.summarize_logs.return_value = "Summary Text"
+
+    with patch("coreason_jules_automator.orchestrator.logger") as mock_logger:
+        orchestrator._handle_ci_failure(checks)
+        mock_logger.info.assert_any_call("Janitor Summary: Summary Text")
 
 
 def test_orchestrator_line_1_defense_review_fail_coverage() -> None:

@@ -79,6 +79,14 @@ def test_get_pr_checks_invalid_json(gh: GitHubInterface) -> None:
         assert "Failed to parse gh output" in str(excinfo.value)
 
 
+def test_get_pr_checks_unexpected_format(gh: GitHubInterface) -> None:
+    """Test get_pr_checks when output is valid JSON but not a list."""
+    with patch.object(gh, "_run_command", return_value="{}"):
+        with pytest.raises(RuntimeError) as excinfo:
+            gh.get_pr_checks()
+        assert "Unexpected format from gh: expected list" in str(excinfo.value)
+
+
 def test_push_to_branch_success(gh: GitHubInterface) -> None:
     """Test push_to_branch success."""
     with patch("subprocess.run") as mock_run:
@@ -100,7 +108,17 @@ def test_push_to_branch_failure(gh: GitHubInterface) -> None:
         with pytest.raises(RuntimeError) as excinfo:
             gh.push_to_branch("feature/test", "msg")
         assert "Git push failed" in str(excinfo.value)
-        assert "remote rejected" in str(excinfo.value)
+
+
+def test_push_to_branch_failure_with_stderr(gh: GitHubInterface) -> None:
+    """Test push_to_branch failure with stderr to cover error decoding."""
+    err = subprocess.CalledProcessError(1, ["git", "push"])
+    err.stderr = b"Permission denied"
+
+    with patch("subprocess.run", side_effect=err):
+        with pytest.raises(RuntimeError) as excinfo:
+            gh.push_to_branch("feature/test", "msg")
+        assert "Git push failed: Permission denied" in str(excinfo.value)
 
 
 def test_push_to_branch_failure_no_stderr(gh: GitHubInterface) -> None:

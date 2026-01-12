@@ -70,3 +70,43 @@ def test_main() -> None:
     with patch("coreason_jules_automator.cli.app") as mock_app:
         main()
         mock_app.assert_called_once()
+
+
+def test_main_execution() -> None:
+    """Test executing the module as a script."""
+    import re
+    import subprocess
+    import sys
+
+    # Use coverage run to ensure we capture the coverage
+    cmd = [sys.executable, "-m", "coverage", "run", "--append", "-m", "coreason_jules_automator.cli", "--help"]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+
+    assert result.returncode == 0
+    # Strip ANSI codes
+    clean_stdout = re.sub(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])", "", result.stdout)
+    assert "Usage: vibe-runner" in clean_stdout or "Usage: python -m coreason_jules_automator.cli" in clean_stdout
+
+
+def test_cli_file_execution() -> None:
+    """Test executing the cli.py file directly."""
+    import re
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    # Locate the cli.py file
+    cli_file = Path("src/coreason_jules_automator/cli.py").resolve()
+
+    # Use coverage run here too
+    cmd = [sys.executable, "-m", "coverage", "run", "--append", str(cli_file), "--help"]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+
+    assert result.returncode == 0
+    # Strip ANSI codes
+    clean_stdout = re.sub(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])", "", result.stdout)
+    assert (
+        "Usage: vibe-runner" in clean_stdout
+        or "Usage: coreason_jules_automator/cli.py" in clean_stdout
+        or "Usage: cli.py" in clean_stdout
+    )
