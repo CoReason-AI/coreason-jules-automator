@@ -59,7 +59,7 @@ def test_run_command_exception(gh: GitHubInterface) -> None:
         with pytest.raises(RuntimeError) as excinfo:
             gh._run_command(["test"])
 
-        assert "Failed to execute gh command" in str(excinfo.value)
+        assert "gh command failed" in str(excinfo.value)
 
 
 def test_get_pr_checks_success(gh: GitHubInterface) -> None:
@@ -90,12 +90,13 @@ def test_get_pr_checks_unexpected_format(gh: GitHubInterface) -> None:
 def test_push_to_branch_success(gh: GitHubInterface) -> None:
     """Test push_to_branch success."""
     with patch("subprocess.run") as mock_run:
+        mock_run.return_value.returncode = 0
         gh.push_to_branch("feature/test", "commit message")
         assert mock_run.call_count == 3  # add, commit, push
         # Verify calls
-        mock_run.assert_any_call(["git", "add", "."], check=True, capture_output=True)
-        mock_run.assert_any_call(["git", "commit", "-m", "commit message"], check=True, capture_output=True)
-        mock_run.assert_any_call(["git", "push", "origin", "feature/test"], check=True, capture_output=True)
+        mock_run.assert_any_call(["git", "add", "."], capture_output=True, text=True, check=False, timeout=300)
+        mock_run.assert_any_call(["git", "commit", "-m", "commit message"], capture_output=True, text=True, check=False, timeout=300)
+        mock_run.assert_any_call(["git", "push", "origin", "feature/test"], capture_output=True, text=True, check=False, timeout=300)
 
 
 def test_push_to_branch_failure(gh: GitHubInterface) -> None:
@@ -112,13 +113,14 @@ def test_push_to_branch_failure(gh: GitHubInterface) -> None:
 
 def test_push_to_branch_failure_with_stderr(gh: GitHubInterface) -> None:
     """Test push_to_branch failure with stderr to cover error decoding."""
-    err = subprocess.CalledProcessError(1, ["git", "push"])
-    err.stderr = b"Permission denied"
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value.returncode = 1
+        mock_run.return_value.stderr = "Permission denied"
+        mock_run.return_value.stdout = ""
 
-    with patch("subprocess.run", side_effect=err):
         with pytest.raises(RuntimeError) as excinfo:
             gh.push_to_branch("feature/test", "msg")
-        assert "Git push failed: Permission denied" in str(excinfo.value)
+        assert "Git push failed: Command failed with exit code 1: Permission denied" in str(excinfo.value)
 
 
 def test_push_to_branch_failure_no_stderr(gh: GitHubInterface) -> None:
