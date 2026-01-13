@@ -2157,4 +2157,4 @@ local = ["llama-cpp-python"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12, <3.15"
-content-hash = "fcd741b68e379c1e9f659b02617c8088fbeb966c2555b47cfcdfa93fad2576e9"
+content-hash = "9a0900111820d5a6fbfea688be6273cb6f3b672a0ebfba1e14293c0febf41ea1"

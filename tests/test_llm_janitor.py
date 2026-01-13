@@ -1,4 +1,6 @@
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 from coreason_jules_automator.llm.janitor import JanitorService
 from coreason_jules_automator.llm.prompts import PromptManager
@@ -18,16 +20,17 @@ def test_janitor_sanitize_commit() -> None:
     assert clean == "feat: add feature"
 
 
-def test_janitor_summarize_logs_success() -> None:
+@pytest.mark.asyncio
+async def test_janitor_summarize_logs_success() -> None:
     """Test summarize_logs with mocked LLM and PromptManager."""
     mock_client = MagicMock()
-    mock_client.complete.return_value = "Summary"
+    mock_client.complete = AsyncMock(return_value="Summary")
 
     mock_prompt_manager = MagicMock()
     mock_prompt_manager.render.return_value = "Rendered Prompt"
 
     janitor = JanitorService(llm_client=mock_client, prompt_manager=mock_prompt_manager)
-    summary = janitor.summarize_logs("long log...")
+    summary = await janitor.summarize_logs("long log...")
 
     assert summary == "Summary"
     # logs="long log..." is correct because "long log..." is much shorter than 2000 chars, so no slicing happens.
@@ -37,12 +40,13 @@ def test_janitor_summarize_logs_success() -> None:
     )
 
 
-def test_janitor_summarize_logs_template_error() -> None:
+@pytest.mark.asyncio
+async def test_janitor_summarize_logs_template_error() -> None:
     """Test handling of template rendering errors."""
     mock_prompt_manager = MagicMock()
     mock_prompt_manager.render.side_effect = Exception("Template Error")
 
     janitor = JanitorService(llm_client=None, prompt_manager=mock_prompt_manager)
-    summary = janitor.summarize_logs("log")
+    summary = await janitor.summarize_logs("log")
 
     assert summary == "Log summarization failed due to template error."

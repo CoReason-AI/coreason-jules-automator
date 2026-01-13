@@ -1,6 +1,8 @@
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-from unittest.mock import MagicMock, AsyncMock
-from coreason_jules_automator.llm.adapters import OpenAIAdapter, LlamaAdapter
+
+from coreason_jules_automator.llm.adapters import LlamaAdapter, OpenAIAdapter
 
 
 @pytest.fixture

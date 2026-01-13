@@ -1,6 +1,8 @@
+from typing import Any, Dict
+
 import pytest
-from coreason_jules_automator.strategies.base import DefenseStrategy, DefenseResult
-from typing import Dict, Any
+
+from coreason_jules_automator.strategies.base import DefenseResult, DefenseStrategy
 
 
 class ConcreteDefense(DefenseStrategy):

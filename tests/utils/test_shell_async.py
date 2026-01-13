@@ -1,6 +1,6 @@
-import asyncio
 import pytest
-from coreason_jules_automator.utils.shell import ShellExecutor, CommandResult
+
+from coreason_jules_automator.utils.shell import ShellExecutor
 
 
 @pytest.mark.asyncio
