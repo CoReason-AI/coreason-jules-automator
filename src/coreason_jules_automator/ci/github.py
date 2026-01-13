@@ -59,4 +59,3 @@ class GitHubInterface:
             return parsed
         except json.JSONDecodeError as e:
             raise RuntimeError(f"Failed to parse gh output: {output}") from e
-

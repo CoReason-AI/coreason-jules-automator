@@ -1,4 +1,3 @@
-import subprocess
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -85,5 +84,3 @@ def test_get_pr_checks_unexpected_format(gh: GitHubInterface) -> None:
         with pytest.raises(RuntimeError) as excinfo:
             gh.get_pr_checks()
         assert "Unexpected format from gh: expected list" in str(excinfo.value)
-
-

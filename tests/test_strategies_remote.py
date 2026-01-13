@@ -21,9 +21,7 @@ def mock_git() -> MagicMock:
 
 
 @pytest.fixture
-def strategy(
-    mock_github: MagicMock, mock_janitor: MagicMock, mock_git: MagicMock
-) -> RemoteDefenseStrategy:
+def strategy(mock_github: MagicMock, mock_janitor: MagicMock, mock_git: MagicMock) -> RemoteDefenseStrategy:
     return RemoteDefenseStrategy(github=mock_github, janitor=mock_janitor, git=mock_git)
 
 

@@ -1,5 +1,4 @@
-import subprocess
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -30,7 +29,7 @@ def test_push_to_branch_failure(git: GitInterface) -> None:
     git = GitInterface(shell_executor=mock_shell)
 
     # Simulate ShellError
-    from coreason_jules_automator.utils.shell import ShellError, CommandResult
+    from coreason_jules_automator.utils.shell import CommandResult, ShellError
 
     result = CommandResult(1, "", "error")
     mock_shell.run.side_effect = ShellError("Command failed", result)
