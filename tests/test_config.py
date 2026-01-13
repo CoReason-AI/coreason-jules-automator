@@ -12,6 +12,7 @@ def test_settings_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test default values for settings."""
     monkeypatch.setenv("COREASON_GITHUB_TOKEN", "dummy_token")
     monkeypatch.setenv("COREASON_GOOGLE_API_KEY", "dummy_key")
+    monkeypatch.setenv("COREASON_REPO_NAME", "dummy/repo")
     # Ensure no other env vars interfere
     monkeypatch.delenv("COREASON_LLM_STRATEGY", raising=False)
     monkeypatch.delenv("COREASON_EXTENSIONS_ENABLED", raising=False)
@@ -29,6 +30,7 @@ def test_settings_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test overriding settings with environment variables."""
     monkeypatch.setenv("COREASON_GITHUB_TOKEN", "dummy_token")
     monkeypatch.setenv("COREASON_GOOGLE_API_KEY", "dummy_key")
+    monkeypatch.setenv("COREASON_REPO_NAME", "dummy/repo")
     monkeypatch.setenv("COREASON_LLM_STRATEGY", "local")
     monkeypatch.setenv("COREASON_EXTENSIONS_ENABLED", '["security"]')
     monkeypatch.setenv("COREASON_MAX_RETRIES", "10")
@@ -74,6 +76,7 @@ def test_secrets_not_logged(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test that secrets are not exposed in repr."""
     monkeypatch.setenv("COREASON_GITHUB_TOKEN", "secret_token_value")
     monkeypatch.setenv("COREASON_GOOGLE_API_KEY", "secret_key_value")
+    monkeypatch.setenv("COREASON_REPO_NAME", "dummy/repo")
 
     settings = Settings()  # type: ignore
     repr_str = repr(settings)
@@ -85,6 +88,7 @@ def test_local_strategy_missing_dependency(monkeypatch: pytest.MonkeyPatch) -> N
     """Test that selecting 'local' strategy without llama_cpp installed raises ValueError."""
     monkeypatch.setenv("COREASON_GITHUB_TOKEN", "dummy_token")
     monkeypatch.setenv("COREASON_GOOGLE_API_KEY", "dummy_key")
+    monkeypatch.setenv("COREASON_REPO_NAME", "dummy/repo")
     monkeypatch.setenv("COREASON_LLM_STRATEGY", "local")
 
     # Mock find_spec to return None (simulating NOT installed)
@@ -101,6 +105,7 @@ def test_api_strategy_missing_dependency_ok(monkeypatch: pytest.MonkeyPatch) -> 
     """Test that selecting 'api' strategy works even if llama_cpp is missing."""
     monkeypatch.setenv("COREASON_GITHUB_TOKEN", "dummy_token")
     monkeypatch.setenv("COREASON_GOOGLE_API_KEY", "dummy_key")
+    monkeypatch.setenv("COREASON_REPO_NAME", "dummy/repo")
     monkeypatch.setenv("COREASON_LLM_STRATEGY", "api")
 
     # Mock find_spec to return None (simulating NOT installed)
@@ -124,6 +129,7 @@ def test_get_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test get_settings returns a Settings instance."""
     monkeypatch.setenv("COREASON_GITHUB_TOKEN", "dummy")
     monkeypatch.setenv("COREASON_GOOGLE_API_KEY", "dummy")
+    monkeypatch.setenv("COREASON_REPO_NAME", "dummy/repo")
 
     # Reload module to get fresh classes/functions
     importlib.reload(coreason_jules_automator.config)
@@ -144,6 +150,7 @@ def test_invalid_llm_strategy(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test that an invalid llm_strategy raises ValidationError."""
     monkeypatch.setenv("COREASON_GITHUB_TOKEN", "dummy")
     monkeypatch.setenv("COREASON_GOOGLE_API_KEY", "dummy")
+    monkeypatch.setenv("COREASON_REPO_NAME", "dummy/repo")
     monkeypatch.setenv("COREASON_LLM_STRATEGY", "invalid_strategy")
 
     with pytest.raises(ValidationError) as excinfo:
@@ -156,15 +163,19 @@ def test_settings_runtime_instantiation(monkeypatch: pytest.MonkeyPatch) -> None
     """Test instantiating Settings with runtime values overrides environment."""
     monkeypatch.setenv("COREASON_GITHUB_TOKEN", "env_token")
     monkeypatch.setenv("COREASON_GOOGLE_API_KEY", "env_key")
+    monkeypatch.setenv("COREASON_REPO_NAME", "env/repo")
 
     # 1. Default uses env
     s1 = Settings()  # type: ignore
     assert s1.GITHUB_TOKEN.get_secret_value() == "env_token"
+    assert s1.repo_name == "env/repo"
 
     # 2. Override via init
-    s2 = Settings(GITHUB_TOKEN="override_token", GOOGLE_API_KEY="override_key")  # type: ignore
+    s2 = Settings(GITHUB_TOKEN="override_token", GOOGLE_API_KEY="override_key", repo_name="override/repo")  # type: ignore
     assert s2.GITHUB_TOKEN.get_secret_value() == "override_token"
     assert s2.GOOGLE_API_KEY.get_secret_value() == "override_key"
+    assert s2.repo_name == "override/repo"
 
     # 3. Prove s1 is unchanged (environment didn't change)
     assert s1.GITHUB_TOKEN.get_secret_value() == "env_token"
+    assert s1.repo_name == "env/repo"

@@ -13,6 +13,7 @@ from coreason_jules_automator.llm.model_manager import ModelManager
 def mock_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("COREASON_GITHUB_TOKEN", "dummy")
     monkeypatch.setenv("COREASON_GOOGLE_API_KEY", "dummy")
+    monkeypatch.setenv("COREASON_REPO_NAME", "dummy/repo")
     monkeypatch.setenv("COREASON_LLM_STRATEGY", "api")
     get_settings.cache_clear()
 
