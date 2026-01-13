@@ -232,9 +232,7 @@ def test_teleport_and_sync_success(
 
 @patch("subprocess.run")
 @patch("pathlib.Path.mkdir")
-def test_teleport_and_sync_no_folder(
-    mock_mkdir: MagicMock, mock_run: MagicMock, agent: JulesAgent
-) -> None:
+def test_teleport_and_sync_no_folder(mock_mkdir: MagicMock, mock_run: MagicMock, agent: JulesAgent) -> None:
     """Test teleport failing to find jules-* folder."""
     mock_run.return_value = MagicMock()
 
@@ -257,9 +255,7 @@ def test_teleport_and_sync_failure(mock_run: MagicMock, agent: JulesAgent) -> No
 
 @patch("subprocess.run")
 @patch("pathlib.Path.mkdir")
-def test_teleport_and_sync_exception(
-    mock_mkdir: MagicMock, mock_run: MagicMock, agent: JulesAgent
-) -> None:
+def test_teleport_and_sync_exception(mock_mkdir: MagicMock, mock_run: MagicMock, agent: JulesAgent) -> None:
     """Test teleport handling generic exception."""
     mock_run.side_effect = Exception("Disk Error")
 
