@@ -8,10 +8,11 @@
 #
 # Source Code: https://github.com/CoReason-AI/coreason_jules_automator
 
-from typing import List
+from typing import List, Optional
 
 from coreason_jules_automator.agent.jules import JulesAgent
 from coreason_jules_automator.config import get_settings
+from coreason_jules_automator.events import AutomationEvent, EventEmitter, EventType, LoguruEmitter
 from coreason_jules_automator.strategies.base import DefenseStrategy
 from coreason_jules_automator.utils.logger import logger
 
@@ -22,9 +23,15 @@ class Orchestrator:
     Manages the 'Two-Line Defense' state machine using injected strategies.
     """
 
-    def __init__(self, agent: JulesAgent, strategies: List[DefenseStrategy]) -> None:
+    def __init__(
+        self,
+        agent: JulesAgent,
+        strategies: List[DefenseStrategy],
+        event_emitter: Optional[EventEmitter] = None,
+    ) -> None:
         self.agent = agent
         self.strategies = strategies
+        self.event_emitter = event_emitter or LoguruEmitter()
 
     def run_cycle(self, task_description: str, branch_name: str) -> bool:
         """
@@ -32,18 +39,36 @@ class Orchestrator:
         Agent -> Strategies -> Success/Retry.
         """
         settings = get_settings()
-        logger.info(f"Starting orchestration cycle for branch: {branch_name}")
+        self.event_emitter.emit(
+            AutomationEvent(
+                type=EventType.CYCLE_START,
+                message=f"Starting orchestration cycle for branch: {branch_name}",
+                payload={"task": task_description, "branch": branch_name},
+            )
+        )
 
         attempt = 0
         while attempt < settings.max_retries:
             attempt += 1
-            logger.info(f"Iteration {attempt}/{settings.max_retries}")
+            self.event_emitter.emit(
+                AutomationEvent(
+                    type=EventType.PHASE_START,
+                    message=f"Iteration {attempt}/{settings.max_retries}",
+                    payload={"attempt": attempt, "max_retries": settings.max_retries},
+                )
+            )
 
             # 1. Agent generates code
             try:
                 self.agent.start(task_description)
             except Exception as e:
-                logger.error(f"Agent failed to execute: {e}")
+                self.event_emitter.emit(
+                    AutomationEvent(
+                        type=EventType.ERROR,
+                        message=f"Agent failed to execute: {e}",
+                        payload={"error": str(e)},
+                    )
+                )
                 return False
 
             # 2. Execute Defense Strategies
@@ -51,16 +76,36 @@ class Orchestrator:
             for strategy in self.strategies:
                 result = strategy.execute(context={"branch_name": branch_name})
                 if not result.success:
+                    # Strategy failure is logged by the strategy itself via events (ideally),
+                    # but we also log high level warning here.
                     logger.warning(f"Strategy {strategy.__class__.__name__} failed: {result.message}")
                     cycle_passed = False
                     # Feedback loop simulated here; in real implementation would pass back to agent
                     break  # Break inner loop to retry outer loop
 
             if cycle_passed:
-                logger.info("All defense strategies passed. Success!")
+                self.event_emitter.emit(
+                    AutomationEvent(
+                        type=EventType.PHASE_START,
+                        message="All defense strategies passed. Success!",
+                        payload={"status": "success"},
+                    )
+                )
                 return True
             else:
-                logger.warning("Defense cycle failed. Retrying...")
+                self.event_emitter.emit(
+                    AutomationEvent(
+                        type=EventType.PHASE_START,
+                        message="Defense cycle failed. Retrying...",
+                        payload={"status": "retry"},
+                    )
+                )
 
-        logger.error("Max retries reached. Task failed.")
+        self.event_emitter.emit(
+            AutomationEvent(
+                type=EventType.ERROR,
+                message="Max retries reached. Task failed.",
+                payload={"status": "failed"},
+            )
+        )
         return False
