@@ -7,6 +7,7 @@ from coreason_jules_automator.config import get_settings
 from coreason_jules_automator.llm.factory import LLMFactory
 from coreason_jules_automator.llm.janitor import JanitorService
 from coreason_jules_automator.llm.model_manager import ModelManager
+from coreason_jules_automator.llm.adapters import OpenAIAdapter
 
 
 @pytest.fixture
@@ -83,32 +84,22 @@ def test_janitor_sanitize_commit() -> None:
     assert clean == "feat: add feature"
 
 
-def test_janitor_summarize_logs_openai() -> None:
-    """Test summarize_logs with OpenAI client."""
+def test_janitor_summarize_logs_success() -> None:
+    """Test summarize_logs with a valid LLMClient."""
     mock_client = MagicMock()
-    mock_client.chat.completions.create.return_value.choices[0].message.content = "Summary"
+    # Mock the complete method
+    mock_client.complete.return_value = "Summary"
 
     janitor = JanitorService(llm_client=mock_client)
     summary = janitor.summarize_logs("long log...")
     assert summary == "Summary"
-
-
-def test_janitor_summarize_logs_local() -> None:
-    """Test summarize_logs with Local client."""
-    mock_client = MagicMock()
-    mock_client.create_chat_completion.return_value = {"choices": [{"message": {"content": "Local Summary"}}]}
-    # Simulate removal of 'chat' attribute to ensure it falls through to local logic if check assumes it
-    del mock_client.chat
-
-    janitor = JanitorService(llm_client=mock_client)
-    summary = janitor.summarize_logs("long log...")
-    assert summary == "Local Summary"
+    mock_client.complete.assert_called_once()
 
 
 def test_janitor_summarize_logs_failure() -> None:
     """Test summarize_logs failure handling."""
     mock_client = MagicMock()
-    mock_client.chat.completions.create.side_effect = Exception("API Error")
+    mock_client.complete.side_effect = Exception("API Error")
 
     janitor = JanitorService(llm_client=mock_client)
     summary = janitor.summarize_logs("log")

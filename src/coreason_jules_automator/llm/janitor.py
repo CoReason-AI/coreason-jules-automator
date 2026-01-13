@@ -1,6 +1,7 @@
 import re
-from typing import Any, Optional
+from typing import Optional
 
+from coreason_jules_automator.llm.adapters import LLMClient
 from coreason_jules_automator.utils.logger import logger
 
 
@@ -9,7 +10,7 @@ class JanitorService:
     Business logic for cleaning commits and summarizing logs.
     """
 
-    def __init__(self, llm_client: Optional[Any]) -> None:
+    def __init__(self, llm_client: Optional[LLMClient]) -> None:
         self.client = llm_client
 
     def sanitize_commit(self, text: str) -> str:
@@ -35,19 +36,9 @@ class JanitorService:
 
         if self.client:
             try:
-                # Check if it's OpenAI client
-                if hasattr(self.client, "chat"):
-                    response = self.client.chat.completions.create(
-                        model="gpt-3.5-turbo", messages=[{"role": "user", "content": prompt}], max_tokens=150
-                    )
-                    return str(response.choices[0].message.content.strip())
-
-                # Check if it's Llama client
-                elif hasattr(self.client, "create_chat_completion"):
-                    response = self.client.create_chat_completion(
-                        messages=[{"role": "user", "content": prompt}], max_tokens=150
-                    )
-                    return str(response["choices"][0]["message"]["content"].strip())
+                return self.client.complete(
+                    messages=[{"role": "user", "content": prompt}], max_tokens=150
+                )
 
             except Exception as e:
                 logger.error(f"LLM generation failed: {e}")

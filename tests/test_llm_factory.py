@@ -4,6 +4,7 @@ import pytest
 from pydantic import SecretStr
 
 from coreason_jules_automator.llm.factory import LLMFactory
+from coreason_jules_automator.llm.adapters import OpenAIAdapter, LlamaAdapter
 
 
 def test_get_client_api_openai_missing_import() -> None:
@@ -24,8 +25,9 @@ def test_get_client_api_openai_key() -> None:
         mock_settings.return_value.DEEPSEEK_API_KEY = None
 
         with patch("openai.OpenAI") as mock_openai:
-            LLMFactory.get_client()
+            client = LLMFactory.get_client()
             mock_openai.assert_called_with(api_key="sk-test")
+            assert isinstance(client, OpenAIAdapter)
 
 
 def test_get_client_api_deepseek_key() -> None:
@@ -36,8 +38,9 @@ def test_get_client_api_deepseek_key() -> None:
         mock_settings.return_value.DEEPSEEK_API_KEY = SecretStr("sk-deepseek")
 
         with patch("openai.OpenAI") as mock_openai:
-            LLMFactory.get_client()
+            client = LLMFactory.get_client()
             mock_openai.assert_called_with(api_key="sk-deepseek", base_url="https://api.deepseek.com")
+            assert isinstance(client, OpenAIAdapter)
 
 
 def test_get_client_api_no_keys() -> None:
@@ -61,7 +64,7 @@ def test_initialize_local_success() -> None:
         with patch.dict("sys.modules", {"llama_cpp": mock_llama_module}):
             client = LLMFactory._initialize_local()
             mock_llama_module.Llama.assert_called_with(model_path="/path/to/model", verbose=False)
-            assert client is not None
+            assert isinstance(client, LlamaAdapter)
 
 
 def test_initialize_local_download_failure() -> None:
