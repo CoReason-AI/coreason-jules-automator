@@ -1,8 +1,8 @@
-# Software Requirements & Vision: The "Hybrid Vibe Runner"
+# Software Requirements & Vision: The "Coreason Jules Automator"
 
 ## Introduction
 
-This document outlines the vision and technical requirements for the **"Hybrid Vibe Runner"**, an autonomous orchestration engine designed to optimize software development workflows by integrating fast local feedback loops with robust remote CI/CD verification.
+This document outlines the vision and technical requirements for the **"Coreason Jules Automator"**, an autonomous orchestration engine designed to optimize software development workflows by integrating fast local feedback loops with robust remote CI/CD verification.
 
 ## Vision
 
@@ -39,7 +39,7 @@ The system is built around a nested feedback loop managed by a central State Mac
 
 ### 1. Configuration Settings
 
-The application is configured via environment variables with a `VIBE_` prefix, ensuring security and flexibility.
+The application is configured via environment variables with a `COREASON_` prefix, ensuring security and flexibility.
 
 *   **Tunable Settings:**
     *   `llm_strategy`: Choose between `"api"` (default, for speed) and `"local"` (fallback).
@@ -84,4 +84,4 @@ The system provides a **Command Line Interface (CLI)** built with `typer`.
 *   Provides clear, real-time feedback on the orchestration process.
 
 ---
-*This document reflects the "Hybrid Vibe Runner" implementation plan and architectural vision.*
+*This document reflects the "Coreason Jules Automator" implementation plan and architectural vision.*
