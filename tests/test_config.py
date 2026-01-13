@@ -162,7 +162,7 @@ def test_settings_runtime_instantiation(monkeypatch: pytest.MonkeyPatch) -> None
     assert s1.GITHUB_TOKEN.get_secret_value() == "env_token"
 
     # 2. Override via init
-    s2 = Settings(GITHUB_TOKEN="override_token", GOOGLE_API_KEY="override_key")  # type: ignore[arg-type]
+    s2 = Settings(GITHUB_TOKEN="override_token", GOOGLE_API_KEY="override_key")  # type: ignore[arg-type, call-arg]
     assert s2.GITHUB_TOKEN.get_secret_value() == "override_token"
     assert s2.GOOGLE_API_KEY.get_secret_value() == "override_key"
 
