@@ -62,8 +62,9 @@ def test_execute_no_changes(
 
     result = strategy.execute({"branch_name": "feature/test", "sid": "12345"})
 
-    assert result.success is False
+    assert result.success is True
     assert "No changes detected" in result.message
+    assert "Task completed" in result.message
 
     # Verify SID in commit message passed to sanitize
     mock_janitor.sanitize_commit.assert_called_with("feat: implementation for feature/test (SID: 12345)")

@@ -51,7 +51,7 @@ class RemoteDefenseStrategy(DefenseStrategy):
                 self.event_emitter.emit(
                     AutomationEvent(type=EventType.CHECK_RESULT, message=msg, payload={"status": "warn"})
                 )
-                return DefenseResult(success=False, message=msg)
+                return DefenseResult(success=True, message="No changes detected. Task completed.")
 
             self.event_emitter.emit(
                 AutomationEvent(
