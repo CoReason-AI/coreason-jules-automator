@@ -29,6 +29,9 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    # Core Settings
+    repo_name: str = Field(..., description="Target repository name (e.g. 'CoReason-AI/testing_automator')")
+
     # Tunable Settings
     llm_strategy: Literal["local", "api"] = Field(default="api", description="Strategy to use for LLM (local or api)")
     extensions_enabled: List[str] = Field(
