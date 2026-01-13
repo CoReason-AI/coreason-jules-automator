@@ -18,12 +18,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     """
-    Application settings for the Hybrid Vibe Runner.
-    Environment variables are prefixed with VIBE_.
+    Application settings for the Coreason Jules Automator.
+    Environment variables are prefixed with COREASON_.
     """
 
     model_config = SettingsConfigDict(
-        env_prefix="VIBE_",
+        env_prefix="COREASON_",
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
