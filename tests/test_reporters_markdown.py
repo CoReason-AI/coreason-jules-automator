@@ -58,3 +58,47 @@ def test_markdown_reporter_renders_full_template(tmp_path: Path) -> None:
     assert "Lint Check" in report
     assert "CI Build" in report
     assert "I am fixing the build" in report
+
+def test_markdown_reporter_fallback_logic(tmp_path: Path) -> None:
+    # Setup template
+    template_dir = tmp_path / "templates"
+    template_dir.mkdir()
+    template_file = template_dir / "report.md.j2"
+    template_file.write_text("""
+    Local: {% for c in local_checks %}{{ c.name }},{% endfor %}
+    Remote: {% for c in remote_checks %}{{ c.name }},{% endfor %}
+    """)
+
+    reporter = MarkdownReporter(template_dir)
+
+    events = [
+        AutomationEvent(type=EventType.CYCLE_START, message="Start"),
+        # No Phase Start
+        AutomationEvent(type=EventType.CHECK_RESULT, message="Unknown Check", payload={"status": "pass"}),
+        AutomationEvent(type=EventType.CHECK_RESULT, message="GitHub Action", payload={"status": "pass"}),
+        AutomationEvent(type=EventType.CHECK_RESULT, message="Remote Build", payload={"status": "pass"}),
+    ]
+
+    report = reporter.generate_report(events, "Task B", "branch-b")
+
+    assert "Local: Unknown Check," in report
+    assert "Remote: GitHub Action,Remote Build," in report
+
+def test_markdown_reporter_missing_cycle_start(tmp_path: Path) -> None:
+    # Setup template
+    template_dir = tmp_path / "templates"
+    template_dir.mkdir()
+    template_file = template_dir / "report.md.j2"
+    template_file.write_text("Duration: {{ duration }}")
+
+    reporter = MarkdownReporter(template_dir)
+
+    events = [
+        AutomationEvent(type=EventType.CHECK_RESULT, message="Check", payload={"status": "pass"}, timestamp=1000.0),
+        AutomationEvent(type=EventType.CHECK_RESULT, message="Check2", payload={"status": "pass"}, timestamp=1010.0),
+    ]
+
+    report = reporter.generate_report(events, "Task C", "branch-c")
+
+    # 1010 - 1000 = 10 seconds
+    assert "Duration: 0:00:10" in report
