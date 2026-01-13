@@ -6,6 +6,7 @@ from typing import Any, Dict
 @dataclass
 class DefenseResult:
     """Result of a defense strategy execution."""
+
     success: bool
     message: str = ""
     metadata: Dict[str, Any] = field(default_factory=dict)

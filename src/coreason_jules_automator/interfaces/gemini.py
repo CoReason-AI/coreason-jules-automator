@@ -12,7 +12,7 @@ import shutil
 from typing import List, Optional
 
 from coreason_jules_automator.utils.logger import logger
-from coreason_jules_automator.utils.shell import ShellExecutor, ShellError
+from coreason_jules_automator.utils.shell import ShellError, ShellExecutor
 
 
 class GeminiInterface:

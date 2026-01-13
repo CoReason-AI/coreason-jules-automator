@@ -2,7 +2,8 @@ import subprocess
 from unittest.mock import MagicMock, patch
 
 import pytest
-from coreason_jules_automator.utils.shell import ShellExecutor, ShellError, CommandResult
+
+from coreason_jules_automator.utils.shell import ShellError, ShellExecutor
 
 
 @pytest.fixture
@@ -23,13 +24,7 @@ def test_run_success(executor: ShellExecutor) -> None:
         assert result.exit_code == 0
         assert result.stdout == "output"
         assert result.stderr == ""
-        mock_run.assert_called_with(
-            ["echo", "hello"],
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=300
-        )
+        mock_run.assert_called_with(["echo", "hello"], capture_output=True, text=True, check=False, timeout=300)
 
 
 def test_run_failure_no_check(executor: ShellExecutor) -> None:

@@ -55,10 +55,7 @@ def run(
 
         agent = JulesAgent()
 
-        orchestrator = Orchestrator(
-            agent=agent,
-            strategies=[local_strategy, remote_strategy]
-        )
+        orchestrator = Orchestrator(agent=agent, strategies=[local_strategy, remote_strategy])
 
         success = orchestrator.run_cycle(task, branch)
 

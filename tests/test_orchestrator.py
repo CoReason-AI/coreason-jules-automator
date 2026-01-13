@@ -82,10 +82,7 @@ def test_run_cycle_strategy_fail_retry(mock_agent: MagicMock) -> None:
 
         # Strategy fails first time, succeeds second time
         strategy = MagicMock(spec=DefenseStrategy)
-        strategy.execute.side_effect = [
-            DefenseResult(success=False, message="Fail"),
-            DefenseResult(success=True)
-        ]
+        strategy.execute.side_effect = [DefenseResult(success=False, message="Fail"), DefenseResult(success=True)]
 
         strategies: list[DefenseStrategy] = [strategy]
         orch = Orchestrator(agent=mock_agent, strategies=strategies)

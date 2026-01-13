@@ -1,6 +1,6 @@
 import subprocess
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List
 
 from coreason_jules_automator.utils.logger import logger
 
@@ -8,6 +8,7 @@ from coreason_jules_automator.utils.logger import logger
 @dataclass
 class CommandResult:
     """Result of a shell command execution."""
+
     exit_code: int
     stdout: str
     stderr: str
@@ -15,6 +16,7 @@ class CommandResult:
 
 class ShellError(RuntimeError):
     """Raised when a shell command fails."""
+
     def __init__(self, message: str, result: CommandResult):
         super().__init__(message)
         self.result = result
@@ -43,7 +45,7 @@ class ShellExecutor:
                 capture_output=True,
                 text=True,
                 check=False,  # We handle check manually
-                timeout=timeout
+                timeout=timeout,
             )
         except subprocess.TimeoutExpired as e:
             # When timeout expires, we might get partial stdout/stderr or None
@@ -60,11 +62,7 @@ class ShellExecutor:
                 raise ShellError(f"Failed to execute command: {e}", result) from e
             return result
 
-        result = CommandResult(
-            exit_code=process.returncode,
-            stdout=process.stdout,
-            stderr=process.stderr
-        )
+        result = CommandResult(exit_code=process.returncode, stdout=process.stdout, stderr=process.stderr)
 
         if check and result.exit_code != 0:
             error_msg = f"Command failed with exit code {result.exit_code}"
