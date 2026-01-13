@@ -1,6 +1,7 @@
 import time
 from typing import Any, Dict, List
 
+from coreason_jules_automator.ci.git import GitInterface
 from coreason_jules_automator.ci.github import GitHubInterface
 from coreason_jules_automator.llm.janitor import JanitorService
 from coreason_jules_automator.strategies.base import DefenseResult, DefenseStrategy
@@ -13,9 +14,10 @@ class RemoteDefenseStrategy(DefenseStrategy):
     Wraps GitHubInterface and JanitorService.
     """
 
-    def __init__(self, github: GitHubInterface, janitor: JanitorService):
+    def __init__(self, github: GitHubInterface, janitor: JanitorService, git: GitInterface):
         self.github = github
         self.janitor = janitor
+        self.git = git
 
     def execute(self, context: Dict[str, Any]) -> DefenseResult:
         branch_name = context.get("branch_name")
@@ -27,7 +29,7 @@ class RemoteDefenseStrategy(DefenseStrategy):
         # 1. Push Code
         try:
             commit_msg = self.janitor.sanitize_commit(f"feat: implementation for {branch_name}")
-            self.github.push_to_branch(branch_name, commit_msg)
+            self.git.push_to_branch(branch_name, commit_msg)
         except RuntimeError as e:
             logger.error(f"Failed to push code: {e}")
             return DefenseResult(success=False, message=f"Failed to push code: {e}")

@@ -13,6 +13,7 @@ import sys
 import typer
 
 from coreason_jules_automator.agent.jules import JulesAgent
+from coreason_jules_automator.ci.git import GitInterface
 from coreason_jules_automator.ci.github import GitHubInterface
 from coreason_jules_automator.interfaces.gemini import GeminiInterface
 from coreason_jules_automator.llm.factory import LLMFactory
@@ -45,13 +46,14 @@ def run(
         shell_executor = ShellExecutor()
 
         gemini = GeminiInterface(shell_executor=shell_executor)
+        git = GitInterface(shell_executor=shell_executor)
         github = GitHubInterface(shell_executor=shell_executor)
 
         llm_client = LLMFactory.get_client()
         janitor = JanitorService(llm_client=llm_client)
 
         local_strategy = LocalDefenseStrategy(gemini=gemini)
-        remote_strategy = RemoteDefenseStrategy(github=github, janitor=janitor)
+        remote_strategy = RemoteDefenseStrategy(github=github, janitor=janitor, git=git)
 
         agent = JulesAgent()
 
