@@ -65,7 +65,7 @@ jobs:
           PGUSER: ${{ secrets.DB_POSTGRES_TEST_USERNAME}}
           PGPASSWORD: ${{ secrets.DB_POSTGRES_TEST_PASSWORD}}
           PGDATABASE: ${{ secrets.DB_POSTGRES_TEST_PATIENT_SYNTHETIC_DATA}}
-        run: poetry run pytest --cov=src --cov-report=xml
+        run: poetry run pytest
         shell: bash
 
       - name: Upload coverage to Codecov
