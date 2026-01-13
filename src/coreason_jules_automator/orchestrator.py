@@ -8,6 +8,7 @@
 #
 # Source Code: https://github.com/CoReason-AI/coreason_jules_automator
 
+from pathlib import Path
 from typing import List, Optional
 
 from coreason_jules_automator.agent.jules import JulesAgent
@@ -21,6 +22,7 @@ class Orchestrator:
     """
     The Brain of the Hybrid Vibe Runner.
     Manages the 'Two-Line Defense' state machine using injected strategies.
+    Refactored to support Remote Session + Teleport workflow.
     """
 
     def __init__(
@@ -36,7 +38,7 @@ class Orchestrator:
     def run_cycle(self, task_description: str, branch_name: str) -> bool:
         """
         Executes the full development cycle:
-        Agent -> Strategies -> Success/Retry.
+        Agent Launch -> Wait -> Teleport -> Strategies -> Success/Retry.
         """
         settings = get_settings()
         self.event_emitter.emit(
@@ -58,30 +60,66 @@ class Orchestrator:
                 )
             )
 
-            # 1. Agent generates code
+            # --- PHASE 1: REMOTE GENERATION & TELEPORT ---
             try:
-                self.agent.start(task_description)
+                # 1. Launch Session
+                self.event_emitter.emit(
+                    AutomationEvent(type=EventType.CHECK_RUNNING, message="Launching Remote Jules Session...")
+                )
+                sid = self.agent.launch_session(task_description)
+
+                if not sid:
+                    raise RuntimeError("Failed to obtain Session ID (SID).")
+
+                self.event_emitter.emit(
+                    AutomationEvent(
+                        type=EventType.CHECK_RESULT, message=f"Session Started: {sid}", payload={"sid": sid}
+                    )
+                )
+
+                # 2. Monitor for Completion
+                self.event_emitter.emit(
+                    AutomationEvent(type=EventType.CHECK_RUNNING, message=f"Waiting for SID {sid} to complete...")
+                )
+                success_wait = self.agent.wait_for_completion(sid)
+
+                if not success_wait:
+                    raise RuntimeError(f"Session {sid} did not complete successfully.")
+
+                # 3. Teleport & Sync
+                self.event_emitter.emit(
+                    AutomationEvent(type=EventType.CHECK_RUNNING, message="Teleporting code to local workspace...")
+                )
+                success_sync = self.agent.teleport_and_sync(sid, Path.cwd())
+
+                if not success_sync:
+                    raise RuntimeError("Failed to sync remote code to local repository.")
+
+                self.event_emitter.emit(
+                    AutomationEvent(
+                        type=EventType.CHECK_RESULT, message="Code synced successfully.", payload={"status": "pass"}
+                    )
+                )
+
             except Exception as e:
                 self.event_emitter.emit(
                     AutomationEvent(
                         type=EventType.ERROR,
-                        message=f"Agent failed to execute: {e}",
+                        message=f"Agent workflow failed: {e}",
                         payload={"error": str(e)},
                     )
                 )
                 return False
 
-            # 2. Execute Defense Strategies
+            # --- PHASE 2: DEFENSE STRATEGIES ---
             cycle_passed = True
             for strategy in self.strategies:
                 result = strategy.execute(context={"branch_name": branch_name})
                 if not result.success:
-                    # Strategy failure is logged by the strategy itself via events (ideally),
-                    # but we also log high level warning here.
                     logger.warning(f"Strategy {strategy.__class__.__name__} failed: {result.message}")
                     cycle_passed = False
-                    # Feedback loop simulated here; in real implementation would pass back to agent
-                    break  # Break inner loop to retry outer loop
+                    # The strategies (specifically Line 2 / Janitor) generate the feedback for the next loop
+                    break
 
             if cycle_passed:
                 self.event_emitter.emit(

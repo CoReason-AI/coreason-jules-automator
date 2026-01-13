@@ -17,6 +17,11 @@ class MockStrategy(DefenseStrategy):
 
 def test_orchestrator_events() -> None:
     mock_agent = MagicMock(spec=JulesAgent)
+    # Setup happy path
+    mock_agent.launch_session.return_value = "123"
+    mock_agent.wait_for_completion.return_value = True
+    mock_agent.teleport_and_sync.return_value = True
+
     mock_strategy = MockStrategy(success=True)
     mock_emitter = MagicMock()
 
@@ -30,7 +35,9 @@ def test_orchestrator_events() -> None:
         assert result is True
 
         # Verify calls
-        assert mock_emitter.emit.call_count >= 3  # Cycle start, Phase start (iter), Success
+        assert mock_emitter.emit.call_count >= 5
+        # Cycle Start, Phase Start, Launch Running, Launch Result, Wait Running,
+        # Wait Result(implicit?), Teleport Running, Teleport Result, Strategy Result
 
         # Check cycle start
         args, _ = mock_emitter.emit.call_args_list[0]
@@ -38,9 +45,21 @@ def test_orchestrator_events() -> None:
         assert event.type == EventType.CYCLE_START
         assert event.payload["branch"] == "branch"
 
+        # Verify call chain
+        mock_agent.launch_session.assert_called_once()
+        mock_agent.wait_for_completion.assert_called_once_with("123")
+        # We don't need to patch cwd here, just check it was called with a path
+        args, _ = mock_agent.teleport_and_sync.call_args
+        assert args[0] == "123"
+        assert args[1] is not None  # Check it is a path
+
 
 def test_orchestrator_failure_events() -> None:
     mock_agent = MagicMock(spec=JulesAgent)
+    mock_agent.launch_session.return_value = "123"
+    mock_agent.wait_for_completion.return_value = True
+    mock_agent.teleport_and_sync.return_value = True
+
     mock_strategy = MockStrategy(success=False)
     mock_emitter = MagicMock()
 
@@ -54,19 +73,17 @@ def test_orchestrator_failure_events() -> None:
         assert result is False
 
         # Check error emission at end
-        # We expect: Cycle Start, Iteration Start, Retry/Fail, Max Retries Error
         calls = mock_emitter.emit.call_args_list
-        assert len(calls) >= 4
-
         last_event = calls[-1][0][0]
         assert last_event.type == EventType.ERROR
         assert "Max retries reached" in last_event.message
 
 
-def test_orchestrator_agent_failure_events() -> None:
-    """Test that events are emitted when the agent raises an exception."""
+def test_orchestrator_agent_failure_launch() -> None:
+    """Test that events are emitted when the agent fails to launch session."""
     mock_agent = MagicMock(spec=JulesAgent)
-    mock_agent.start.side_effect = RuntimeError("Agent crash")
+    mock_agent.launch_session.return_value = None  # Failed to launch
+
     mock_strategy = MockStrategy(success=True)
     mock_emitter = MagicMock()
 
@@ -79,13 +96,59 @@ def test_orchestrator_agent_failure_events() -> None:
 
         assert result is False
 
-        # Verify calls
-        # We expect: Cycle Start, Phase Start, then Error
-        assert mock_emitter.emit.call_count >= 3
-
         calls = mock_emitter.emit.call_args_list
-        # The last event should be the agent error
         last_event = calls[-1][0][0]
         assert last_event.type == EventType.ERROR
-        assert "Agent failed to execute" in last_event.message
-        assert "Agent crash" in last_event.payload["error"]
+        assert "Agent workflow failed" in last_event.message
+        assert "Failed to obtain Session ID" in last_event.payload["error"]
+
+
+def test_orchestrator_agent_failure_wait() -> None:
+    """Test that events are emitted when the agent fails to wait for completion."""
+    mock_agent = MagicMock(spec=JulesAgent)
+    mock_agent.launch_session.return_value = "123"
+    mock_agent.wait_for_completion.return_value = False  # Failed waiting
+
+    mock_strategy = MockStrategy(success=True)
+    mock_emitter = MagicMock()
+
+    orchestrator = Orchestrator(agent=mock_agent, strategies=[mock_strategy], event_emitter=mock_emitter)
+
+    with patch("coreason_jules_automator.orchestrator.get_settings") as mock_settings:
+        mock_settings.return_value.max_retries = 1
+
+        result = orchestrator.run_cycle("task", "branch")
+
+        assert result is False
+
+        calls = mock_emitter.emit.call_args_list
+        last_event = calls[-1][0][0]
+        assert last_event.type == EventType.ERROR
+        assert "Agent workflow failed" in last_event.message
+        assert "did not complete successfully" in last_event.payload["error"]
+
+
+def test_orchestrator_agent_failure_teleport() -> None:
+    """Test that events are emitted when the agent fails to teleport."""
+    mock_agent = MagicMock(spec=JulesAgent)
+    mock_agent.launch_session.return_value = "123"
+    mock_agent.wait_for_completion.return_value = True
+    mock_agent.teleport_and_sync.return_value = False  # Failed teleport
+
+    mock_strategy = MockStrategy(success=True)
+    mock_emitter = MagicMock()
+
+    orchestrator = Orchestrator(agent=mock_agent, strategies=[mock_strategy], event_emitter=mock_emitter)
+
+    with patch("coreason_jules_automator.orchestrator.get_settings") as mock_settings:
+        mock_settings.return_value.max_retries = 1
+
+        result = orchestrator.run_cycle("task", "branch")
+
+        assert result is False
+
+        calls = mock_emitter.emit.call_args_list
+        last_event = calls[-1][0][0]
+        assert last_event.type == EventType.ERROR
+        assert "Agent workflow failed" in last_event.message
+        assert "Failed to sync remote code" in last_event.payload["error"]
