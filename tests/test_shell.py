@@ -6,11 +6,11 @@ from coreason_jules_automator.utils.shell import ShellExecutor, ShellError, Comm
 
 
 @pytest.fixture
-def executor():
+def executor() -> ShellExecutor:
     return ShellExecutor()
 
 
-def test_run_success(executor):
+def test_run_success(executor: ShellExecutor) -> None:
     with patch("subprocess.run") as mock_run:
         mock_process = MagicMock()
         mock_process.returncode = 0
@@ -32,7 +32,7 @@ def test_run_success(executor):
         )
 
 
-def test_run_failure_no_check(executor):
+def test_run_failure_no_check(executor: ShellExecutor) -> None:
     with patch("subprocess.run") as mock_run:
         mock_process = MagicMock()
         mock_process.returncode = 1
@@ -47,7 +47,7 @@ def test_run_failure_no_check(executor):
         assert result.stderr == "error"
 
 
-def test_run_failure_check(executor):
+def test_run_failure_check(executor: ShellExecutor) -> None:
     with patch("subprocess.run") as mock_run:
         mock_process = MagicMock()
         mock_process.returncode = 1
@@ -62,27 +62,28 @@ def test_run_failure_check(executor):
         assert excinfo.value.result.stderr == "error"
 
 
-def test_run_timeout(executor):
+def test_run_timeout(executor: ShellExecutor) -> None:
     with patch("subprocess.run", side_effect=subprocess.TimeoutExpired(["sleep"], 1)):
         result = executor.run(["sleep", "1"])
         assert result.exit_code == -1
         assert "Command timed out" in result.stderr
 
 
-def test_run_timeout_check(executor):
+def test_run_timeout_check(executor: ShellExecutor) -> None:
     with patch("subprocess.run", side_effect=subprocess.TimeoutExpired(["sleep"], 1)):
         with pytest.raises(ShellError) as excinfo:
             executor.run(["sleep", "1"], check=True)
         assert "Command timed out" in str(excinfo.value)
 
 
-def test_run_exception(executor):
+def test_run_exception(executor: ShellExecutor) -> None:
     with patch("subprocess.run", side_effect=FileNotFoundError("No file")):
         result = executor.run(["badcmd"])
         assert result.exit_code == -1
         assert "No file" in result.stderr
 
-def test_run_exception_check(executor):
+
+def test_run_exception_check(executor: ShellExecutor) -> None:
     with patch("subprocess.run", side_effect=FileNotFoundError("No file")):
         with pytest.raises(ShellError) as excinfo:
             executor.run(["badcmd"], check=True)

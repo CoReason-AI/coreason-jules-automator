@@ -78,7 +78,9 @@ class RemoteDefenseStrategy(DefenseStrategy):
         # Find failed check
         failed_check = next((c for c in checks if c["conclusion"] != "success"), None)
         if failed_check:
-            log_snippet = f"Check {failed_check.get('name', 'unknown')} failed. URL: {failed_check.get('url', 'unknown')}"
+            log_snippet = (
+                f"Check {failed_check.get('name', 'unknown')} failed. URL: {failed_check.get('url', 'unknown')}"
+            )
             summary = self.janitor.summarize_logs(log_snippet)
             logger.info(f"Janitor Summary: {summary}")
             return summary

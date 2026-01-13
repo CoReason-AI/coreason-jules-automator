@@ -37,7 +37,8 @@ def mock_strategy_fail() -> MagicMock:
 
 def test_orchestrator_init(mock_agent: MagicMock, mock_strategy_success: MagicMock) -> None:
     """Test Orchestrator initialization with DI."""
-    strategies = [mock_strategy_success]
+    # Annotate strategies as List[DefenseStrategy] to satisfy mypy
+    strategies: list[DefenseStrategy] = [mock_strategy_success]
     orch = Orchestrator(agent=mock_agent, strategies=strategies)
     assert orch.agent == mock_agent
     assert orch.strategies == strategies
@@ -50,7 +51,8 @@ def test_run_cycle_success(mock_agent: MagicMock, mock_strategy_success: MagicMo
         mock_settings.max_retries = 5
         mock_get_settings.return_value = mock_settings
 
-        orch = Orchestrator(agent=mock_agent, strategies=[mock_strategy_success])
+        strategies: list[DefenseStrategy] = [mock_strategy_success]
+        orch = Orchestrator(agent=mock_agent, strategies=strategies)
         assert orch.run_cycle("task", "branch") is True
 
         mock_agent.start.assert_called_with("task")
@@ -66,7 +68,8 @@ def test_run_cycle_agent_fail(mock_agent: MagicMock, mock_strategy_success: Magi
 
         mock_agent.start.side_effect = Exception("Agent died")
 
-        orch = Orchestrator(agent=mock_agent, strategies=[mock_strategy_success])
+        strategies: list[DefenseStrategy] = [mock_strategy_success]
+        orch = Orchestrator(agent=mock_agent, strategies=strategies)
         assert orch.run_cycle("task", "branch") is False
 
 
@@ -84,7 +87,8 @@ def test_run_cycle_strategy_fail_retry(mock_agent: MagicMock) -> None:
             DefenseResult(success=True)
         ]
 
-        orch = Orchestrator(agent=mock_agent, strategies=[strategy])
+        strategies: list[DefenseStrategy] = [strategy]
+        orch = Orchestrator(agent=mock_agent, strategies=strategies)
         assert orch.run_cycle("task", "branch") is True
 
         assert mock_agent.start.call_count == 2
@@ -104,7 +108,8 @@ def test_run_cycle_multiple_strategies_fail(mock_agent: MagicMock) -> None:
         strat2 = MagicMock(spec=DefenseStrategy)
         strat2.execute.return_value = DefenseResult(success=False, message="Fail")
 
-        orch = Orchestrator(agent=mock_agent, strategies=[strat1, strat2])
+        strategies: list[DefenseStrategy] = [strat1, strat2]
+        orch = Orchestrator(agent=mock_agent, strategies=strategies)
         assert orch.run_cycle("task", "branch") is False
 
         # strat1 called twice (once per retry)
@@ -120,6 +125,7 @@ def test_run_cycle_max_retries(mock_agent: MagicMock, mock_strategy_fail: MagicM
         mock_settings.max_retries = 2
         mock_get_settings.return_value = mock_settings
 
-        orch = Orchestrator(agent=mock_agent, strategies=[mock_strategy_fail])
+        strategies: list[DefenseStrategy] = [mock_strategy_fail]
+        orch = Orchestrator(agent=mock_agent, strategies=strategies)
         assert orch.run_cycle("task", "branch") is False
         assert mock_agent.start.call_count == 2
