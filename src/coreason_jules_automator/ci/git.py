@@ -61,3 +61,46 @@ class GitInterface:
         except ShellError as e:
             logger.error(f"Git push failed: {e}")
             raise RuntimeError(f"Git push failed: {e}") from e
+
+    def checkout_new_branch(self, branch_name: str, base_branch: str) -> None:
+        """
+        Creates and checks out a new branch from a base branch.
+        """
+        try:
+            # Check out base first to ensure we are clean/up-to-date
+            self.shell.run(["git", "checkout", base_branch], check=True)
+            self.shell.run(["git", "pull", "origin", base_branch], check=True)
+            # Create new branch
+            self.shell.run(["git", "checkout", "-b", branch_name], check=True)
+        except ShellError as e:
+            logger.error(f"Failed to checkout new branch {branch_name} from {base_branch}: {e}")
+            raise RuntimeError(f"Failed to checkout new branch: {e}") from e
+
+    def merge_squash(self, source_branch: str, target_branch: str, message: str) -> None:
+        """
+        Squash merges source_branch into target_branch with a custom message.
+        """
+        try:
+            self.shell.run(["git", "checkout", target_branch], check=True)
+            # Squash merge
+            self.shell.run(["git", "merge", "--squash", source_branch], check=True)
+            # Commit
+            self.shell.run(["git", "commit", "-m", message], check=True)
+        except ShellError as e:
+            logger.error(f"Failed to squash merge {source_branch} into {target_branch}: {e}")
+            raise RuntimeError(f"Failed to squash merge: {e}") from e
+
+    def get_commit_log(self, base_branch: str, head_branch: str) -> str:
+        """
+        Returns the log of commits between base and head.
+        """
+        try:
+            # git log base..head --pretty=format:"%s"
+            result = self.shell.run(
+                ["git", "log", f"{base_branch}..{head_branch}", "--pretty=format:%s"],
+                check=True
+            )
+            return result.stdout.strip()
+        except ShellError as e:
+            logger.error(f"Failed to get commit log: {e}")
+            raise RuntimeError(f"Failed to get commit log: {e}") from e

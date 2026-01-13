@@ -59,3 +59,34 @@ class GitHubInterface:
             return parsed
         except json.JSONDecodeError as e:
             raise RuntimeError(f"Failed to parse gh output: {output}") from e
+
+    def get_latest_run_log(self, branch_name: str) -> str:
+        """
+        Fetches the log of the latest workflow run for the given branch.
+        """
+        logger.info(f"Fetching latest run logs for branch: {branch_name}")
+        try:
+            # 1. Get the latest run ID
+            output = self._run_command(["run", "list", "--branch", branch_name, "--limit", "1", "--json", "databaseId"])
+            runs = json.loads(output)
+
+            if not runs or not isinstance(runs, list):
+                logger.warning(f"No runs found for branch {branch_name}")
+                return "No workflow runs found."
+
+            # runs[0] can be a dict
+            run_id = str(runs[0].get("databaseId"))
+            if not run_id:
+                logger.warning("Run ID not found in response.")
+                return "Run ID not found."
+
+            # 2. Get the log
+            log_output = self._run_command(["run", "view", run_id, "--log"])
+            return log_output
+
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse gh output: {e}")
+            return f"Failed to parse run list: {e}"
+        except Exception as e:
+            logger.error(f"Failed to fetch run logs: {e}")
+            return f"Failed to fetch run logs: {e}"
