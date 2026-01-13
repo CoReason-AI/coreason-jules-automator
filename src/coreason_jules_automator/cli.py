@@ -16,6 +16,7 @@ from coreason_jules_automator.agent.jules import JulesAgent
 from coreason_jules_automator.ci.git import GitInterface
 from coreason_jules_automator.ci.github import GitHubInterface
 from coreason_jules_automator.config import get_settings
+from coreason_jules_automator.events import LoguruEmitter
 from coreason_jules_automator.interfaces.gemini import GeminiInterface
 from coreason_jules_automator.llm.factory import LLMFactory
 from coreason_jules_automator.llm.janitor import JanitorService
@@ -45,6 +46,7 @@ def run(
     try:
         # Composition Root
         shell_executor = ShellExecutor()
+        event_emitter = LoguruEmitter()
 
         gemini = GeminiInterface(shell_executor=shell_executor)
         git = GitInterface(shell_executor=shell_executor)
@@ -54,12 +56,16 @@ def run(
         llm_client = LLMFactory().get_client(settings)
         janitor = JanitorService(llm_client=llm_client)
 
-        local_strategy = LocalDefenseStrategy(gemini=gemini)
-        remote_strategy = RemoteDefenseStrategy(github=github, janitor=janitor, git=git)
+        local_strategy = LocalDefenseStrategy(gemini=gemini, event_emitter=event_emitter)
+        remote_strategy = RemoteDefenseStrategy(github=github, janitor=janitor, git=git, event_emitter=event_emitter)
 
         agent = JulesAgent()
 
-        orchestrator = Orchestrator(agent=agent, strategies=[local_strategy, remote_strategy])
+        orchestrator = Orchestrator(
+            agent=agent,
+            strategies=[local_strategy, remote_strategy],
+            event_emitter=event_emitter,
+        )
 
         success = orchestrator.run_cycle(task, branch)
 

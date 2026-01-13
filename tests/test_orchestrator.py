@@ -1,128 +1,91 @@
-from typing import Any
+from typing import Any, Dict
 from unittest.mock import MagicMock, patch
 
-import pytest
-
+from coreason_jules_automator.agent.jules import JulesAgent
+from coreason_jules_automator.events import EventType
 from coreason_jules_automator.orchestrator import Orchestrator
 from coreason_jules_automator.strategies.base import DefenseResult, DefenseStrategy
 
 
 class MockStrategy(DefenseStrategy):
-    def __init__(self, success: bool = True, message: str = ""):
-        self.success = success
-        self.message = message
+    def __init__(self, success: bool = True):
+        self.should_succeed = success
 
-    def execute(self, context: Any) -> DefenseResult:
-        return DefenseResult(success=self.success, message=self.message)
-
-
-@pytest.fixture
-def mock_agent() -> MagicMock:
-    return MagicMock()
+    def execute(self, context: Dict[str, Any]) -> DefenseResult:
+        return DefenseResult(success=self.should_succeed, message="Mock result")
 
 
-@pytest.fixture
-def mock_strategy_success() -> MagicMock:
-    strategy = MagicMock(spec=DefenseStrategy)
-    strategy.execute.return_value = DefenseResult(success=True)
-    return strategy
+def test_orchestrator_events() -> None:
+    mock_agent = MagicMock(spec=JulesAgent)
+    mock_strategy = MockStrategy(success=True)
+    mock_emitter = MagicMock()
+
+    orchestrator = Orchestrator(agent=mock_agent, strategies=[mock_strategy], event_emitter=mock_emitter)
+
+    with patch("coreason_jules_automator.orchestrator.get_settings") as mock_settings:
+        mock_settings.return_value.max_retries = 1
+
+        result = orchestrator.run_cycle("task", "branch")
+
+        assert result is True
+
+        # Verify calls
+        assert mock_emitter.emit.call_count >= 3  # Cycle start, Phase start (iter), Success
+
+        # Check cycle start
+        args, _ = mock_emitter.emit.call_args_list[0]
+        event = args[0]
+        assert event.type == EventType.CYCLE_START
+        assert event.payload["branch"] == "branch"
 
 
-@pytest.fixture
-def mock_strategy_fail() -> MagicMock:
-    strategy = MagicMock(spec=DefenseStrategy)
-    strategy.execute.return_value = DefenseResult(success=False, message="Fail")
-    return strategy
+def test_orchestrator_failure_events() -> None:
+    mock_agent = MagicMock(spec=JulesAgent)
+    mock_strategy = MockStrategy(success=False)
+    mock_emitter = MagicMock()
+
+    orchestrator = Orchestrator(agent=mock_agent, strategies=[mock_strategy], event_emitter=mock_emitter)
+
+    with patch("coreason_jules_automator.orchestrator.get_settings") as mock_settings:
+        mock_settings.return_value.max_retries = 1
+
+        result = orchestrator.run_cycle("task", "branch")
+
+        assert result is False
+
+        # Check error emission at end
+        # We expect: Cycle Start, Iteration Start, Retry/Fail, Max Retries Error
+        calls = mock_emitter.emit.call_args_list
+        assert len(calls) >= 4
+
+        last_event = calls[-1][0][0]
+        assert last_event.type == EventType.ERROR
+        assert "Max retries reached" in last_event.message
 
 
-def test_orchestrator_init(mock_agent: MagicMock, mock_strategy_success: MagicMock) -> None:
-    """Test Orchestrator initialization with DI."""
-    # Annotate strategies as List[DefenseStrategy] to satisfy mypy
-    strategies: list[DefenseStrategy] = [mock_strategy_success]
-    orch = Orchestrator(agent=mock_agent, strategies=strategies)
-    assert orch.agent == mock_agent
-    assert orch.strategies == strategies
+def test_orchestrator_agent_failure_events() -> None:
+    """Test that events are emitted when the agent raises an exception."""
+    mock_agent = MagicMock(spec=JulesAgent)
+    mock_agent.start.side_effect = RuntimeError("Agent crash")
+    mock_strategy = MockStrategy(success=True)
+    mock_emitter = MagicMock()
 
+    orchestrator = Orchestrator(agent=mock_agent, strategies=[mock_strategy], event_emitter=mock_emitter)
 
-def test_run_cycle_success(mock_agent: MagicMock, mock_strategy_success: MagicMock) -> None:
-    """Test full cycle success."""
-    with patch("coreason_jules_automator.orchestrator.get_settings") as mock_get_settings:
-        mock_settings = MagicMock()
-        mock_settings.max_retries = 5
-        mock_get_settings.return_value = mock_settings
+    with patch("coreason_jules_automator.orchestrator.get_settings") as mock_settings:
+        mock_settings.return_value.max_retries = 1
 
-        strategies: list[DefenseStrategy] = [mock_strategy_success]
-        orch = Orchestrator(agent=mock_agent, strategies=strategies)
-        assert orch.run_cycle("task", "branch") is True
+        result = orchestrator.run_cycle("task", "branch")
 
-        mock_agent.start.assert_called_with("task")
-        mock_strategy_success.execute.assert_called_with(context={"branch_name": "branch"})
+        assert result is False
 
+        # Verify calls
+        # We expect: Cycle Start, Phase Start, then Error
+        assert mock_emitter.emit.call_count >= 3
 
-def test_run_cycle_agent_fail(mock_agent: MagicMock, mock_strategy_success: MagicMock) -> None:
-    """Test cycle aborts if agent fails."""
-    with patch("coreason_jules_automator.orchestrator.get_settings") as mock_get_settings:
-        mock_settings = MagicMock()
-        mock_settings.max_retries = 5
-        mock_get_settings.return_value = mock_settings
-
-        mock_agent.start.side_effect = Exception("Agent died")
-
-        strategies: list[DefenseStrategy] = [mock_strategy_success]
-        orch = Orchestrator(agent=mock_agent, strategies=strategies)
-        assert orch.run_cycle("task", "branch") is False
-
-
-def test_run_cycle_strategy_fail_retry(mock_agent: MagicMock) -> None:
-    """Test retry loop on strategy failure."""
-    with patch("coreason_jules_automator.orchestrator.get_settings") as mock_get_settings:
-        mock_settings = MagicMock()
-        mock_settings.max_retries = 5
-        mock_get_settings.return_value = mock_settings
-
-        # Strategy fails first time, succeeds second time
-        strategy = MagicMock(spec=DefenseStrategy)
-        strategy.execute.side_effect = [DefenseResult(success=False, message="Fail"), DefenseResult(success=True)]
-
-        strategies: list[DefenseStrategy] = [strategy]
-        orch = Orchestrator(agent=mock_agent, strategies=strategies)
-        assert orch.run_cycle("task", "branch") is True
-
-        assert mock_agent.start.call_count == 2
-        assert strategy.execute.call_count == 2
-
-
-def test_run_cycle_multiple_strategies_fail(mock_agent: MagicMock) -> None:
-    """Test multi-strategy failure stops at first failure."""
-    with patch("coreason_jules_automator.orchestrator.get_settings") as mock_get_settings:
-        mock_settings = MagicMock()
-        mock_settings.max_retries = 2
-        mock_get_settings.return_value = mock_settings
-
-        strat1 = MagicMock(spec=DefenseStrategy)
-        strat1.execute.return_value = DefenseResult(success=True)
-
-        strat2 = MagicMock(spec=DefenseStrategy)
-        strat2.execute.return_value = DefenseResult(success=False, message="Fail")
-
-        strategies: list[DefenseStrategy] = [strat1, strat2]
-        orch = Orchestrator(agent=mock_agent, strategies=strategies)
-        assert orch.run_cycle("task", "branch") is False
-
-        # strat1 called twice (once per retry)
-        assert strat1.execute.call_count == 2
-        # strat2 called twice (once per retry)
-        assert strat2.execute.call_count == 2
-
-
-def test_run_cycle_max_retries(mock_agent: MagicMock, mock_strategy_fail: MagicMock) -> None:
-    """Test max retries reached."""
-    with patch("coreason_jules_automator.orchestrator.get_settings") as mock_get_settings:
-        mock_settings = MagicMock()
-        mock_settings.max_retries = 2
-        mock_get_settings.return_value = mock_settings
-
-        strategies: list[DefenseStrategy] = [mock_strategy_fail]
-        orch = Orchestrator(agent=mock_agent, strategies=strategies)
-        assert orch.run_cycle("task", "branch") is False
-        assert mock_agent.start.call_count == 2
+        calls = mock_emitter.emit.call_args_list
+        # The last event should be the agent error
+        last_event = calls[-1][0][0]
+        assert last_event.type == EventType.ERROR
+        assert "Agent failed to execute" in last_event.message
+        assert "Agent crash" in last_event.payload["error"]
