@@ -3,8 +3,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from pydantic import SecretStr
 
+from coreason_jules_automator.llm.adapters import LlamaAdapter, OpenAIAdapter
 from coreason_jules_automator.llm.factory import LLMFactory
-from coreason_jules_automator.llm.adapters import OpenAIAdapter, LlamaAdapter
 
 
 def test_get_client_api_openai_missing_import() -> None:

@@ -36,9 +36,7 @@ class JanitorService:
 
         if self.client:
             try:
-                return self.client.complete(
-                    messages=[{"role": "user", "content": prompt}], max_tokens=150
-                )
+                return self.client.complete(messages=[{"role": "user", "content": prompt}], max_tokens=150)
 
             except Exception as e:
                 logger.error(f"LLM generation failed: {e}")

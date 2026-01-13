@@ -1,8 +1,8 @@
-from typing import Any, Optional
+from typing import Optional
 
 from coreason_jules_automator.config import get_settings
+from coreason_jules_automator.llm.adapters import LlamaAdapter, LLMClient, OpenAIAdapter
 from coreason_jules_automator.llm.model_manager import ModelManager
-from coreason_jules_automator.llm.adapters import LLMClient, OpenAIAdapter, LlamaAdapter
 from coreason_jules_automator.utils.logger import logger
 
 
