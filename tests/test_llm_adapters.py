@@ -2,6 +2,7 @@ import pytest
 from unittest.mock import MagicMock, AsyncMock
 from coreason_jules_automator.llm.adapters import OpenAIAdapter, LlamaAdapter
 
+
 @pytest.fixture
 def mock_openai_client():
     client = MagicMock()
@@ -9,10 +10,12 @@ def mock_openai_client():
     client.chat.completions.create = AsyncMock()
     return client
 
+
 @pytest.fixture
 def mock_llama_client():
     client = MagicMock()
     return client
+
 
 @pytest.mark.asyncio
 async def test_openai_adapter_complete(mock_openai_client):
@@ -25,6 +28,7 @@ async def test_openai_adapter_complete(mock_openai_client):
 
     assert result == "Test response"
     mock_openai_client.chat.completions.create.assert_called_once()
+
 
 @pytest.mark.asyncio
 async def test_llama_adapter_complete(mock_llama_client):

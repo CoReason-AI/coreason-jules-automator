@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Protocol, runtime_checkable
 
 import asyncio
 
+
 @runtime_checkable
 class LLMClient(Protocol):
     """Protocol for LLM clients."""
@@ -32,9 +33,5 @@ class LlamaAdapter:
         self.client = client
 
     async def complete(self, messages: List[Dict[str, str]], max_tokens: int = 150) -> str:
-        response = await asyncio.to_thread(
-            self.client.create_chat_completion,
-            messages=messages,
-            max_tokens=max_tokens
-        )
+        response = await asyncio.to_thread(self.client.create_chat_completion, messages=messages, max_tokens=max_tokens)
         return str(response["choices"][0]["message"]["content"]).strip()

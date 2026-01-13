@@ -3,6 +3,7 @@ import pytest
 from coreason_jules_automator.strategies.remote import RemoteDefenseStrategy
 from coreason_jules_automator.strategies.base import DefenseResult
 
+
 @pytest.fixture
 def remote_strategy():
     github = MagicMock()
@@ -16,6 +17,7 @@ def remote_strategy():
 
     return RemoteDefenseStrategy(github, janitor, git)
 
+
 @pytest.mark.asyncio
 async def test_execute_success(remote_strategy):
     context = {"branch_name": "test"}
@@ -24,6 +26,7 @@ async def test_execute_success(remote_strategy):
     remote_strategy.git.push_to_branch.assert_called_once()
     remote_strategy.github.get_pr_checks.assert_called()
 
+
 @pytest.mark.asyncio
 async def test_execute_failure_push(remote_strategy):
     remote_strategy.git.push_to_branch.side_effect = RuntimeError("Push failed")
@@ -31,6 +34,7 @@ async def test_execute_failure_push(remote_strategy):
     result = await remote_strategy.execute(context)
     assert not result.success
     assert "Push failed" in result.message
+
 
 @pytest.mark.asyncio
 async def test_execute_failure_ci_checks(remote_strategy):
@@ -44,12 +48,11 @@ async def test_execute_failure_ci_checks(remote_strategy):
     assert "summary" in result.message
     remote_strategy.janitor.summarize_logs.assert_called_once()
 
+
 @pytest.mark.asyncio
 async def test_execute_timeout(remote_strategy):
     # Simulate pending checks forever
-    remote_strategy.github.get_pr_checks.return_value = [
-        {"status": "in_progress", "conclusion": None}
-    ]
+    remote_strategy.github.get_pr_checks.return_value = [{"status": "in_progress", "conclusion": None}]
 
     with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
         context = {"branch_name": "test"}
@@ -57,6 +60,7 @@ async def test_execute_timeout(remote_strategy):
         assert not result.success
         assert "Line 2 timeout" in result.message
         assert mock_sleep.call_count >= 10
+
 
 @pytest.mark.asyncio
 async def test_execute_poll_exception(remote_strategy):
@@ -67,5 +71,5 @@ async def test_execute_poll_exception(remote_strategy):
         context = {"branch_name": "test"}
         result = await remote_strategy.execute(context)
         assert not result.success
-        assert "Line 2 timeout" in result.message # It should exhaust retries
+        assert "Line 2 timeout" in result.message  # It should exhaust retries
         assert mock_sleep.call_count >= 10

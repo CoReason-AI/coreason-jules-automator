@@ -2,6 +2,7 @@ import asyncio
 import pytest
 from coreason_jules_automator.utils.shell import ShellExecutor, CommandResult
 
+
 @pytest.mark.asyncio
 async def test_run_async_success():
     """Test successful async execution of a command."""
@@ -11,6 +12,7 @@ async def test_run_async_success():
     assert result.exit_code == 0
     assert result.stdout.strip() == "hello"
     assert result.stderr == ""
+
 
 @pytest.mark.asyncio
 async def test_run_async_failure_check_false():
@@ -22,6 +24,7 @@ async def test_run_async_failure_check_false():
     assert result.exit_code != 0
     assert "No such file or directory" in result.stderr or result.stderr != ""
 
+
 @pytest.mark.asyncio
 async def test_run_async_timeout():
     """Test async execution timeout."""
@@ -31,6 +34,7 @@ async def test_run_async_timeout():
 
     assert result.exit_code == -1
     assert "timed out" in result.stderr
+
 
 @pytest.mark.asyncio
 async def test_run_async_not_found():

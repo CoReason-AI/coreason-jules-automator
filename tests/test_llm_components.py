@@ -2,7 +2,7 @@ import sys
 from unittest.mock import MagicMock, AsyncMock, patch
 
 import pytest
-from pydantic import SecretStr
+from pydantic import SecretStr, ValidationError
 
 from coreason_jules_automator.config import get_settings, Settings
 from coreason_jules_automator.llm.factory import LLMFactory
@@ -11,6 +11,7 @@ from coreason_jules_automator.llm.model_manager import ModelManager
 
 
 # --- LLMFactory Tests ---
+
 
 @pytest.fixture
 def mock_settings(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -27,7 +28,7 @@ def test_factory_get_client_api_openai(mock_settings: None, monkeypatch: pytest.
 
     mock_openai_module = MagicMock()
     with patch.dict(sys.modules, {"openai": mock_openai_module}):
-        client = LLMFactory().get_client(settings)
+        LLMFactory().get_client(settings)
         # Verify AsyncOpenAI was called
         mock_openai_module.AsyncOpenAI.assert_called()
 
@@ -41,7 +42,7 @@ def test_factory_get_client_api_deepseek(mock_settings: None, monkeypatch: pytes
 
     mock_openai_module = MagicMock()
     with patch.dict(sys.modules, {"openai": mock_openai_module}):
-        client = LLMFactory().get_client(settings)
+        LLMFactory().get_client(settings)
         call_kwargs = mock_openai_module.AsyncOpenAI.call_args[1]
         assert call_kwargs["base_url"] == "https://api.deepseek.com"
 
@@ -61,7 +62,7 @@ def test_factory_get_client_local_success(mock_settings: None, monkeypatch: pyte
         mock_mm.ensure_model_downloaded.return_value = "/tmp/model.gguf"
 
         with patch.dict(sys.modules, {"llama_cpp": mock_llama_module}):
-            client = LLMFactory().get_client(settings)
+            LLMFactory().get_client(settings)
             mock_llama_module.Llama.assert_called()
 
 
@@ -71,14 +72,14 @@ def test_factory_get_client_local_import_error(mock_settings: None, monkeypatch:
     with patch("importlib.util.find_spec", return_value=None):
         monkeypatch.setenv("VIBE_LLM_STRATEGY", "local")
         get_settings.cache_clear()
-        with pytest.raises(Exception): # Pydantic validation error
+        with pytest.raises(ValidationError):  # Pydantic validation error
             get_settings()
 
     # Also test the runtime check in factory if settings passed check (e.g. uninstalled after start?)
     # or if we bypass validation.
 
     # Let's bypass validation for this specific test to reach factory logic
-    monkeypatch.setenv("VIBE_LLM_STRATEGY", "api") # default to api so it validates
+    monkeypatch.setenv("VIBE_LLM_STRATEGY", "api")  # default to api so it validates
     get_settings.cache_clear()
     settings = get_settings()
 
@@ -107,6 +108,7 @@ def test_model_manager_download(tmp_path: Exception) -> None:
 
 
 # --- JanitorService Tests ---
+
 
 @pytest.mark.asyncio
 async def test_janitor_summarize_logs_success() -> None:

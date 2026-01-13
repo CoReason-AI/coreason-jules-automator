@@ -86,7 +86,7 @@ async def test_get_pr_checks_success(gh: GitHubInterface) -> None:
 @pytest.mark.asyncio
 async def test_get_pr_checks_invalid_json(gh: GitHubInterface) -> None:
     """Test get_pr_checks with invalid json."""
-    with patch.object(gh, "_run_command", return_value="invalid json") as mock_run:
+    with patch.object(gh, "_run_command", return_value="invalid json"):
         with pytest.raises(RuntimeError) as excinfo:
             await gh.get_pr_checks()
         assert "Failed to parse gh output" in str(excinfo.value)
@@ -95,7 +95,7 @@ async def test_get_pr_checks_invalid_json(gh: GitHubInterface) -> None:
 @pytest.mark.asyncio
 async def test_get_pr_checks_unexpected_format(gh: GitHubInterface) -> None:
     """Test get_pr_checks when output is valid JSON but not a list."""
-    with patch.object(gh, "_run_command", return_value="{}") as mock_run:
+    with patch.object(gh, "_run_command", return_value="{}"):
         with pytest.raises(RuntimeError) as excinfo:
             await gh.get_pr_checks()
         assert "Unexpected format from gh: expected list" in str(excinfo.value)

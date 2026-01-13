@@ -16,7 +16,7 @@ def test_get_client_api_openai_key() -> None:
 
     with patch("openai.AsyncOpenAI") as mock_openai:
         factory = LLMFactory()
-        client = factory.get_client(mock_settings)
+        factory.get_client(mock_settings)
         mock_openai.assert_called_with(api_key="sk-test")
 
 
@@ -29,5 +29,5 @@ def test_get_client_api_deepseek_key() -> None:
 
     with patch("openai.AsyncOpenAI") as mock_openai:
         factory = LLMFactory()
-        client = factory.get_client(mock_settings)
+        factory.get_client(mock_settings)
         mock_openai.assert_called_with(api_key="sk-deepseek", base_url="https://api.deepseek.com")

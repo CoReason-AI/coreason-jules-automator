@@ -34,9 +34,7 @@ async def test_run_command_success(gemini: GeminiInterface) -> None:
     output = await gemini._run_command(["test", "arg"])
 
     assert output == "Scan complete. No issues found."
-    mock_shell.run_async.assert_called_once_with(
-        ["gemini", "test", "arg"], check=True
-    )
+    mock_shell.run_async.assert_called_once_with(["gemini", "test", "arg"], check=True)
 
 
 @pytest.mark.asyncio

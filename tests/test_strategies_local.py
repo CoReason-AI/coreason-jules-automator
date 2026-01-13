@@ -3,12 +3,14 @@ import pytest
 from coreason_jules_automator.strategies.local import LocalDefenseStrategy
 from coreason_jules_automator.strategies.base import DefenseResult
 
+
 @pytest.fixture
 def local_strategy():
     gemini = MagicMock()
     gemini.security_scan = AsyncMock(return_value="Scan passed")
     gemini.code_review = AsyncMock(return_value="Review passed")
     return LocalDefenseStrategy(gemini=gemini)
+
 
 @pytest.mark.asyncio
 async def test_execute_success(local_strategy):
@@ -19,6 +21,7 @@ async def test_execute_success(local_strategy):
         assert result.success
         local_strategy.gemini.security_scan.assert_called_once()
         local_strategy.gemini.code_review.assert_called_once()
+
 
 @pytest.mark.asyncio
 async def test_execute_failure(local_strategy):

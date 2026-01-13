@@ -109,7 +109,7 @@ class ShellExecutor:
                 exit_code = -1
                 result = CommandResult(exit_code=exit_code, stdout=stdout, stderr=stderr)
                 if check:
-                    raise ShellError(f"Command timed out: {' '.join(command)}", result)
+                    raise ShellError(f"Command timed out: {' '.join(command)}", result) from None
                 return result
 
         except Exception as e:
