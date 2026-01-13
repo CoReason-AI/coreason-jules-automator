@@ -1,27 +1,26 @@
+from typing import Any, Dict
 from unittest.mock import MagicMock, patch
-import pytest
+
 from coreason_jules_automator.agent.jules import JulesAgent
+from coreason_jules_automator.events import EventType
 from coreason_jules_automator.orchestrator import Orchestrator
 from coreason_jules_automator.strategies.base import DefenseResult, DefenseStrategy
-from coreason_jules_automator.events import EventType
+
 
 class MockStrategy(DefenseStrategy):
     def __init__(self, success: bool = True):
         self.should_succeed = success
 
-    def execute(self, context):
+    def execute(self, context: Dict[str, Any]) -> DefenseResult:
         return DefenseResult(success=self.should_succeed, message="Mock result")
 
-def test_orchestrator_events():
+
+def test_orchestrator_events() -> None:
     mock_agent = MagicMock(spec=JulesAgent)
     mock_strategy = MockStrategy(success=True)
     mock_emitter = MagicMock()
 
-    orchestrator = Orchestrator(
-        agent=mock_agent,
-        strategies=[mock_strategy],
-        event_emitter=mock_emitter
-    )
+    orchestrator = Orchestrator(agent=mock_agent, strategies=[mock_strategy], event_emitter=mock_emitter)
 
     with patch("coreason_jules_automator.orchestrator.get_settings") as mock_settings:
         mock_settings.return_value.max_retries = 1
@@ -31,7 +30,7 @@ def test_orchestrator_events():
         assert result is True
 
         # Verify calls
-        assert mock_emitter.emit.call_count >= 3 # Cycle start, Phase start (iter), Success
+        assert mock_emitter.emit.call_count >= 3  # Cycle start, Phase start (iter), Success
 
         # Check cycle start
         args, _ = mock_emitter.emit.call_args_list[0]
@@ -39,16 +38,13 @@ def test_orchestrator_events():
         assert event.type == EventType.CYCLE_START
         assert event.payload["branch"] == "branch"
 
-def test_orchestrator_failure_events():
+
+def test_orchestrator_failure_events() -> None:
     mock_agent = MagicMock(spec=JulesAgent)
     mock_strategy = MockStrategy(success=False)
     mock_emitter = MagicMock()
 
-    orchestrator = Orchestrator(
-        agent=mock_agent,
-        strategies=[mock_strategy],
-        event_emitter=mock_emitter
-    )
+    orchestrator = Orchestrator(agent=mock_agent, strategies=[mock_strategy], event_emitter=mock_emitter)
 
     with patch("coreason_jules_automator.orchestrator.get_settings") as mock_settings:
         mock_settings.return_value.max_retries = 1

@@ -55,7 +55,9 @@ def test_execute_security_fail(strategy: LocalDefenseStrategy, mock_gemini: Magi
 
         # Verify failure event
         calls = [args[0] for args, _ in mock_emitter.emit.call_args_list]
-        fail_event = next((e for e in calls if e.type.name == "CHECK_RESULT" and e.payload.get("status") == "fail"), None)
+        fail_event = next(
+            (e for e in calls if e.type.name == "CHECK_RESULT" and e.payload.get("status") == "fail"), None
+        )
         assert fail_event is not None
         assert "Security Issue" in fail_event.payload["error"]
 
