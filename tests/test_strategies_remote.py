@@ -21,8 +21,17 @@ def mock_git() -> MagicMock:
 
 
 @pytest.fixture
-def strategy(mock_github: MagicMock, mock_janitor: MagicMock, mock_git: MagicMock) -> RemoteDefenseStrategy:
-    return RemoteDefenseStrategy(github=mock_github, janitor=mock_janitor, git=mock_git)
+def mock_emitter() -> MagicMock:
+    return MagicMock()
+
+
+@pytest.fixture
+def strategy(
+    mock_github: MagicMock, mock_janitor: MagicMock, mock_git: MagicMock, mock_emitter: MagicMock
+) -> RemoteDefenseStrategy:
+    return RemoteDefenseStrategy(
+        github=mock_github, janitor=mock_janitor, git=mock_git, event_emitter=mock_emitter
+    )
 
 
 def test_execute_missing_branch(strategy: RemoteDefenseStrategy) -> None:
@@ -46,7 +55,11 @@ def test_execute_push_failure(
 
 
 def test_execute_success(
-    strategy: RemoteDefenseStrategy, mock_github: MagicMock, mock_janitor: MagicMock, mock_git: MagicMock
+    strategy: RemoteDefenseStrategy,
+    mock_github: MagicMock,
+    mock_janitor: MagicMock,
+    mock_git: MagicMock,
+    mock_emitter: MagicMock,
 ) -> None:
     """Test successful execution."""
     mock_janitor.sanitize_commit.return_value = "clean commit"
@@ -63,6 +76,11 @@ def test_execute_success(
     assert result.success is True
     assert result.message == "CI checks passed"
     assert mock_github.get_pr_checks.call_count == 2
+
+    # Check for waiting events
+    calls = [args[0] for args, _ in mock_emitter.emit.call_args_list]
+    waiting_events = [e for e in calls if "Waiting for checks..." in e.message]
+    assert len(waiting_events) >= 2
 
 
 def test_execute_check_failure(

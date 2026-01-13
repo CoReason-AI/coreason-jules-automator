@@ -11,11 +11,16 @@ def mock_gemini() -> MagicMock:
 
 
 @pytest.fixture
-def strategy(mock_gemini: MagicMock) -> LocalDefenseStrategy:
-    return LocalDefenseStrategy(gemini=mock_gemini)
+def mock_emitter() -> MagicMock:
+    return MagicMock()
 
 
-def test_execute_success(strategy: LocalDefenseStrategy, mock_gemini: MagicMock) -> None:
+@pytest.fixture
+def strategy(mock_gemini: MagicMock, mock_emitter: MagicMock) -> LocalDefenseStrategy:
+    return LocalDefenseStrategy(gemini=mock_gemini, event_emitter=mock_emitter)
+
+
+def test_execute_success(strategy: LocalDefenseStrategy, mock_gemini: MagicMock, mock_emitter: MagicMock) -> None:
     """Test successful execution of both security and code review."""
     with patch("coreason_jules_automator.strategies.local.get_settings") as mock_settings:
         mock_settings.return_value.extensions_enabled = ["security", "code-review"]
@@ -27,8 +32,12 @@ def test_execute_success(strategy: LocalDefenseStrategy, mock_gemini: MagicMock)
         mock_gemini.security_scan.assert_called_once()
         mock_gemini.code_review.assert_called_once()
 
+        # Verify events
+        # We expect: Phase Start, Security Running, Security Result, Review Running, Review Result
+        assert mock_emitter.emit.call_count >= 5
 
-def test_execute_security_fail(strategy: LocalDefenseStrategy, mock_gemini: MagicMock) -> None:
+
+def test_execute_security_fail(strategy: LocalDefenseStrategy, mock_gemini: MagicMock, mock_emitter: MagicMock) -> None:
     """Test failure in security scan."""
     with patch("coreason_jules_automator.strategies.local.get_settings") as mock_settings:
         mock_settings.return_value.extensions_enabled = ["security", "code-review"]
@@ -43,6 +52,12 @@ def test_execute_security_fail(strategy: LocalDefenseStrategy, mock_gemini: Magi
         # if not passed: return ...
         # So code review is skipped if security scan fails.
         mock_gemini.code_review.assert_not_called()
+
+        # Verify failure event
+        calls = [args[0] for args, _ in mock_emitter.emit.call_args_list]
+        fail_event = next((e for e in calls if e.type.name == "CHECK_RESULT" and e.payload.get("status") == "fail"), None)
+        assert fail_event is not None
+        assert "Security Issue" in fail_event.payload["error"]
 
 
 def test_execute_code_review_fail(strategy: LocalDefenseStrategy, mock_gemini: MagicMock) -> None:
