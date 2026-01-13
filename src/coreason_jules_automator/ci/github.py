@@ -1,9 +1,9 @@
 import json
 import shutil
-import subprocess
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from coreason_jules_automator.utils.logger import logger
+from coreason_jules_automator.utils.shell import ShellError, ShellExecutor
 
 
 class GitHubInterface:
@@ -12,8 +12,9 @@ class GitHubInterface:
     Implements 'Line 2' of the defense strategy (Remote CI/CD Verification).
     """
 
-    def __init__(self, executable: str = "gh") -> None:
+    def __init__(self, shell_executor: Optional[ShellExecutor] = None, executable: str = "gh") -> None:
         self.executable = executable
+        self.shell = shell_executor or ShellExecutor()
         if not shutil.which(self.executable):
             logger.warning(f"GitHub CLI executable '{self.executable}' not found in PATH.")
 
@@ -31,21 +32,12 @@ class GitHubInterface:
             RuntimeError: If the command fails (non-zero exit code).
         """
         command = [self.executable] + args
-        logger.debug(f"Executing: {' '.join(command)}")
-
         try:
-            result = subprocess.run(command, capture_output=True, text=True, check=False)
-        except Exception as e:
-            raise RuntimeError(f"Failed to execute gh command: {e}") from e
-
-        if result.returncode != 0:
-            error_msg = (
-                f"gh command failed (Exit {result.returncode}):\n{result.stderr.strip() or result.stdout.strip()}"
-            )
-            logger.error(error_msg)
-            raise RuntimeError(error_msg)
-
-        return str(result.stdout.strip())
+            result = self.shell.run(command, check=True)
+            return result.stdout.strip()
+        except ShellError as e:
+            logger.error(str(e))
+            raise RuntimeError(f"gh command failed: {e}") from e
 
     def get_pr_checks(self) -> List[Dict[str, Any]]:
         """
@@ -71,25 +63,13 @@ class GitHubInterface:
     def push_to_branch(self, branch_name: str, message: str) -> None:
         """
         Pushes changes to a specific branch.
-        Note: This usually uses `git` directly, but we can also use gh for PR creation.
-        Since the spec asks to wrap `gh`, and `gh` interacts with PRs, we'll assume
-        git operations are handled via git CLI or this wrapper needs to handle git push too.
-
-        However, `gh` does not replace `git push`.
-        The spec says: "Push to a task branch" and "wraps gh CLI".
-        We will implement `git` push wrapping here for convenience, or assume `gh pr create` workflow.
-
-        Let's implement a generic git push wrapper here as it's part of the CI loop.
         """
         logger.info(f"Pushing to branch {branch_name}")
         # Using git directly for push as gh doesn't do it.
         try:
-            subprocess.run(["git", "add", "."], check=True, capture_output=True)
-            subprocess.run(["git", "commit", "-m", message], check=True, capture_output=True)
-            subprocess.run(["git", "push", "origin", branch_name], check=True, capture_output=True)
-        except subprocess.CalledProcessError as e:
-            # Captured output is bytes, so we decode it. stderr might be None.
-            error_output = e.stderr.decode() if e.stderr else str(e)
-            logger.error(f"Git push failed: {error_output}")
-            # Include the output in the raised error so it can be asserted on
-            raise RuntimeError(f"Git push failed: {error_output}") from e
+            self.shell.run(["git", "add", "."], check=True)
+            self.shell.run(["git", "commit", "-m", message], check=True)
+            self.shell.run(["git", "push", "origin", branch_name], check=True)
+        except ShellError as e:
+            logger.error(f"Git push failed: {e}")
+            raise RuntimeError(f"Git push failed: {e}") from e

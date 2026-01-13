@@ -34,7 +34,9 @@ def test_run_command_success(gemini: GeminiInterface) -> None:
         output = gemini._run_command(["test", "arg"])
 
         assert output == "Scan complete. No issues found."
-        mock_run.assert_called_once_with(["gemini", "test", "arg"], capture_output=True, text=True, check=False)
+        mock_run.assert_called_once_with(
+            ["gemini", "test", "arg"], capture_output=True, text=True, check=False, timeout=300
+        )
 
 
 def test_run_command_failure_exit_code(gemini: GeminiInterface) -> None:
@@ -59,7 +61,7 @@ def test_run_command_failure_exception(gemini: GeminiInterface) -> None:
         with pytest.raises(RuntimeError) as excinfo:
             gemini._run_command(["test", "crash"])
 
-        assert "Failed to execute gemini command" in str(excinfo.value)
+        assert "Gemini command failed" in str(excinfo.value)
 
 
 def test_security_scan(gemini: GeminiInterface) -> None:
