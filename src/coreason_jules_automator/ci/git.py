@@ -12,7 +12,7 @@ class GitInterface:
     def __init__(self, shell_executor: Optional[ShellExecutor] = None) -> None:
         self.shell = shell_executor or ShellExecutor()
 
-    def push_to_branch(self, branch_name: str, message: str) -> None:
+    async def push_to_branch(self, branch_name: str, message: str) -> None:
         """
         Pushes changes to a specific branch.
 
@@ -25,9 +25,9 @@ class GitInterface:
         """
         logger.info(f"Pushing to branch {branch_name}")
         try:
-            self.shell.run(["git", "add", "."], check=True)
-            self.shell.run(["git", "commit", "-m", message], check=True)
-            self.shell.run(["git", "push", "origin", branch_name], check=True)
+            await self.shell.run_async(["git", "add", "."], check=True)
+            await self.shell.run_async(["git", "commit", "-m", message], check=True)
+            await self.shell.run_async(["git", "push", "origin", branch_name], check=True)
         except ShellError as e:
             logger.error(f"Git push failed: {e}")
             raise RuntimeError(f"Git push failed: {e}") from e

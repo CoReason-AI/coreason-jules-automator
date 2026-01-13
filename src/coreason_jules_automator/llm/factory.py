@@ -17,18 +17,18 @@ class LLMFactory:
 
         if strategy == "api":
             try:
-                from openai import OpenAI
+                from openai import AsyncOpenAI
             except ImportError:
                 logger.warning("openai package not installed. Falling back to local.")
                 return self._initialize_local(settings)
 
             if settings.OPENAI_API_KEY:
                 logger.info("Initializing OpenAI client")
-                client = OpenAI(api_key=settings.OPENAI_API_KEY.get_secret_value())
+                client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY.get_secret_value())
                 return OpenAIAdapter(client)
             elif settings.DEEPSEEK_API_KEY:
                 logger.info("Initializing DeepSeek client")
-                client = OpenAI(
+                client = AsyncOpenAI(
                     api_key=settings.DEEPSEEK_API_KEY.get_secret_value(),
                     base_url="https://api.deepseek.com",
                 )

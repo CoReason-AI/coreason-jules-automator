@@ -24,7 +24,7 @@ class JanitorService:
         # Remove empty lines at the end
         return text.strip()
 
-    def summarize_logs(self, text: str) -> str:
+    async def summarize_logs(self, text: str) -> str:
         """
         Converts detailed logs into a 3-sentence hint using the LLM.
         """
@@ -36,7 +36,7 @@ class JanitorService:
 
         if self.client:
             try:
-                return self.client.complete(messages=[{"role": "user", "content": prompt}], max_tokens=150)
+                return await self.client.complete(messages=[{"role": "user", "content": prompt}], max_tokens=150)
 
             except Exception as e:
                 logger.error(f"LLM generation failed: {e}")

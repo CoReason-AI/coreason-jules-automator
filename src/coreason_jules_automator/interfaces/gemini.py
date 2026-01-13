@@ -28,7 +28,7 @@ class GeminiInterface:
             # We don't raise an error here to allow for testing in environments without gemini
             logger.warning(f"Gemini executable '{self.executable}' not found in PATH.")
 
-    def _run_command(self, args: List[str]) -> str:
+    async def _run_command(self, args: List[str]) -> str:
         """
         Executes a gemini command.
 
@@ -43,14 +43,14 @@ class GeminiInterface:
         """
         command = [self.executable] + args
         try:
-            result = self.shell.run(command, check=True)
+            result = await self.shell.run_async(command, check=True)
             logger.info("Gemini command successful")
             return result.stdout.strip()
         except ShellError as e:
             logger.error(str(e))
             raise RuntimeError(f"Gemini command failed: {e}") from e
 
-    def security_scan(self, path: str = ".") -> str:
+    async def security_scan(self, path: str = ".") -> str:
         """
         Runs the gemini security scan on the specified path.
 
@@ -61,9 +61,9 @@ class GeminiInterface:
             The output of the security scan.
         """
         logger.info(f"Starting security scan on {path}")
-        return self._run_command(["security", "scan", path])
+        return await self._run_command(["security", "scan", path])
 
-    def code_review(self, path: str = ".") -> str:
+    async def code_review(self, path: str = ".") -> str:
         """
         Runs the gemini code review on the specified path.
 
@@ -74,4 +74,4 @@ class GeminiInterface:
             The output of the code review.
         """
         logger.info(f"Starting code review on {path}")
-        return self._run_command(["code-review", path])
+        return await self._run_command(["code-review", path])
