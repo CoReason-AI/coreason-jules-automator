@@ -9,6 +9,7 @@
 # Source Code: https://github.com/CoReason-AI/coreason_jules_automator
 
 import sys
+from pathlib import Path
 
 import typer
 
@@ -16,12 +17,13 @@ from coreason_jules_automator.agent.jules import JulesAgent
 from coreason_jules_automator.ci.git import GitInterface
 from coreason_jules_automator.ci.github import GitHubInterface
 from coreason_jules_automator.config import get_settings
-from coreason_jules_automator.events import LoguruEmitter
+from coreason_jules_automator.events import CompositeEmitter, EventCollector, LoguruEmitter
 from coreason_jules_automator.interfaces.gemini import GeminiInterface
 from coreason_jules_automator.llm.factory import LLMFactory
 from coreason_jules_automator.llm.janitor import JanitorService
 from coreason_jules_automator.llm.prompts import PromptManager
 from coreason_jules_automator.orchestrator import Orchestrator
+from coreason_jules_automator.reporters.markdown import MarkdownReporter
 from coreason_jules_automator.strategies.local import LocalDefenseStrategy
 from coreason_jules_automator.strategies.remote import RemoteDefenseStrategy
 from coreason_jules_automator.utils.logger import logger
@@ -47,7 +49,10 @@ def run(
     try:
         # Composition Root
         shell_executor = ShellExecutor()
-        event_emitter = LoguruEmitter()
+
+        log_emitter = LoguruEmitter()
+        event_collector = EventCollector()
+        composite_emitter = CompositeEmitter([log_emitter, event_collector])
 
         gemini = GeminiInterface(shell_executor=shell_executor)
         git = GitInterface(shell_executor=shell_executor)
@@ -58,18 +63,37 @@ def run(
         prompt_manager = PromptManager()
         janitor = JanitorService(llm_client=llm_client, prompt_manager=prompt_manager)
 
-        local_strategy = LocalDefenseStrategy(gemini=gemini, event_emitter=event_emitter)
-        remote_strategy = RemoteDefenseStrategy(github=github, janitor=janitor, git=git, event_emitter=event_emitter)
+        local_strategy = LocalDefenseStrategy(gemini=gemini, event_emitter=composite_emitter)
+        remote_strategy = RemoteDefenseStrategy(
+            github=github, janitor=janitor, git=git, event_emitter=composite_emitter
+        )
 
         agent = JulesAgent()
 
         orchestrator = Orchestrator(
             agent=agent,
             strategies=[local_strategy, remote_strategy],
-            event_emitter=event_emitter,
+            event_emitter=composite_emitter,
         )
 
         success = orchestrator.run_cycle(task, branch)
+
+        # Generate Report
+        try:
+            reporter = MarkdownReporter(template_dir=Path(__file__).parent / "templates")
+            report_content = reporter.generate_report(event_collector.get_events(), task, branch)
+
+            # Simple filename generation
+            # report_filename = f"CoA_{branch}_{int(datetime.datetime.now().timestamp())}.md"
+            # Per MVP instruction:
+            report_filename = "REPORT.md"
+
+            with open(report_filename, "w") as f:
+                f.write(report_content)
+
+            logger.info(f"Certificate of Analysis generated: {report_filename}")
+        except Exception as report_err:
+            logger.error(f"Failed to generate report: {report_err}")
 
         if success:
             logger.info("Cycle completed successfully.")

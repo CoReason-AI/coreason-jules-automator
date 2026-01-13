@@ -1,0 +1,31 @@
+# Certificate of Analysis
+
+**Task Name:** {{ task_name }}
+**Branch:** {{ branch_name }}
+**Timestamp:** {{ timestamp }} (UTC)
+**Status:** **{{ final_status }}**
+
+## Executive Summary
+* **Duration:** {{ duration }}
+* **Checks Run:** {{ checks_count }}
+* **Checks Passed:** {{ checks_passed }}
+* **Checks Failed:** {{ checks_failed }}
+
+## Defense Line 1 (Local)
+| Check | Status | Message |
+|-------|--------|---------|
+{% for check in local_checks -%}
+| {{ check.name }} | {{ check.status }} | {{ check.message }} |
+{% endfor %}
+
+## Defense Line 2 (Remote)
+| Check | Status | Message |
+|-------|--------|---------|
+{% for check in remote_checks -%}
+| {{ check.name }} | {{ check.status }} | {{ check.message }} |
+{% endfor %}
+
+## Agent Interaction Log
+{% for msg in agent_messages -%}
+* **{{ msg.timestamp }}**: {{ msg.content }}
+{% endfor %}

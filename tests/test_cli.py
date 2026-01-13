@@ -125,3 +125,30 @@ def test_cli_file_execution() -> None:
         or "Usage: coreason_jules_automator/cli.py" in clean_stdout
         or "Usage: cli.py" in clean_stdout
     )
+
+
+def test_run_report_exception() -> None:
+    """Test run with exception during report generation."""
+    with (
+        patch("coreason_jules_automator.cli.get_settings"),
+        patch("coreason_jules_automator.llm.factory.LLMFactory.get_client"),
+        patch("coreason_jules_automator.cli.Orchestrator") as MockOrchestrator,
+        patch("coreason_jules_automator.cli.MarkdownReporter") as MockReporter,
+        patch("coreason_jules_automator.cli.logger") as mock_logger,
+    ):
+        mock_instance = MockOrchestrator.return_value
+        mock_instance.run_cycle.return_value = True
+
+        mock_reporter = MockReporter.return_value
+        mock_reporter.generate_report.side_effect = Exception("Report Error")
+
+        result = runner.invoke(app, ["run", "Task1", "--branch", "fix/bug"])
+
+        if result.exit_code != 0:
+            result = runner.invoke(app, ["Task1", "--branch", "fix/bug"])
+
+        if result.exit_code != 0:
+            print(f"Output: {result.output}")
+
+        assert result.exit_code == 0
+        mock_logger.error.assert_called_with("Failed to generate report: Report Error")
