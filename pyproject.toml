@@ -1,14 +1,14 @@
 [tool.poetry]
 name = "coreason_jules_automator"
 version = "0.1.0"
-description = "coreason-jules-automator"
+description = "Coreason Jules Automator"
 authors = ["Gowtham A Rao <gowtham.rao@coreason.ai>"]
 license = "Prosperity-3.0"
 readme = "README.md"
 packages = [{include = "coreason_jules_automator", from = "src"}]
 
 [tool.poetry.scripts]
-vibe-runner = "coreason_jules_automator.cli:main"
+coreason-jules-automator = "coreason_jules_automator.cli:main"
 
 [tool.poetry.dependencies]
 python = ">=3.12, <3.15"
@@ -41,7 +41,7 @@ build-backend = "poetry.core.masonry.api"
 [project]
 name = "coreason_jules_automator"
 version = "0.1.0"
-description = "coreason-jules-automator"
+description = "Coreason Jules Automator"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [

@@ -10,12 +10,12 @@ from coreason_jules_automator.config import Settings
 
 def test_settings_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test default values for settings."""
-    monkeypatch.setenv("VIBE_GITHUB_TOKEN", "dummy_token")
-    monkeypatch.setenv("VIBE_GOOGLE_API_KEY", "dummy_key")
+    monkeypatch.setenv("COREASON_GITHUB_TOKEN", "dummy_token")
+    monkeypatch.setenv("COREASON_GOOGLE_API_KEY", "dummy_key")
     # Ensure no other env vars interfere
-    monkeypatch.delenv("VIBE_LLM_STRATEGY", raising=False)
-    monkeypatch.delenv("VIBE_EXTENSIONS_ENABLED", raising=False)
-    monkeypatch.delenv("VIBE_MAX_RETRIES", raising=False)
+    monkeypatch.delenv("COREASON_LLM_STRATEGY", raising=False)
+    monkeypatch.delenv("COREASON_EXTENSIONS_ENABLED", raising=False)
+    monkeypatch.delenv("COREASON_MAX_RETRIES", raising=False)
 
     settings = Settings()  # type: ignore
     assert settings.llm_strategy == "api"
@@ -27,11 +27,11 @@ def test_settings_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_settings_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test overriding settings with environment variables."""
-    monkeypatch.setenv("VIBE_GITHUB_TOKEN", "dummy_token")
-    monkeypatch.setenv("VIBE_GOOGLE_API_KEY", "dummy_key")
-    monkeypatch.setenv("VIBE_LLM_STRATEGY", "local")
-    monkeypatch.setenv("VIBE_EXTENSIONS_ENABLED", '["security"]')
-    monkeypatch.setenv("VIBE_MAX_RETRIES", "10")
+    monkeypatch.setenv("COREASON_GITHUB_TOKEN", "dummy_token")
+    monkeypatch.setenv("COREASON_GOOGLE_API_KEY", "dummy_key")
+    monkeypatch.setenv("COREASON_LLM_STRATEGY", "local")
+    monkeypatch.setenv("COREASON_EXTENSIONS_ENABLED", '["security"]')
+    monkeypatch.setenv("COREASON_MAX_RETRIES", "10")
 
     # Mock find_spec to return True (simulating installed)
     with patch("importlib.util.find_spec", return_value=True):
@@ -43,8 +43,8 @@ def test_settings_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_missing_secrets(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test that missing mandatory secrets raise ValidationError."""
-    monkeypatch.delenv("VIBE_GITHUB_TOKEN", raising=False)
-    monkeypatch.delenv("VIBE_GOOGLE_API_KEY", raising=False)
+    monkeypatch.delenv("COREASON_GITHUB_TOKEN", raising=False)
+    monkeypatch.delenv("COREASON_GOOGLE_API_KEY", raising=False)
     # Also ensure env vars without prefix are not picked up if they were set in system
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
@@ -60,8 +60,8 @@ def test_missing_secrets(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_empty_secrets(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test that empty secrets raise ValueError."""
-    monkeypatch.setenv("VIBE_GITHUB_TOKEN", "")
-    monkeypatch.setenv("VIBE_GOOGLE_API_KEY", "")
+    monkeypatch.setenv("COREASON_GITHUB_TOKEN", "")
+    monkeypatch.setenv("COREASON_GOOGLE_API_KEY", "")
 
     with pytest.raises(ValidationError) as excinfo:
         Settings()  # type: ignore
@@ -72,8 +72,8 @@ def test_empty_secrets(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_secrets_not_logged(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test that secrets are not exposed in repr."""
-    monkeypatch.setenv("VIBE_GITHUB_TOKEN", "secret_token_value")
-    monkeypatch.setenv("VIBE_GOOGLE_API_KEY", "secret_key_value")
+    monkeypatch.setenv("COREASON_GITHUB_TOKEN", "secret_token_value")
+    monkeypatch.setenv("COREASON_GOOGLE_API_KEY", "secret_key_value")
 
     settings = Settings()  # type: ignore
     repr_str = repr(settings)
@@ -83,9 +83,9 @@ def test_secrets_not_logged(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_local_strategy_missing_dependency(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test that selecting 'local' strategy without llama_cpp installed raises ValueError."""
-    monkeypatch.setenv("VIBE_GITHUB_TOKEN", "dummy_token")
-    monkeypatch.setenv("VIBE_GOOGLE_API_KEY", "dummy_key")
-    monkeypatch.setenv("VIBE_LLM_STRATEGY", "local")
+    monkeypatch.setenv("COREASON_GITHUB_TOKEN", "dummy_token")
+    monkeypatch.setenv("COREASON_GOOGLE_API_KEY", "dummy_key")
+    monkeypatch.setenv("COREASON_LLM_STRATEGY", "local")
 
     # Mock find_spec to return None (simulating NOT installed)
     with patch("importlib.util.find_spec", return_value=None):
@@ -99,9 +99,9 @@ def test_local_strategy_missing_dependency(monkeypatch: pytest.MonkeyPatch) -> N
 
 def test_api_strategy_missing_dependency_ok(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test that selecting 'api' strategy works even if llama_cpp is missing."""
-    monkeypatch.setenv("VIBE_GITHUB_TOKEN", "dummy_token")
-    monkeypatch.setenv("VIBE_GOOGLE_API_KEY", "dummy_key")
-    monkeypatch.setenv("VIBE_LLM_STRATEGY", "api")
+    monkeypatch.setenv("COREASON_GITHUB_TOKEN", "dummy_token")
+    monkeypatch.setenv("COREASON_GOOGLE_API_KEY", "dummy_key")
+    monkeypatch.setenv("COREASON_LLM_STRATEGY", "api")
 
     # Mock find_spec to return None (simulating NOT installed)
     with patch("importlib.util.find_spec", return_value=None):
@@ -112,8 +112,8 @@ def test_api_strategy_missing_dependency_ok(monkeypatch: pytest.MonkeyPatch) -> 
 def test_config_settings_init_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test exception during Settings initialization in config.py."""
     # Unset required env vars to force ValidationError during init
-    monkeypatch.delenv("VIBE_GITHUB_TOKEN", raising=False)
-    monkeypatch.delenv("VIBE_GOOGLE_API_KEY", raising=False)
+    monkeypatch.delenv("COREASON_GITHUB_TOKEN", raising=False)
+    monkeypatch.delenv("COREASON_GOOGLE_API_KEY", raising=False)
 
     # Reload the module. Settings() instantiation should fail.
     # The try/except block in config.py should catch it.
@@ -122,8 +122,8 @@ def test_config_settings_init_failure(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_get_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test get_settings returns a Settings instance."""
-    monkeypatch.setenv("VIBE_GITHUB_TOKEN", "dummy")
-    monkeypatch.setenv("VIBE_GOOGLE_API_KEY", "dummy")
+    monkeypatch.setenv("COREASON_GITHUB_TOKEN", "dummy")
+    monkeypatch.setenv("COREASON_GOOGLE_API_KEY", "dummy")
 
     # Reload module to get fresh classes/functions
     importlib.reload(coreason_jules_automator.config)
@@ -142,9 +142,9 @@ def test_get_settings(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_invalid_llm_strategy(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test that an invalid llm_strategy raises ValidationError."""
-    monkeypatch.setenv("VIBE_GITHUB_TOKEN", "dummy")
-    monkeypatch.setenv("VIBE_GOOGLE_API_KEY", "dummy")
-    monkeypatch.setenv("VIBE_LLM_STRATEGY", "invalid_strategy")
+    monkeypatch.setenv("COREASON_GITHUB_TOKEN", "dummy")
+    monkeypatch.setenv("COREASON_GOOGLE_API_KEY", "dummy")
+    monkeypatch.setenv("COREASON_LLM_STRATEGY", "invalid_strategy")
 
     with pytest.raises(ValidationError) as excinfo:
         Settings()  # type: ignore
@@ -154,8 +154,8 @@ def test_invalid_llm_strategy(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_settings_runtime_instantiation(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test instantiating Settings with runtime values overrides environment."""
-    monkeypatch.setenv("VIBE_GITHUB_TOKEN", "env_token")
-    monkeypatch.setenv("VIBE_GOOGLE_API_KEY", "env_key")
+    monkeypatch.setenv("COREASON_GITHUB_TOKEN", "env_token")
+    monkeypatch.setenv("COREASON_GOOGLE_API_KEY", "env_key")
 
     # 1. Default uses env
     s1 = Settings()  # type: ignore

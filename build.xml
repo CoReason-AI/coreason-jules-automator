@@ -1,10 +1,10 @@
 <project name="CoReasonJulesAutomator" default="run" basedir=".">
     <description>
-        Build file to run the Vibe Runner CLI in background.
+        Build file to run the Coreason Jules Automator CLI in background.
     </description>
     <target name="run">
         <exec executable="nohup">
-            <arg line="poetry run vibe-runner run 'Default Task' --branch 'main'"/>
+            <arg line="poetry run coreason-jules-automator run 'Default Task' --branch 'main'"/>
         </exec>
     </target>
 </project>
