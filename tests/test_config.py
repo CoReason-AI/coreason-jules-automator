@@ -1,10 +1,11 @@
 import importlib
 from unittest.mock import patch
 
-import coreason_jules_automator.config
 import pytest
-from coreason_jules_automator.config import Settings
 from pydantic import ValidationError
+
+import coreason_jules_automator.config
+from coreason_jules_automator.config import Settings
 
 
 def test_settings_defaults(monkeypatch: pytest.MonkeyPatch) -> None:

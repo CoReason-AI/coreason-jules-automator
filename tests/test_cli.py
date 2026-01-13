@@ -1,7 +1,8 @@
 from unittest.mock import patch
 
-from coreason_jules_automator.cli import app, main
 from typer.testing import CliRunner
+
+from coreason_jules_automator.cli import app, main
 
 runner = CliRunner()
 

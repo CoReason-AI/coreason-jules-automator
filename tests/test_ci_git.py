@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock
 
 import pytest
+
 from coreason_jules_automator.ci.git import GitInterface
 
 

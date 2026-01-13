@@ -637,6 +637,7 @@ files = [
     {file = "jinja2-3.1.6-py3-none-any.whl", hash = "sha256:85ece4451f492d0c13c5dd7c13a64681a86afae63a5f347908daf103ce6d2f67"},
     {file = "jinja2-3.1.6.tar.gz", hash = "sha256:0137fb05990d35f1275a587e9aee6d56da821fc83491a0fb838183be43f66d6d"},
 ]
+markers = {main = "extra == \"local\""}
 
 [package.dependencies]
 MarkupSafe = ">=2.0"
@@ -1024,6 +1025,7 @@ files = [
     {file = "markupsafe-3.0.3-cp39-cp39-win_arm64.whl", hash = "sha256:38664109c14ffc9e7437e86b4dceb442b0096dfe3541d7864d9cbe1da4cf36c8"},
     {file = "markupsafe-3.0.3.tar.gz", hash = "sha256:722695808f4b6457b320fdc131280796bdceb04ab50fe1795cd540799ebe1698"},
 ]
+markers = {main = "extra == \"local\""}
 
 [[package]]
 name = "mdurl"
@@ -2137,4 +2139,4 @@ local = ["llama-cpp-python"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12, <3.15"
-content-hash = "2aa334b54eb9f2fd3936f22a8ed7fbaacad7b3212a1c3b55a2050c444a4ca34d"
+content-hash = "e3f513ea5bf80ddfdc24ee31ba4abe842c6ee9b953496ae810b0de79303a3d65"

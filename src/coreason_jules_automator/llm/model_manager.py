@@ -1,7 +1,8 @@
 from pathlib import Path
 
-from coreason_jules_automator.utils.logger import logger
 from huggingface_hub import hf_hub_download
+
+from coreason_jules_automator.utils.logger import logger
 
 
 class ModelManager:
