@@ -51,7 +51,7 @@ def test_orchestrator_events() -> None:
         # We don't need to patch cwd here, just check it was called with a path
         args, _ = mock_agent.teleport_and_sync.call_args
         assert args[0] == "123"
-        assert args[1] is not None # Check it is a path
+        assert args[1] is not None  # Check it is a path
 
 
 def test_orchestrator_failure_events() -> None:
@@ -82,7 +82,7 @@ def test_orchestrator_failure_events() -> None:
 def test_orchestrator_agent_failure_launch() -> None:
     """Test that events are emitted when the agent fails to launch session."""
     mock_agent = MagicMock(spec=JulesAgent)
-    mock_agent.launch_session.return_value = None # Failed to launch
+    mock_agent.launch_session.return_value = None  # Failed to launch
 
     mock_strategy = MockStrategy(success=True)
     mock_emitter = MagicMock()
@@ -102,11 +102,12 @@ def test_orchestrator_agent_failure_launch() -> None:
         assert "Agent workflow failed" in last_event.message
         assert "Failed to obtain Session ID" in last_event.payload["error"]
 
+
 def test_orchestrator_agent_failure_wait() -> None:
     """Test that events are emitted when the agent fails to wait for completion."""
     mock_agent = MagicMock(spec=JulesAgent)
     mock_agent.launch_session.return_value = "123"
-    mock_agent.wait_for_completion.return_value = False # Failed waiting
+    mock_agent.wait_for_completion.return_value = False  # Failed waiting
 
     mock_strategy = MockStrategy(success=True)
     mock_emitter = MagicMock()
@@ -126,12 +127,13 @@ def test_orchestrator_agent_failure_wait() -> None:
         assert "Agent workflow failed" in last_event.message
         assert "did not complete successfully" in last_event.payload["error"]
 
+
 def test_orchestrator_agent_failure_teleport() -> None:
     """Test that events are emitted when the agent fails to teleport."""
     mock_agent = MagicMock(spec=JulesAgent)
     mock_agent.launch_session.return_value = "123"
     mock_agent.wait_for_completion.return_value = True
-    mock_agent.teleport_and_sync.return_value = False # Failed teleport
+    mock_agent.teleport_and_sync.return_value = False  # Failed teleport
 
     mock_strategy = MockStrategy(success=True)
     mock_emitter = MagicMock()

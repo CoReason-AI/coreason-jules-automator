@@ -1,12 +1,16 @@
-from unittest.mock import MagicMock, patch
-from pathlib import Path
-import pytest
 import subprocess
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
+
 from coreason_jules_automator.agent.jules import JulesAgent
+
 
 @pytest.fixture
 def agent() -> JulesAgent:
     return JulesAgent()
+
 
 @patch("subprocess.run")
 def test_get_active_sids(mock_run: MagicMock, agent: JulesAgent) -> None:
