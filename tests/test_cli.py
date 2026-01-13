@@ -100,7 +100,10 @@ def test_main_execution() -> None:
     assert result.returncode == 0
     # Strip ANSI codes
     clean_stdout = re.sub(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])", "", result.stdout)
-    assert "Usage: coreason-jules-automator" in clean_stdout or "Usage: python -m coreason_jules_automator.cli" in clean_stdout
+    assert (
+        "Usage: coreason-jules-automator" in clean_stdout
+        or "Usage: python -m coreason_jules_automator.cli" in clean_stdout
+    )
 
 
 def test_cli_file_execution() -> None:
