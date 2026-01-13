@@ -1,6 +1,6 @@
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
-from coreason_jules_automator.events import AutomationEvent, EventType, LoguruEmitter
+from coreason_jules_automator.events import AutomationEvent, EventType, LoguruEmitter, EventCollector, CompositeEmitter
 
 
 def test_automation_event_creation() -> None:
@@ -45,3 +45,26 @@ def test_loguru_emitter_emit() -> None:
         event_pass = AutomationEvent(type=EventType.CHECK_RESULT, message="Check passed", payload={"status": "pass"})
         emitter.emit(event_pass)
         mock_logger.info.assert_called_once()
+
+
+def test_event_collector_collects_events() -> None:
+    collector = EventCollector()
+    event = AutomationEvent(type=EventType.CYCLE_START, message="Start")
+
+    collector.emit(event)
+
+    events = collector.get_events()
+    assert len(events) == 1
+    assert events[0] == event
+
+
+def test_composite_emitter_broadcasts() -> None:
+    mock_emitter1 = MagicMock()
+    mock_emitter2 = MagicMock()
+    composite = CompositeEmitter([mock_emitter1, mock_emitter2])
+
+    event = AutomationEvent(type=EventType.CYCLE_START, message="Start")
+    composite.emit(event)
+
+    mock_emitter1.emit.assert_called_once_with(event)
+    mock_emitter2.emit.assert_called_once_with(event)
