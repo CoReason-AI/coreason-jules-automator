@@ -13,6 +13,7 @@ from coreason_jules_automator.llm.model_manager import ModelManager
 def mock_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("VIBE_GITHUB_TOKEN", "dummy")
     monkeypatch.setenv("VIBE_GOOGLE_API_KEY", "dummy")
+    monkeypatch.setenv("VIBE_REPO_NAME", "test_repo")
     monkeypatch.setenv("VIBE_LLM_STRATEGY", "api")
     get_settings.cache_clear()
 
@@ -20,6 +21,10 @@ def mock_settings(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_factory_get_client_api_openai(mock_settings: None, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test factory returns OpenAI client when configured."""
     monkeypatch.setenv("VIBE_OPENAI_API_KEY", "sk-test")
+    # Repo name already set by mock_settings fixture, but get_settings() is cleared below
+    # The fixture runs before this test function, setting env vars.
+    # cache_clear() clears the lru_cache, so next call re-reads env vars.
+    # The env vars set by fixture SHOULD persist.
     get_settings.cache_clear()
     settings = get_settings()
 
