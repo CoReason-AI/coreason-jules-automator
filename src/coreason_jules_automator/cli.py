@@ -12,8 +12,16 @@ import sys
 
 import typer
 
+from coreason_jules_automator.agent.jules import JulesAgent
+from coreason_jules_automator.ci.github import GitHubInterface
+from coreason_jules_automator.interfaces.gemini import GeminiInterface
+from coreason_jules_automator.llm.factory import LLMFactory
+from coreason_jules_automator.llm.janitor import JanitorService
 from coreason_jules_automator.orchestrator import Orchestrator
+from coreason_jules_automator.strategies.local import LocalDefenseStrategy
+from coreason_jules_automator.strategies.remote import RemoteDefenseStrategy
 from coreason_jules_automator.utils.logger import logger
+from coreason_jules_automator.utils.shell import ShellExecutor
 
 app = typer.Typer(
     name="vibe-runner",
@@ -33,7 +41,22 @@ def run(
     logger.info(f"Vibe Runner started. Task: {task}, Branch: {branch}")
 
     try:
-        orchestrator = Orchestrator()
+        # Composition Root
+        shell_executor = ShellExecutor()
+
+        gemini = GeminiInterface(shell_executor=shell_executor)
+        github = GitHubInterface(shell_executor=shell_executor)
+
+        llm_client = LLMFactory.get_client()
+        janitor = JanitorService(llm_client=llm_client)
+
+        local_strategy = LocalDefenseStrategy(gemini=gemini)
+        remote_strategy = RemoteDefenseStrategy(github=github, janitor=janitor)
+
+        agent = JulesAgent()
+
+        orchestrator = Orchestrator(agent=agent, strategies=[local_strategy, remote_strategy])
+
         success = orchestrator.run_cycle(task, branch)
 
         if success:

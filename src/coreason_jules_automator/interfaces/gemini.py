@@ -9,10 +9,10 @@
 # Source Code: https://github.com/CoReason-AI/coreason_jules_automator
 
 import shutil
-import subprocess
-from typing import List
+from typing import List, Optional
 
 from coreason_jules_automator.utils.logger import logger
+from coreason_jules_automator.utils.shell import ShellError, ShellExecutor
 
 
 class GeminiInterface:
@@ -21,8 +21,9 @@ class GeminiInterface:
     Implements 'Line 1' of the defense strategy (Local Security & Code Review).
     """
 
-    def __init__(self, executable: str = "gemini") -> None:
+    def __init__(self, shell_executor: Optional[ShellExecutor] = None, executable: str = "gemini") -> None:
         self.executable = executable
+        self.shell = shell_executor or ShellExecutor()
         if not shutil.which(self.executable):
             # We don't raise an error here to allow for testing in environments without gemini
             logger.warning(f"Gemini executable '{self.executable}' not found in PATH.")
@@ -41,22 +42,13 @@ class GeminiInterface:
             RuntimeError: If the command fails (non-zero exit code).
         """
         command = [self.executable] + args
-        logger.debug(f"Executing: {' '.join(command)}")
-
         try:
-            result = subprocess.run(command, capture_output=True, text=True, check=False)
-        except Exception as e:
-            raise RuntimeError(f"Failed to execute gemini command: {e}") from e
-
-        if result.returncode != 0:
-            error_msg = (
-                f"Gemini command failed (Exit {result.returncode}):\n{result.stderr.strip() or result.stdout.strip()}"
-            )
-            logger.error(error_msg)
-            raise RuntimeError(error_msg)
-
-        logger.info("Gemini command successful")
-        return str(result.stdout.strip())
+            result = self.shell.run(command, check=True)
+            logger.info("Gemini command successful")
+            return result.stdout.strip()
+        except ShellError as e:
+            logger.error(str(e))
+            raise RuntimeError(f"Gemini command failed: {e}") from e
 
     def security_scan(self, path: str = ".") -> str:
         """
