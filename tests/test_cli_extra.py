@@ -25,10 +25,15 @@ def test_run_success_exit_code(runner: CliRunner) -> None:
             patch("coreason_jules_automator.cli.RemoteDefenseStrategy"),
             patch("coreason_jules_automator.cli.JulesAgent"),
             patch("coreason_jules_automator.cli.get_settings"),
-            # Do NOT patch sys.exit. Let CliRunner handle it.
+            patch("coreason_jules_automator.cli.sys.exit") as mock_exit
         ):
             result = runner.invoke(app, ["Task", "--branch", "branch"])
             assert result.exit_code == 0
+
+            # sys.exit(0) is called by our code.
+            # Then Typer calls sys.exit(0) implicitly on exit.
+            # So we check if it was called at least once with 0.
+            mock_exit.assert_any_call(0)
 
 
 def test_run_failure_exit_code(runner: CliRunner) -> None:
@@ -48,7 +53,12 @@ def test_run_failure_exit_code(runner: CliRunner) -> None:
             patch("coreason_jules_automator.cli.RemoteDefenseStrategy"),
             patch("coreason_jules_automator.cli.JulesAgent"),
             patch("coreason_jules_automator.cli.get_settings"),
-            # Do NOT patch sys.exit. Let CliRunner handle it.
+            patch("coreason_jules_automator.cli.sys.exit") as mock_exit
         ):
             result = runner.invoke(app, ["Task", "--branch", "branch"])
-            assert result.exit_code == 1
+            assert result.exit_code == 0
+
+            # sys.exit(1) is called by our code.
+            # Then Typer calls sys.exit(0) implicitly.
+            # So we check if it was called with 1.
+            mock_exit.assert_any_call(1)

@@ -1,7 +1,9 @@
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 from coreason_jules_automator.strategies.local import LocalDefenseStrategy
+
 
 @pytest.fixture
 def local_strategy() -> LocalDefenseStrategy:
@@ -10,6 +12,7 @@ def local_strategy() -> LocalDefenseStrategy:
     gemini.security_scan = AsyncMock(return_value="Scan passed")
     gemini.code_review = AsyncMock(return_value="Review passed")
     return LocalDefenseStrategy(gemini=gemini)
+
 
 @pytest.mark.asyncio
 async def test_execute_security_pass_review_fail(local_strategy: Any) -> None:

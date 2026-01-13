@@ -1,9 +1,8 @@
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from typer.testing import CliRunner
-
 from coreason_jules_automator.cli import app
+from typer.testing import CliRunner
 
 
 @pytest.fixture

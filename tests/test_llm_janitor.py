@@ -1,7 +1,6 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
 from coreason_jules_automator.llm.janitor import JanitorService
 from coreason_jules_automator.llm.prompts import PromptManager
 

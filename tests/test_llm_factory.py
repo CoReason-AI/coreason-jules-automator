@@ -1,9 +1,8 @@
 from unittest.mock import MagicMock, patch
 
-from pydantic import SecretStr
-
 from coreason_jules_automator.config import Settings
 from coreason_jules_automator.llm.factory import LLMFactory
+from pydantic import SecretStr
 
 
 def test_get_client_api_openai_key() -> None:

@@ -1,7 +1,6 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from coreason_jules_automator.interfaces.gemini import GeminiInterface
 from coreason_jules_automator.utils.shell import CommandResult, ShellError
 

@@ -1,7 +1,6 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from coreason_jules_automator.ci.github import GitHubInterface
 from coreason_jules_automator.utils.shell import CommandResult, ShellError
 

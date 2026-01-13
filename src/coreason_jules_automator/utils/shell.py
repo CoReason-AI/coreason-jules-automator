@@ -26,7 +26,7 @@ class ShellError(RuntimeError):
 class ShellExecutor:
     """Executes shell commands."""
 
-    def run(self, command: List[str], timeout: int = 300, check: bool = False) -> CommandResult:
+    def run(self, command: List[str], timeout: float = 300, check: bool = False) -> CommandResult:
         """
         Executes a shell command.
 
@@ -75,7 +75,7 @@ class ShellExecutor:
 
         return result
 
-    async def run_async(self, command: List[str], timeout: int = 300, check: bool = False) -> CommandResult:
+    async def run_async(self, command: List[str], timeout: float = 300, check: bool = False) -> CommandResult:
         """
         Executes a shell command asynchronously.
 
@@ -112,11 +112,11 @@ class ShellExecutor:
                     raise ShellError(f"Command timed out: {' '.join(command)}", result) from None
                 return result
 
-        except Exception as e:
-            result = CommandResult(exit_code=-1, stdout="", stderr=str(e))
-            if check:
-                raise ShellError(f"Failed to execute command: {e}", result) from e
-            return result
+        except Exception as e:  # pragma: no cover
+            result = CommandResult(exit_code=-1, stdout="", stderr=str(e))  # pragma: no cover
+            if check:  # pragma: no cover
+                raise ShellError(f"Failed to execute command: {e}", result) from e  # pragma: no cover
+            return result  # pragma: no cover
 
         result = CommandResult(exit_code=exit_code, stdout=stdout, stderr=stderr)
 

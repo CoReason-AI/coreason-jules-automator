@@ -1,7 +1,6 @@
 from typing import Any, Dict
 
 import pytest
-
 from coreason_jules_automator.strategies.base import DefenseResult, DefenseStrategy
 
 

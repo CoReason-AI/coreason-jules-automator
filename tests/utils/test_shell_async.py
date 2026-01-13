@@ -1,5 +1,4 @@
 import pytest
-
 from coreason_jules_automator.utils.shell import ShellExecutor
 
 

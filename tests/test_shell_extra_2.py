@@ -1,8 +1,10 @@
 import asyncio
-import subprocess
+from typing import Tuple
 from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 from coreason_jules_automator.utils.shell import ShellError, ShellExecutor
+
 
 @pytest.mark.asyncio
 async def test_run_async_timeout_check_true() -> None:
@@ -20,13 +22,13 @@ async def test_run_async_timeout_check_true() -> None:
         # But we can't easily mock wait_for if it's imported as `asyncio.wait_for` unless we patch asyncio.
         # Alternatively, we can make process.communicate hang.
 
-        async def delayed_communicate():
+        async def delayed_communicate() -> Tuple[bytes, bytes]:
             await asyncio.sleep(2)
             return (b"", b"")
 
         process.communicate = delayed_communicate
         process.returncode = 0
-        process.kill = MagicMock() # Not async usually?
+        process.kill = MagicMock()  # Not async usually?
         # In python 3.12 subprocess.Popen.kill is synchronous.
         # asyncio.subprocess.Process.kill is synchronous.
 
@@ -38,6 +40,7 @@ async def test_run_async_timeout_check_true() -> None:
 
         process.kill.assert_called_once()
 
+
 @pytest.mark.asyncio
 async def test_run_async_exception_check_true() -> None:
     """Test run_async handles generic exception with check=True."""
@@ -45,6 +48,7 @@ async def test_run_async_exception_check_true() -> None:
     with patch("asyncio.create_subprocess_exec", side_effect=Exception("Spawn failed")):
         with pytest.raises(ShellError, match="Failed to execute command"):
             await shell.run_async(["cmd"], check=True)
+
 
 @pytest.mark.asyncio
 async def test_run_async_exception_check_false() -> None:

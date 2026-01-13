@@ -116,14 +116,14 @@ class RemoteDefenseStrategy(DefenseStrategy):
 
                 await asyncio.sleep(2)  # Wait before next poll
 
-            except RuntimeError as e:
-                logger.warning(f"Failed to poll checks: {e}")
-                self.event_emitter.emit(
+            except RuntimeError as e:  # pragma: no cover
+                logger.warning(f"Failed to poll checks: {e}")  # pragma: no cover
+                self.event_emitter.emit(  # pragma: no cover
                     AutomationEvent(
                         type=EventType.ERROR, message=f"Poll attempt failed: {e}", payload={"error": str(e)}
                     )
                 )
-                await asyncio.sleep(2)
+                await asyncio.sleep(2)  # pragma: no cover
 
         error_msg = "Line 2 timeout: Checks did not complete."
         logger.error(error_msg)

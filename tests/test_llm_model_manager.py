@@ -1,6 +1,8 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
+
 import pytest
 from coreason_jules_automator.llm.model_manager import ModelManager
+
 
 def test_ensure_model_downloaded_failure() -> None:
     """Test ensure_model_downloaded raises RuntimeError on download failure."""
