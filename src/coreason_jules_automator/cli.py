@@ -8,7 +8,6 @@
 #
 # Source Code: https://github.com/CoReason-AI/coreason_jules_automator
 
-import datetime
 import sys
 from pathlib import Path
 
@@ -63,7 +62,9 @@ def run(
         janitor = JanitorService(llm_client=llm_client)
 
         local_strategy = LocalDefenseStrategy(gemini=gemini, event_emitter=composite_emitter)
-        remote_strategy = RemoteDefenseStrategy(github=github, janitor=janitor, git=git, event_emitter=composite_emitter)
+        remote_strategy = RemoteDefenseStrategy(
+            github=github, janitor=janitor, git=git, event_emitter=composite_emitter
+        )
 
         agent = JulesAgent()
 
@@ -90,8 +91,7 @@ def run(
 
             logger.info(f"Certificate of Analysis generated: {report_filename}")
         except Exception as report_err:
-             logger.error(f"Failed to generate report: {report_err}")
-
+            logger.error(f"Failed to generate report: {report_err}")
 
         if success:
             logger.info("Cycle completed successfully.")

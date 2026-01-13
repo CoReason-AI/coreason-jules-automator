@@ -1,7 +1,6 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from coreason_jules_automator.strategies.local import LocalDefenseStrategy
 
 

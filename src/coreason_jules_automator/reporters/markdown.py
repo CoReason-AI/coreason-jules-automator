@@ -1,6 +1,6 @@
 import datetime
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List
 
 from jinja2 import Environment, FileSystemLoader
 
@@ -42,11 +42,7 @@ class MarkdownReporter:
 
             if event.type == EventType.CHECK_RESULT:
                 status = event.payload.get("status", "unknown")
-                check_item = {
-                    "name": event.message,
-                    "status": status,
-                    "message": str(event.payload)
-                }
+                check_item = {"name": event.message, "status": status, "message": str(event.payload)}
 
                 if status == "pass":
                     checks_passed += 1
@@ -61,15 +57,19 @@ class MarkdownReporter:
                 else:
                     # Fallback based on message content if phase tracking failed
                     if "GitHub" in event.message or "Remote" in event.message:
-                         remote_checks.append(check_item)
+                        remote_checks.append(check_item)
                     else:
-                         local_checks.append(check_item)
+                        local_checks.append(check_item)
 
             if event.type == EventType.AGENT_MESSAGE:
-                 agent_messages.append({
-                     "timestamp": datetime.datetime.fromtimestamp(event.timestamp, datetime.UTC).strftime("%H:%M:%S"),
-                     "content": event.message
-                 })
+                agent_messages.append(
+                    {
+                        "timestamp": datetime.datetime.fromtimestamp(event.timestamp, datetime.UTC).strftime(
+                            "%H:%M:%S"
+                        ),
+                        "content": event.message,
+                    }
+                )
 
         if not start_time:
             start_time = events[0].timestamp if events else 0
@@ -91,7 +91,7 @@ class MarkdownReporter:
             "checks_failed": checks_failed,
             "local_checks": local_checks,
             "remote_checks": remote_checks,
-            "agent_messages": agent_messages
+            "agent_messages": agent_messages,
         }
 
-        return self.template.render(context)
+        return str(self.template.render(context))

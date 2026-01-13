@@ -1,6 +1,6 @@
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from coreason_jules_automator.events import AutomationEvent, EventType, LoguruEmitter, EventCollector, CompositeEmitter
+from coreason_jules_automator.events import AutomationEvent, CompositeEmitter, EventCollector, EventType, LoguruEmitter
 
 
 def test_automation_event_creation() -> None:

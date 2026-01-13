@@ -1,7 +1,7 @@
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, Protocol, List
+from typing import Any, Dict, List, Protocol
 
 from coreason_jules_automator.utils.logger import logger
 
