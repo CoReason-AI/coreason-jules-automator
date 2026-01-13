@@ -8,7 +8,6 @@
 #
 # Source Code: https://github.com/CoReason-AI/coreason_jules_automator
 
-import datetime
 import sys
 from pathlib import Path
 
@@ -93,7 +92,6 @@ def run(
             logger.info(f"Certificate of Analysis generated: {report_filename}")
         except Exception as report_err:
             logger.error(f"Failed to generate report: {report_err}")
-
 
         if success:
             logger.info("Cycle completed successfully.")

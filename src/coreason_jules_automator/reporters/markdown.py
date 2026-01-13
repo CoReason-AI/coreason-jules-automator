@@ -51,15 +51,19 @@ class MarkdownReporter:
                 else:
                     # Fallback based on message content if phase tracking failed
                     if "GitHub" in event.message or "Remote" in event.message:
-                         remote_checks.append(check_item)
+                        remote_checks.append(check_item)
                     else:
-                         local_checks.append(check_item)
+                        local_checks.append(check_item)
 
             if event.type == EventType.AGENT_MESSAGE:
-                 agent_messages.append({
-                     "timestamp": datetime.datetime.fromtimestamp(event.timestamp, datetime.UTC).strftime("%H:%M:%S"),
-                     "content": event.message
-                 })
+                agent_messages.append(
+                    {
+                        "timestamp": datetime.datetime.fromtimestamp(event.timestamp, datetime.UTC).strftime(
+                            "%H:%M:%S"
+                        ),
+                        "content": event.message,
+                    }
+                )
 
         if not start_time:
             start_time = events[0].timestamp if events else 0
