@@ -32,13 +32,27 @@ class RemoteDefenseStrategy(DefenseStrategy):
         if not branch_name:
             return DefenseResult(success=False, message="Missing branch_name in context")
 
+        sid = context.get("sid", "unknown")
+
         self.event_emitter.emit(AutomationEvent(type=EventType.PHASE_START, message="Executing Line 2: Remote Defense"))
 
         # 1. Push Code
         try:
             self.event_emitter.emit(AutomationEvent(type=EventType.CHECK_RUNNING, message="Pushing Code"))
-            commit_msg = self.janitor.sanitize_commit(f"feat: implementation for {branch_name}")
-            self.git.push_to_branch(branch_name, commit_msg)
+
+            # Traceability: Add SID to commit
+            base_msg = f"feat: implementation for {branch_name} (SID: {sid})"
+            commit_msg = self.janitor.sanitize_commit(base_msg)
+
+            changes_pushed = self.git.push_to_branch(branch_name, commit_msg)
+
+            if not changes_pushed:
+                msg = "No changes detected to push. Agent produced identical code."
+                self.event_emitter.emit(
+                    AutomationEvent(type=EventType.CHECK_RESULT, message=msg, payload={"status": "warn"})
+                )
+                return DefenseResult(success=False, message=msg)
+
             self.event_emitter.emit(
                 AutomationEvent(
                     type=EventType.CHECK_RESULT,

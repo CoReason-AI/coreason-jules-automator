@@ -114,7 +114,7 @@ class Orchestrator:
             # --- PHASE 2: DEFENSE STRATEGIES ---
             cycle_passed = True
             for strategy in self.strategies:
-                result = strategy.execute(context={"branch_name": branch_name})
+                result = strategy.execute(context={"branch_name": branch_name, "sid": sid})
                 if not result.success:
                     logger.warning(f"Strategy {strategy.__class__.__name__} failed: {result.message}")
                     cycle_passed = False

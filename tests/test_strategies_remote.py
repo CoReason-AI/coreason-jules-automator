@@ -2,6 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from coreason_jules_automator.events import EventType
 from coreason_jules_automator.strategies.remote import RemoteDefenseStrategy
 
 
@@ -52,6 +53,26 @@ def test_execute_push_failure(
     assert "Failed to push code: Push failed" in result.message
 
 
+def test_execute_no_changes(
+    strategy: RemoteDefenseStrategy, mock_janitor: MagicMock, mock_git: MagicMock, mock_emitter: MagicMock
+) -> None:
+    """Test execution when no changes are detected (empty commit)."""
+    mock_janitor.sanitize_commit.return_value = "clean commit"
+    mock_git.push_to_branch.return_value = False  # No changes
+
+    result = strategy.execute({"branch_name": "feature/test", "sid": "12345"})
+
+    assert result.success is False
+    assert "No changes detected" in result.message
+
+    # Verify SID in commit message passed to sanitize
+    mock_janitor.sanitize_commit.assert_called_with("feat: implementation for feature/test (SID: 12345)")
+
+    # Verify warning event
+    calls = [args[0] for args, _ in mock_emitter.emit.call_args_list]
+    assert any(e.type == EventType.CHECK_RESULT and e.payload.get("status") == "warn" for e in calls)
+
+
 def test_execute_success(
     strategy: RemoteDefenseStrategy,
     mock_github: MagicMock,
@@ -61,6 +82,8 @@ def test_execute_success(
 ) -> None:
     """Test successful execution."""
     mock_janitor.sanitize_commit.return_value = "clean commit"
+    mock_git.push_to_branch.return_value = True  # Changes pushed
+
     # Return empty list first (wait), then success
     mock_github.get_pr_checks.side_effect = [
         [],
@@ -69,11 +92,14 @@ def test_execute_success(
 
     # We need to speed up time.sleep
     with patch("time.sleep"):
-        result = strategy.execute({"branch_name": "feature/test"})
+        result = strategy.execute({"branch_name": "feature/test", "sid": "test-sid"})
 
     assert result.success is True
     assert result.message == "CI checks passed"
     assert mock_github.get_pr_checks.call_count == 2
+
+    # Verify SID inclusion
+    mock_janitor.sanitize_commit.assert_called_with("feat: implementation for feature/test (SID: test-sid)")
 
     # Check for waiting events
     calls = [args[0] for args, _ in mock_emitter.emit.call_args_list]
@@ -82,9 +108,10 @@ def test_execute_success(
 
 
 def test_execute_check_failure(
-    strategy: RemoteDefenseStrategy, mock_github: MagicMock, mock_janitor: MagicMock
+    strategy: RemoteDefenseStrategy, mock_github: MagicMock, mock_janitor: MagicMock, mock_git: MagicMock
 ) -> None:
     """Test execution when a check fails."""
+    mock_git.push_to_branch.return_value = True
     mock_janitor.sanitize_commit.return_value = "clean commit"
     mock_github.get_pr_checks.return_value = [
         {"name": "test", "status": "completed", "conclusion": "failure", "url": "http://logs"}
@@ -99,8 +126,11 @@ def test_execute_check_failure(
     mock_janitor.summarize_logs.assert_called_once()
 
 
-def test_execute_timeout(strategy: RemoteDefenseStrategy, mock_github: MagicMock, mock_janitor: MagicMock) -> None:
+def test_execute_timeout(
+    strategy: RemoteDefenseStrategy, mock_github: MagicMock, mock_janitor: MagicMock, mock_git: MagicMock
+) -> None:
     """Test execution when checks time out (never complete)."""
+    mock_git.push_to_branch.return_value = True
     mock_janitor.sanitize_commit.return_value = "clean commit"
     mock_github.get_pr_checks.return_value = [{"name": "test", "status": "in_progress"}]
 
@@ -113,9 +143,10 @@ def test_execute_timeout(strategy: RemoteDefenseStrategy, mock_github: MagicMock
 
 
 def test_execute_poll_exception(
-    strategy: RemoteDefenseStrategy, mock_github: MagicMock, mock_janitor: MagicMock
+    strategy: RemoteDefenseStrategy, mock_github: MagicMock, mock_janitor: MagicMock, mock_git: MagicMock
 ) -> None:
     """Test execution when polling raises exceptions repeatedly."""
+    mock_git.push_to_branch.return_value = True
     mock_janitor.sanitize_commit.return_value = "clean commit"
     mock_github.get_pr_checks.side_effect = RuntimeError("API Error")
 
