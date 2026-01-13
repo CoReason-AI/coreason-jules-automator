@@ -1,12 +1,14 @@
-import sys
 from unittest.mock import AsyncMock, patch
+
 import pytest
-from typer.testing import CliRunner
 from coreason_jules_automator.cli import app
+from typer.testing import CliRunner
+
 
 @pytest.fixture
 def runner() -> CliRunner:
     return CliRunner()
+
 
 def test_run_success_exit_code(runner: CliRunner) -> None:
     """Test successful run triggers sys.exit(0)."""
@@ -25,7 +27,7 @@ def test_run_success_exit_code(runner: CliRunner) -> None:
             patch("coreason_jules_automator.cli.RemoteDefenseStrategy"),
             patch("coreason_jules_automator.cli.JulesAgent"),
             patch("coreason_jules_automator.cli.get_settings"),
-            patch("coreason_jules_automator.cli.sys.exit") as mock_exit
+            patch("coreason_jules_automator.cli.sys.exit") as mock_exit,
         ):
             result = runner.invoke(app, ["Task", "--branch", "branch"])
             assert result.exit_code == 0
@@ -53,7 +55,7 @@ def test_run_failure_exit_code(runner: CliRunner) -> None:
             patch("coreason_jules_automator.cli.RemoteDefenseStrategy"),
             patch("coreason_jules_automator.cli.JulesAgent"),
             patch("coreason_jules_automator.cli.get_settings"),
-            patch("coreason_jules_automator.cli.sys.exit") as mock_exit
+            patch("coreason_jules_automator.cli.sys.exit") as mock_exit,
         ):
             result = runner.invoke(app, ["Task", "--branch", "branch"])
             assert result.exit_code == 0

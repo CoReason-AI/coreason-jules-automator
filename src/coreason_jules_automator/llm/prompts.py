@@ -35,7 +35,7 @@ class PromptManager:
         """
         try:
             template = self.env.get_template(template_name)
-            return cast(str, template.render(**kwargs))
+            return template.render(**kwargs)
         except TemplateNotFound:
             logger.error(f"Template not found: {template_name} in {self.template_dir}")
             raise FileNotFoundError(f"Template not found: {template_name}") from None

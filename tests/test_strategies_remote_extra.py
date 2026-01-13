@@ -2,9 +2,9 @@ from typing import Any, Dict
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from coreason_jules_automator.strategies.remote import RemoteDefenseStrategy
 from coreason_jules_automator.utils.logger import logger
+
 
 @pytest.fixture
 def remote_strategy() -> RemoteDefenseStrategy:
