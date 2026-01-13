@@ -16,8 +16,13 @@ def mock_janitor() -> MagicMock:
 
 
 @pytest.fixture
-def strategy(mock_github: MagicMock, mock_janitor: MagicMock) -> RemoteDefenseStrategy:
-    return RemoteDefenseStrategy(github=mock_github, janitor=mock_janitor)
+def mock_git() -> MagicMock:
+    return MagicMock()
+
+
+@pytest.fixture
+def strategy(mock_github: MagicMock, mock_janitor: MagicMock, mock_git: MagicMock) -> RemoteDefenseStrategy:
+    return RemoteDefenseStrategy(github=mock_github, janitor=mock_janitor, git=mock_git)
 
 
 def test_execute_missing_branch(strategy: RemoteDefenseStrategy) -> None:
@@ -27,10 +32,12 @@ def test_execute_missing_branch(strategy: RemoteDefenseStrategy) -> None:
     assert "Missing branch_name" in result.message
 
 
-def test_execute_push_failure(strategy: RemoteDefenseStrategy, mock_github: MagicMock, mock_janitor: MagicMock) -> None:
+def test_execute_push_failure(
+    strategy: RemoteDefenseStrategy, mock_github: MagicMock, mock_janitor: MagicMock, mock_git: MagicMock
+) -> None:
     """Test execution when push fails."""
     mock_janitor.sanitize_commit.return_value = "clean commit"
-    mock_github.push_to_branch.side_effect = RuntimeError("Push failed")
+    mock_git.push_to_branch.side_effect = RuntimeError("Push failed")
 
     result = strategy.execute({"branch_name": "feature/test"})
 
@@ -38,7 +45,9 @@ def test_execute_push_failure(strategy: RemoteDefenseStrategy, mock_github: Magi
     assert "Failed to push code: Push failed" in result.message
 
 
-def test_execute_success(strategy: RemoteDefenseStrategy, mock_github: MagicMock, mock_janitor: MagicMock) -> None:
+def test_execute_success(
+    strategy: RemoteDefenseStrategy, mock_github: MagicMock, mock_janitor: MagicMock, mock_git: MagicMock
+) -> None:
     """Test successful execution."""
     mock_janitor.sanitize_commit.return_value = "clean commit"
     # Return empty list first (wait), then success

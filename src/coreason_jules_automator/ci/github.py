@@ -12,8 +12,8 @@ class GitHubInterface:
     Implements 'Line 2' of the defense strategy (Remote CI/CD Verification).
     """
 
-    def __init__(self, shell_executor: Optional[ShellExecutor] = None, executable: str = "gh") -> None:
-        self.executable = executable
+    def __init__(self, shell_executor: Optional[ShellExecutor] = None) -> None:
+        self.executable = "gh"
         self.shell = shell_executor or ShellExecutor()
         if not shutil.which(self.executable):
             logger.warning(f"GitHub CLI executable '{self.executable}' not found in PATH.")
@@ -59,17 +59,3 @@ class GitHubInterface:
             return parsed
         except json.JSONDecodeError as e:
             raise RuntimeError(f"Failed to parse gh output: {output}") from e
-
-    def push_to_branch(self, branch_name: str, message: str) -> None:
-        """
-        Pushes changes to a specific branch.
-        """
-        logger.info(f"Pushing to branch {branch_name}")
-        # Using git directly for push as gh doesn't do it.
-        try:
-            self.shell.run(["git", "add", "."], check=True)
-            self.shell.run(["git", "commit", "-m", message], check=True)
-            self.shell.run(["git", "push", "origin", branch_name], check=True)
-        except ShellError as e:
-            logger.error(f"Git push failed: {e}")
-            raise RuntimeError(f"Git push failed: {e}") from e
