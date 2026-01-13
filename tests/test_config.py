@@ -150,3 +150,21 @@ def test_invalid_llm_strategy(monkeypatch: pytest.MonkeyPatch) -> None:
         Settings()  # type: ignore
 
     assert "Input should be 'local' or 'api'" in str(excinfo.value)
+
+
+def test_settings_runtime_instantiation(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test instantiating Settings with runtime values overrides environment."""
+    monkeypatch.setenv("VIBE_GITHUB_TOKEN", "env_token")
+    monkeypatch.setenv("VIBE_GOOGLE_API_KEY", "env_key")
+
+    # 1. Default uses env
+    s1 = Settings()  # type: ignore
+    assert s1.GITHUB_TOKEN.get_secret_value() == "env_token"
+
+    # 2. Override via init
+    s2 = Settings(GITHUB_TOKEN="override_token", GOOGLE_API_KEY="override_key")  # type: ignore
+    assert s2.GITHUB_TOKEN.get_secret_value() == "override_token"
+    assert s2.GOOGLE_API_KEY.get_secret_value() == "override_key"
+
+    # 3. Prove s1 is unchanged (environment didn't change)
+    assert s1.GITHUB_TOKEN.get_secret_value() == "env_token"
