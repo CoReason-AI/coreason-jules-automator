@@ -35,7 +35,7 @@ app = typer.Typer(
 )
 
 
-@app.command(name="run")
+@app.command(name="run")  # type: ignore[misc]
 def run(
     task: str = typer.Argument(..., help="The task description for Jules."),
     branch: str = typer.Option(..., "--branch", "-b", help="The target branch name."),
