@@ -30,8 +30,8 @@ from coreason_jules_automator.utils.logger import logger
 from coreason_jules_automator.utils.shell import ShellExecutor
 
 app = typer.Typer(
-    name="vibe-runner",
-    help="Hybrid Vibe Runner: Autonomous Orchestration Engine",
+    name="coreason-jules-automator",
+    help="Coreason Jules Automator: Autonomous Orchestration Engine",
     add_completion=False,
 )
 
@@ -42,9 +42,9 @@ def run(
     branch: str = typer.Option(..., "--branch", "-b", help="The target branch name."),
 ) -> None:
     """
-    Starts the Hybrid Vibe Runner cycle.
+    Starts the Coreason Jules Automator cycle.
     """
-    logger.info(f"Vibe Runner started. Task: {task}, Branch: {branch}")
+    logger.info(f"Coreason Jules Automator started. Task: {task}, Branch: {branch}")
 
     try:
         # Composition Root

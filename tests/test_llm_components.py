@@ -11,20 +11,15 @@ from coreason_jules_automator.llm.model_manager import ModelManager
 
 @pytest.fixture
 def mock_settings(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("VIBE_GITHUB_TOKEN", "dummy")
-    monkeypatch.setenv("VIBE_GOOGLE_API_KEY", "dummy")
-    monkeypatch.setenv("VIBE_REPO_NAME", "test_repo")
-    monkeypatch.setenv("VIBE_LLM_STRATEGY", "api")
+    monkeypatch.setenv("COREASON_GITHUB_TOKEN", "dummy")
+    monkeypatch.setenv("COREASON_GOOGLE_API_KEY", "dummy")
+    monkeypatch.setenv("COREASON_LLM_STRATEGY", "api")
     get_settings.cache_clear()
 
 
 def test_factory_get_client_api_openai(mock_settings: None, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test factory returns OpenAI client when configured."""
-    monkeypatch.setenv("VIBE_OPENAI_API_KEY", "sk-test")
-    # Repo name already set by mock_settings fixture, but get_settings() is cleared below
-    # The fixture runs before this test function, setting env vars.
-    # cache_clear() clears the lru_cache, so next call re-reads env vars.
-    # The env vars set by fixture SHOULD persist.
+    monkeypatch.setenv("COREASON_OPENAI_API_KEY", "sk-test")
     get_settings.cache_clear()
     settings = get_settings()
 
@@ -37,8 +32,8 @@ def test_factory_get_client_api_openai(mock_settings: None, monkeypatch: pytest.
 
 def test_factory_get_client_api_deepseek(mock_settings: None, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test factory returns OpenAI client configured for DeepSeek."""
-    monkeypatch.delenv("VIBE_OPENAI_API_KEY", raising=False)
-    monkeypatch.setenv("VIBE_DEEPSEEK_API_KEY", "sk-deepseek")
+    monkeypatch.delenv("COREASON_OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("COREASON_DEEPSEEK_API_KEY", "sk-deepseek")
     get_settings.cache_clear()
     settings = get_settings()
 
@@ -53,7 +48,7 @@ def test_factory_get_client_api_deepseek(mock_settings: None, monkeypatch: pytes
 
 def test_factory_local_fallback(mock_settings: None, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test fallback to local if API key missing."""
-    monkeypatch.delenv("VIBE_OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("COREASON_OPENAI_API_KEY", raising=False)
     get_settings.cache_clear()
     settings = get_settings()
 

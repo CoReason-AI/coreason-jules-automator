@@ -20,7 +20,7 @@ from coreason_jules_automator.utils.logger import logger
 
 class Orchestrator:
     """
-    The Brain of the Hybrid Vibe Runner.
+    The Brain of the Coreason Jules Automator.
     Manages the 'Two-Line Defense' state machine using injected strategies.
     Refactored to support Remote Session + Teleport workflow.
     """
