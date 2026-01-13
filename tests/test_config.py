@@ -17,7 +17,7 @@ def test_settings_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("VIBE_EXTENSIONS_ENABLED", raising=False)
     monkeypatch.delenv("VIBE_MAX_RETRIES", raising=False)
 
-    settings = Settings()  # type: ignore
+    settings = Settings()
     assert settings.llm_strategy == "api"
     assert settings.extensions_enabled == ["security", "code-review"]
     assert settings.max_retries == 5
@@ -35,7 +35,7 @@ def test_settings_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
 
     # Mock find_spec to return True (simulating installed)
     with patch("importlib.util.find_spec", return_value=True):
-        settings = Settings()  # type: ignore
+        settings = Settings()
         assert settings.llm_strategy == "local"
         assert settings.extensions_enabled == ["security"]
         assert settings.max_retries == 10
@@ -50,7 +50,8 @@ def test_missing_secrets(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
 
     with pytest.raises(ValidationError) as excinfo:
-        Settings()  # type: ignore
+        Settings()
+        Settings()
 
     errors = excinfo.value.errors()
     fields = [e["loc"][0] for e in errors]
@@ -64,7 +65,7 @@ def test_empty_secrets(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("VIBE_GOOGLE_API_KEY", "")
 
     with pytest.raises(ValidationError) as excinfo:
-        Settings()  # type: ignore
+        Settings()
 
     # Verify the specific error message from the validator
     assert "Secret must not be empty" in str(excinfo.value)
@@ -75,7 +76,7 @@ def test_secrets_not_logged(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("VIBE_GITHUB_TOKEN", "secret_token_value")
     monkeypatch.setenv("VIBE_GOOGLE_API_KEY", "secret_key_value")
 
-    settings = Settings()  # type: ignore
+    settings = Settings()
     repr_str = repr(settings)
     assert "secret_token_value" not in repr_str
     assert "secret_key_value" not in repr_str
@@ -90,7 +91,7 @@ def test_local_strategy_missing_dependency(monkeypatch: pytest.MonkeyPatch) -> N
     # Mock find_spec to return None (simulating NOT installed)
     with patch("importlib.util.find_spec", return_value=None):
         with pytest.raises(ValidationError) as excinfo:
-            Settings()  # type: ignore
+            Settings()
 
         # Check that the error message contains the expected hint
         # Note: Pydantic wraps the ValueError in ValidationError
@@ -105,7 +106,7 @@ def test_api_strategy_missing_dependency_ok(monkeypatch: pytest.MonkeyPatch) -> 
 
     # Mock find_spec to return None (simulating NOT installed)
     with patch("importlib.util.find_spec", return_value=None):
-        settings = Settings()  # type: ignore
+        settings = Settings()
         assert settings.llm_strategy == "api"
 
 
@@ -147,7 +148,7 @@ def test_invalid_llm_strategy(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("VIBE_LLM_STRATEGY", "invalid_strategy")
 
     with pytest.raises(ValidationError) as excinfo:
-        Settings()  # type: ignore
+        Settings()
 
     assert "Input should be 'local' or 'api'" in str(excinfo.value)
 
@@ -158,11 +159,11 @@ def test_settings_runtime_instantiation(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setenv("VIBE_GOOGLE_API_KEY", "env_key")
 
     # 1. Default uses env
-    s1 = Settings()  # type: ignore
+    s1 = Settings()
     assert s1.GITHUB_TOKEN.get_secret_value() == "env_token"
 
     # 2. Override via init
-    s2 = Settings(GITHUB_TOKEN="override_token", GOOGLE_API_KEY="override_key")  # type: ignore
+    s2 = Settings(GITHUB_TOKEN="override_token", GOOGLE_API_KEY="override_key")
     assert s2.GITHUB_TOKEN.get_secret_value() == "override_token"
     assert s2.GOOGLE_API_KEY.get_secret_value() == "override_key"
 

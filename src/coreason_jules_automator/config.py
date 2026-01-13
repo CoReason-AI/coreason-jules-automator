@@ -71,4 +71,4 @@ def get_settings() -> Settings:
     Returns a cached instance of Settings.
     This allows for lazy loading and easier patching in tests.
     """
-    return Settings()  # type: ignore[call-arg]
+    return Settings()

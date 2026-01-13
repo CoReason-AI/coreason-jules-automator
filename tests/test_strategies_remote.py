@@ -1,3 +1,4 @@
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -6,7 +7,7 @@ from coreason_jules_automator.strategies.remote import RemoteDefenseStrategy
 
 
 @pytest.fixture
-def remote_strategy():
+def remote_strategy() -> RemoteDefenseStrategy:
     github = MagicMock()
     janitor = MagicMock()
     git = MagicMock()
@@ -20,7 +21,7 @@ def remote_strategy():
 
 
 @pytest.mark.asyncio
-async def test_execute_success(remote_strategy):
+async def test_execute_success(remote_strategy: Any) -> None:
     context = {"branch_name": "test"}
     result = await remote_strategy.execute(context)
     assert result.success
@@ -29,7 +30,7 @@ async def test_execute_success(remote_strategy):
 
 
 @pytest.mark.asyncio
-async def test_execute_failure_push(remote_strategy):
+async def test_execute_failure_push(remote_strategy: Any) -> None:
     remote_strategy.git.push_to_branch.side_effect = RuntimeError("Push failed")
     context = {"branch_name": "test"}
     result = await remote_strategy.execute(context)
@@ -38,7 +39,7 @@ async def test_execute_failure_push(remote_strategy):
 
 
 @pytest.mark.asyncio
-async def test_execute_failure_ci_checks(remote_strategy):
+async def test_execute_failure_ci_checks(remote_strategy: Any) -> None:
     # Simulate CI failure
     remote_strategy.github.get_pr_checks.return_value = [
         {"status": "completed", "conclusion": "failure", "name": "test-check", "url": "http://log"}
@@ -51,7 +52,7 @@ async def test_execute_failure_ci_checks(remote_strategy):
 
 
 @pytest.mark.asyncio
-async def test_execute_timeout(remote_strategy):
+async def test_execute_timeout(remote_strategy: Any) -> None:
     # Simulate pending checks forever
     remote_strategy.github.get_pr_checks.return_value = [{"status": "in_progress", "conclusion": None}]
 
@@ -64,7 +65,7 @@ async def test_execute_timeout(remote_strategy):
 
 
 @pytest.mark.asyncio
-async def test_execute_poll_exception(remote_strategy):
+async def test_execute_poll_exception(remote_strategy: Any) -> None:
     # Simulate exception during polling
     remote_strategy.github.get_pr_checks.side_effect = RuntimeError("API Error")
 

@@ -1,3 +1,4 @@
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -6,7 +7,7 @@ from coreason_jules_automator.strategies.local import LocalDefenseStrategy
 
 
 @pytest.fixture
-def local_strategy():
+def local_strategy() -> LocalDefenseStrategy:
     gemini = MagicMock()
     gemini.security_scan = AsyncMock(return_value="Scan passed")
     gemini.code_review = AsyncMock(return_value="Review passed")
@@ -14,7 +15,7 @@ def local_strategy():
 
 
 @pytest.mark.asyncio
-async def test_execute_success(local_strategy):
+async def test_execute_success(local_strategy: Any) -> None:
     context = {"branch_name": "test"}
     with patch("coreason_jules_automator.strategies.local.get_settings") as mock_settings:
         mock_settings.return_value.extensions_enabled = ["security", "code-review"]
@@ -25,7 +26,7 @@ async def test_execute_success(local_strategy):
 
 
 @pytest.mark.asyncio
-async def test_execute_failure(local_strategy):
+async def test_execute_failure(local_strategy: Any) -> None:
     local_strategy.gemini.security_scan.side_effect = RuntimeError("Scan failed")
     context = {"branch_name": "test"}
     with patch("coreason_jules_automator.strategies.local.get_settings") as mock_settings:
