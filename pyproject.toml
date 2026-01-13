@@ -7,6 +7,9 @@ license = "Prosperity-3.0"
 readme = "README.md"
 packages = [{include = "coreason_jules_automator", from = "src"}]
 
+[tool.poetry.scripts]
+vibe-runner = "coreason_jules_automator.cli:main"
+
 [tool.poetry.dependencies]
 python = ">=3.12, <3.15"
 loguru = "^0.7.2"
