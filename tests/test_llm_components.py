@@ -1,14 +1,13 @@
 import sys
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from pydantic import SecretStr, ValidationError
+from pydantic import ValidationError
 
-from coreason_jules_automator.config import get_settings, Settings
+from coreason_jules_automator.config import get_settings
 from coreason_jules_automator.llm.factory import LLMFactory
 from coreason_jules_automator.llm.janitor import JanitorService
 from coreason_jules_automator.llm.model_manager import ModelManager
-
 
 # --- LLMFactory Tests ---
 

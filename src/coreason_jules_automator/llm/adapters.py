@@ -1,7 +1,5 @@
-from typing import Any, Dict, List, Protocol, runtime_checkable
-
-
 import asyncio
+from typing import Any, Dict, List, Protocol, runtime_checkable
 
 
 @runtime_checkable

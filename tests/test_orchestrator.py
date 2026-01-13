@@ -1,11 +1,14 @@
-from unittest.mock import MagicMock, AsyncMock, patch
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
+
 from coreason_jules_automator.orchestrator import Orchestrator
 from coreason_jules_automator.strategies.base import DefenseResult
 
 
 @pytest.fixture
-def orchestrator():
+def orchestrator() -> Orchestrator:
     agent = MagicMock()
     # Mocking start method, it will be wrapped in to_thread, so it doesn't need to be async mock itself
     # but the orchestrator calls it.
@@ -18,7 +21,7 @@ def orchestrator():
 
 
 @pytest.mark.asyncio
-async def test_run_cycle_success(orchestrator):
+async def test_run_cycle_success(orchestrator: Any) -> None:
     with patch("coreason_jules_automator.orchestrator.get_settings") as mock_settings:
         mock_settings.return_value.max_retries = 1
         result = await orchestrator.run_cycle("task", "branch")
@@ -28,7 +31,7 @@ async def test_run_cycle_success(orchestrator):
 
 
 @pytest.mark.asyncio
-async def test_run_cycle_failure_retry(orchestrator):
+async def test_run_cycle_failure_retry(orchestrator: Any) -> None:
     # Fail first time, succeed second time
     orchestrator.strategies[0].execute.side_effect = [
         DefenseResult(success=False, message="failed"),
@@ -44,7 +47,7 @@ async def test_run_cycle_failure_retry(orchestrator):
 
 
 @pytest.mark.asyncio
-async def test_run_cycle_failure_max_retries(orchestrator):
+async def test_run_cycle_failure_max_retries(orchestrator: Any) -> None:
     orchestrator.strategies[0].execute.return_value = DefenseResult(success=False, message="failed")
 
     with patch("coreason_jules_automator.orchestrator.get_settings") as mock_settings:
@@ -54,7 +57,7 @@ async def test_run_cycle_failure_max_retries(orchestrator):
 
 
 @pytest.mark.asyncio
-async def test_run_cycle_agent_exception(orchestrator):
+async def test_run_cycle_agent_exception(orchestrator: Any) -> None:
     orchestrator.agent.start.side_effect = Exception("Agent crashed")
 
     with patch("coreason_jules_automator.orchestrator.get_settings") as mock_settings:

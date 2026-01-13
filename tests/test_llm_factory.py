@@ -1,6 +1,5 @@
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import MagicMock, patch
 
-import pytest
 from pydantic import SecretStr
 
 from coreason_jules_automator.config import Settings
