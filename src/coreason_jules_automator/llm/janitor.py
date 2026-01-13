@@ -2,6 +2,7 @@ import re
 from typing import Optional
 
 from coreason_jules_automator.llm.adapters import LLMClient
+from coreason_jules_automator.llm.prompts import PromptManager
 from coreason_jules_automator.utils.logger import logger
 
 
@@ -10,8 +11,9 @@ class JanitorService:
     Business logic for cleaning commits and summarizing logs.
     """
 
-    def __init__(self, llm_client: Optional[LLMClient]) -> None:
+    def __init__(self, llm_client: Optional[LLMClient], prompt_manager: Optional[PromptManager] = None) -> None:
         self.client = llm_client
+        self.prompt_manager = prompt_manager or PromptManager()
 
     def sanitize_commit(self, text: str) -> str:
         """
@@ -28,11 +30,11 @@ class JanitorService:
         """
         Converts detailed logs into a 3-sentence hint using the LLM.
         """
-        prompt = (
-            "You are a helpful assistant. "
-            "Summarize the following CI failure logs into a concise 3-sentence hint for the developer:\n\n"
-            f"{text[-2000:]}"  # Take last 2000 chars to avoid token limits
-        )
+        try:
+            prompt = self.prompt_manager.render("janitor_summarize.j2", logs=text[-2000:])
+        except Exception as e:
+            logger.error(f"Failed to render prompt: {e}")
+            return "Log summarization failed due to template error."
 
         if self.client:
             try:

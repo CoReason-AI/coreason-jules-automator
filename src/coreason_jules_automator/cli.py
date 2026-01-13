@@ -21,6 +21,7 @@ from coreason_jules_automator.events import LoguruEmitter
 from coreason_jules_automator.interfaces.gemini import GeminiInterface
 from coreason_jules_automator.llm.factory import LLMFactory
 from coreason_jules_automator.llm.janitor import JanitorService
+from coreason_jules_automator.llm.prompts import PromptManager
 from coreason_jules_automator.orchestrator import Orchestrator
 from coreason_jules_automator.strategies.local import LocalDefenseStrategy
 from coreason_jules_automator.strategies.remote import RemoteDefenseStrategy
@@ -55,7 +56,8 @@ def run(
 
         settings = get_settings()
         llm_client = LLMFactory().get_client(settings)
-        janitor = JanitorService(llm_client=llm_client)
+        prompt_manager = PromptManager()
+        janitor = JanitorService(llm_client=llm_client, prompt_manager=prompt_manager)
 
         local_strategy = LocalDefenseStrategy(gemini=gemini, event_emitter=event_emitter)
         remote_strategy = RemoteDefenseStrategy(github=github, janitor=janitor, git=git, event_emitter=event_emitter)
