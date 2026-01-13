@@ -1,6 +1,7 @@
-from typing import Any, Optional
+from typing import Optional
 
 from coreason_jules_automator.config import get_settings
+from coreason_jules_automator.llm.adapters import LlamaAdapter, LLMClient, OpenAIAdapter
 from coreason_jules_automator.llm.model_manager import ModelManager
 from coreason_jules_automator.utils.logger import logger
 
@@ -9,7 +10,7 @@ class LLMFactory:
     """Factory for creating LLM clients based on configuration."""
 
     @staticmethod
-    def get_client() -> Optional[Any]:
+    def get_client() -> Optional[LLMClient]:
         """
         Initializes the LLM client based on strategy and available keys.
         """
@@ -25,13 +26,15 @@ class LLMFactory:
 
             if settings.OPENAI_API_KEY:
                 logger.info("Initializing OpenAI client")
-                return OpenAI(api_key=settings.OPENAI_API_KEY.get_secret_value())
+                client = OpenAI(api_key=settings.OPENAI_API_KEY.get_secret_value())
+                return OpenAIAdapter(client)
             elif settings.DEEPSEEK_API_KEY:
                 logger.info("Initializing DeepSeek client")
-                return OpenAI(
+                client = OpenAI(
                     api_key=settings.DEEPSEEK_API_KEY.get_secret_value(),
                     base_url="https://api.deepseek.com",
                 )
+                return OpenAIAdapter(client)
             else:
                 logger.warning("No valid API key found (OPENAI_API_KEY or DEEPSEEK_API_KEY). Falling back to local.")
 
@@ -39,7 +42,7 @@ class LLMFactory:
         return LLMFactory._initialize_local()
 
     @staticmethod
-    def _initialize_local() -> Optional[Any]:
+    def _initialize_local() -> Optional[LLMClient]:
         """Initializes the local Llama client."""
         logger.info("Initializing Local Llama client")
         try:
@@ -52,7 +55,8 @@ class LLMFactory:
                 logger.warning(f"Could not download model: {e}")
                 return None
 
-            return Llama(model_path=model_path, verbose=False)
+            client = Llama(model_path=model_path, verbose=False)
+            return LlamaAdapter(client)
 
         except ImportError as e:
             raise RuntimeError("llama-cpp-python not installed. Cannot use local LLM.") from e
