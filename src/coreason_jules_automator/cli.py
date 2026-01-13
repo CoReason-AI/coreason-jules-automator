@@ -55,9 +55,7 @@ def run(
         janitor = JanitorService(llm_client=llm_client)
 
         local_strategy = LocalDefenseStrategy(gemini=gemini, event_emitter=event_emitter)
-        remote_strategy = RemoteDefenseStrategy(
-            github=github, janitor=janitor, git=git, event_emitter=event_emitter
-        )
+        remote_strategy = RemoteDefenseStrategy(github=github, janitor=janitor, git=git, event_emitter=event_emitter)
 
         agent = JulesAgent()
 

@@ -1,6 +1,5 @@
 import time
 from typing import Any, Dict, List, Optional
-import time
 
 from coreason_jules_automator.ci.git import GitInterface
 from coreason_jules_automator.ci.github import GitHubInterface
@@ -33,15 +32,11 @@ class RemoteDefenseStrategy(DefenseStrategy):
         if not branch_name:
             return DefenseResult(success=False, message="Missing branch_name in context")
 
-        self.event_emitter.emit(
-            AutomationEvent(type=EventType.PHASE_START, message="Executing Line 2: Remote Defense")
-        )
+        self.event_emitter.emit(AutomationEvent(type=EventType.PHASE_START, message="Executing Line 2: Remote Defense"))
 
         # 1. Push Code
         try:
-            self.event_emitter.emit(
-                AutomationEvent(type=EventType.CHECK_RUNNING, message="Pushing Code")
-            )
+            self.event_emitter.emit(AutomationEvent(type=EventType.CHECK_RUNNING, message="Pushing Code"))
             commit_msg = self.janitor.sanitize_commit(f"feat: implementation for {branch_name}")
             self.git.push_to_branch(branch_name, commit_msg)
             self.event_emitter.emit(
@@ -125,9 +120,7 @@ class RemoteDefenseStrategy(DefenseStrategy):
                 logger.warning(f"Failed to poll checks: {e}")
                 self.event_emitter.emit(
                     AutomationEvent(
-                         type=EventType.ERROR,
-                         message=f"Poll attempt failed: {e}",
-                         payload={"error": str(e)}
+                        type=EventType.ERROR, message=f"Poll attempt failed: {e}", payload={"error": str(e)}
                     )
                 )
                 time.sleep(2)

@@ -29,9 +29,7 @@ def mock_emitter() -> MagicMock:
 def strategy(
     mock_github: MagicMock, mock_janitor: MagicMock, mock_git: MagicMock, mock_emitter: MagicMock
 ) -> RemoteDefenseStrategy:
-    return RemoteDefenseStrategy(
-        github=mock_github, janitor=mock_janitor, git=mock_git, event_emitter=mock_emitter
-    )
+    return RemoteDefenseStrategy(github=mock_github, janitor=mock_janitor, git=mock_git, event_emitter=mock_emitter)
 
 
 def test_execute_missing_branch(strategy: RemoteDefenseStrategy) -> None:

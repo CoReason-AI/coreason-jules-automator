@@ -1,8 +1,10 @@
+import time
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, Protocol
-import time
+
 from coreason_jules_automator.utils.logger import logger
+
 
 class EventType(Enum):
     CYCLE_START = "cycle_start"
@@ -12,6 +14,7 @@ class EventType(Enum):
     AGENT_MESSAGE = "agent_message"
     ERROR = "error"
 
+
 @dataclass
 class AutomationEvent:
     type: EventType
@@ -19,10 +22,12 @@ class AutomationEvent:
     timestamp: float = field(default_factory=time.time)
     payload: Dict[str, Any] = field(default_factory=dict)
 
+
 class EventEmitter(Protocol):
     def emit(self, event: AutomationEvent) -> None:
         """Emits an automation event."""
         ...
+
 
 class LoguruEmitter:
     """Adapter that logs events to Loguru."""
@@ -33,8 +38,8 @@ class LoguruEmitter:
         elif event.type == EventType.CHECK_RESULT:
             status = event.payload.get("status", "unknown")
             if status == "fail":
-                 logger.error(f"[{event.type.value}] {event.message} | {event.payload}")
+                logger.error(f"[{event.type.value}] {event.message} | {event.payload}")
             else:
-                 logger.info(f"[{event.type.value}] {event.message} | {event.payload}")
+                logger.info(f"[{event.type.value}] {event.message} | {event.payload}")
         else:
             logger.info(f"[{event.type.value}] {event.message} | {event.payload}")
