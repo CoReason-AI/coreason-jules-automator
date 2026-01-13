@@ -63,29 +63,43 @@ class Orchestrator:
             # --- PHASE 1: REMOTE GENERATION & TELEPORT ---
             try:
                 # 1. Launch Session
-                self.event_emitter.emit(AutomationEvent(type=EventType.CHECK_RUNNING, message="Launching Remote Jules Session..."))
+                self.event_emitter.emit(
+                    AutomationEvent(type=EventType.CHECK_RUNNING, message="Launching Remote Jules Session...")
+                )
                 sid = self.agent.launch_session(task_description)
 
                 if not sid:
                     raise RuntimeError("Failed to obtain Session ID (SID).")
 
-                self.event_emitter.emit(AutomationEvent(type=EventType.CHECK_RESULT, message=f"Session Started: {sid}", payload={"sid": sid}))
+                self.event_emitter.emit(
+                    AutomationEvent(
+                        type=EventType.CHECK_RESULT, message=f"Session Started: {sid}", payload={"sid": sid}
+                    )
+                )
 
                 # 2. Monitor for Completion
-                self.event_emitter.emit(AutomationEvent(type=EventType.CHECK_RUNNING, message=f"Waiting for SID {sid} to complete..."))
+                self.event_emitter.emit(
+                    AutomationEvent(type=EventType.CHECK_RUNNING, message=f"Waiting for SID {sid} to complete...")
+                )
                 success_wait = self.agent.wait_for_completion(sid)
 
                 if not success_wait:
                     raise RuntimeError(f"Session {sid} did not complete successfully.")
 
                 # 3. Teleport & Sync
-                self.event_emitter.emit(AutomationEvent(type=EventType.CHECK_RUNNING, message="Teleporting code to local workspace..."))
+                self.event_emitter.emit(
+                    AutomationEvent(type=EventType.CHECK_RUNNING, message="Teleporting code to local workspace...")
+                )
                 success_sync = self.agent.teleport_and_sync(sid, Path.cwd())
 
                 if not success_sync:
                     raise RuntimeError("Failed to sync remote code to local repository.")
 
-                self.event_emitter.emit(AutomationEvent(type=EventType.CHECK_RESULT, message="Code synced successfully.", payload={"status": "pass"}))
+                self.event_emitter.emit(
+                    AutomationEvent(
+                        type=EventType.CHECK_RESULT, message="Code synced successfully.", payload={"status": "pass"}
+                    )
+                )
 
             except Exception as e:
                 self.event_emitter.emit(

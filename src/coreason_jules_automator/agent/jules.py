@@ -72,7 +72,7 @@ class JulesAgent:
                 stdin=subprocess.PIPE,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
-                text=True
+                text=True,
             )
             # Send prompt to stdin
             if process.stdin:
@@ -83,6 +83,12 @@ class JulesAgent:
 
             # 4. Polling for SID registry
             for attempt in range(1, 21):
+                # Check if process died prematurely
+                if process.poll() is not None:
+                    _, stderr = process.communicate()
+                    logger.error(f"❌ Jules process exited early (code {process.returncode}). Stderr: {stderr}")
+                    return None
+
                 post_sids = self._get_active_sids()
                 new_sids = post_sids - pre_sids
 
@@ -96,6 +102,9 @@ class JulesAgent:
 
             logger.error("❌ Jules failed to register a session within timeout.")
             process.kill()
+            _, stderr = process.communicate()
+            if stderr:
+                logger.error(f"Timeout stderr: {stderr}")
             return None
 
         except Exception as e:
@@ -111,10 +120,7 @@ class JulesAgent:
         while True:
             try:
                 result = subprocess.run(
-                    [self.executable, "remote", "list", "--session"],
-                    capture_output=True,
-                    text=True,
-                    check=True
+                    [self.executable, "remote", "list", "--session"], capture_output=True, text=True, check=True
                 )
 
                 status_line = ""
@@ -155,7 +161,7 @@ class JulesAgent:
                 cwd=temp_dir,
                 capture_output=True,
                 text=True,
-                check=True
+                check=True,
             )
 
             jules_folders = list(temp_dir.glob("jules-*"))

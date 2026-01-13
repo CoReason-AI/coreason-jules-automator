@@ -9,7 +9,7 @@ def agent() -> JulesAgent:
     return JulesAgent()
 
 @patch("subprocess.run")
-def test_get_active_sids(mock_run, agent):
+def test_get_active_sids(mock_run: MagicMock, agent: JulesAgent) -> None:
     """Test getting active SIDs."""
     mock_run.return_value.stdout = "123 active\n456 completed"
     sids = agent._get_active_sids()
@@ -17,17 +17,21 @@ def test_get_active_sids(mock_run, agent):
     assert "456" in sids
     assert len(sids) == 2
 
+
 @patch("subprocess.run")
-def test_get_active_sids_empty(mock_run, agent):
+def test_get_active_sids_empty(mock_run: MagicMock, agent: JulesAgent) -> None:
     """Test getting empty active SIDs."""
     mock_run.return_value.stdout = "No sessions found"
     sids = agent._get_active_sids()
     assert len(sids) == 0
 
+
 @patch("subprocess.Popen")
 @patch("coreason_jules_automator.agent.jules.JulesAgent._get_active_sids")
 @patch("coreason_jules_automator.agent.jules.get_settings")
-def test_launch_session_success(mock_settings, mock_get_sids, mock_popen, agent):
+def test_launch_session_success(
+    mock_settings: MagicMock, mock_get_sids: MagicMock, mock_popen: MagicMock, agent: JulesAgent
+) -> None:
     """Test successful session launch."""
     mock_settings.return_value.repo_name = "test/repo"
 
@@ -36,6 +40,8 @@ def test_launch_session_success(mock_settings, mock_get_sids, mock_popen, agent)
 
     mock_process = MagicMock()
     mock_process.stdin = MagicMock()
+    mock_process.communicate.return_value = ("stdout", "stderr")
+    mock_process.poll.return_value = None  # Process running
     mock_popen.return_value = mock_process
 
     sid = agent.launch_session("Test Task")
@@ -46,10 +52,13 @@ def test_launch_session_success(mock_settings, mock_get_sids, mock_popen, agent)
     assert "--repo" in mock_popen.call_args[0][0]
     assert "test/repo" in mock_popen.call_args[0][0]
 
+
 @patch("subprocess.Popen")
 @patch("coreason_jules_automator.agent.jules.JulesAgent._get_active_sids")
 @patch("coreason_jules_automator.agent.jules.get_settings")
-def test_launch_session_timeout(mock_settings, mock_get_sids, mock_popen, agent):
+def test_launch_session_timeout(
+    mock_settings: MagicMock, mock_get_sids: MagicMock, mock_popen: MagicMock, agent: JulesAgent
+) -> None:
     """Test session launch timeout."""
     mock_settings.return_value.repo_name = "test/repo"
 
@@ -58,6 +67,8 @@ def test_launch_session_timeout(mock_settings, mock_get_sids, mock_popen, agent)
 
     mock_process = MagicMock()
     mock_process.stdin = MagicMock()
+    mock_process.communicate.return_value = ("stdout", "stderr")
+    mock_process.poll.return_value = None  # Process running
     mock_popen.return_value = mock_process
 
     # To avoid long wait in tests, we can mock time.sleep or reduce range
@@ -68,8 +79,9 @@ def test_launch_session_timeout(mock_settings, mock_get_sids, mock_popen, agent)
     assert sid is None
     mock_process.kill.assert_called_once()
 
+
 @patch("subprocess.run")
-def test_wait_for_completion_success(mock_run, agent):
+def test_wait_for_completion_success(mock_run: MagicMock, agent: JulesAgent) -> None:
     """Test wait for completion success."""
     # First call running, second call completed
     mock_run.side_effect = [
@@ -82,44 +94,54 @@ def test_wait_for_completion_success(mock_run, agent):
 
     assert result is True
 
+
 @patch("subprocess.run")
-def test_wait_for_completion_disappeared(mock_run, agent):
+def test_wait_for_completion_disappeared(mock_run: MagicMock, agent: JulesAgent) -> None:
     """Test wait for completion where SID disappears."""
-    mock_run.return_value.stdout = "456 running" # SID 123 is missing
+    mock_run.return_value.stdout = "456 running"  # SID 123 is missing
 
     with patch("time.sleep", return_value=None):
         result = agent.wait_for_completion("123")
 
     assert result is False
 
+
 @patch("subprocess.run")
 @patch("shutil.copytree")
 @patch("shutil.copy2")
 @patch("pathlib.Path.mkdir")
 @patch("shutil.rmtree")
-def test_teleport_and_sync_success(mock_rmtree, mock_mkdir, mock_copy2, mock_copytree, mock_run, agent):
+def test_teleport_and_sync_success(
+    mock_rmtree: MagicMock,
+    mock_mkdir: MagicMock,
+    mock_copy2: MagicMock,
+    mock_copytree: MagicMock,
+    mock_run: MagicMock,
+    agent: JulesAgent,
+) -> None:
     """Test successful teleport and sync."""
-    mock_run.return_value = MagicMock() # Success
+    mock_run.return_value = MagicMock()  # Success
 
     # Mock glob to return a jules folder
     with patch("pathlib.Path.glob", return_value=[MagicMock(name="jules-123")]):
-         # Mock exists for syncing
+        # Mock exists for syncing
         with patch("pathlib.Path.exists", return_value=True):
-             result = agent.teleport_and_sync("123", Path("/tmp"))
+            result = agent.teleport_and_sync("123", Path("/tmp"))
 
     assert result is True
     mock_run.assert_called_once()
     assert "teleport" in mock_run.call_args[0][0]
     assert "123" in mock_run.call_args[0][0]
-    mock_copytree.assert_called() # Should copy src and tests
-    mock_copy2.assert_called()    # Should copy requirements.txt
+    mock_copytree.assert_called()  # Should copy src and tests
+    mock_copy2.assert_called()  # Should copy requirements.txt
+
 
 @patch("subprocess.run")
-def test_teleport_and_sync_failure(mock_run, agent):
+def test_teleport_and_sync_failure(mock_run: MagicMock, agent: JulesAgent) -> None:
     """Test teleport command failure."""
     mock_run.side_effect = subprocess.CalledProcessError(1, "cmd", stderr="error")
 
     with patch("pathlib.Path.mkdir"):
-         result = agent.teleport_and_sync("123", Path("/tmp"))
+        result = agent.teleport_and_sync("123", Path("/tmp"))
 
     assert result is False

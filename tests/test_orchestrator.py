@@ -36,7 +36,8 @@ def test_orchestrator_events() -> None:
 
         # Verify calls
         assert mock_emitter.emit.call_count >= 5
-        # Cycle Start, Phase Start, Launch Running, Launch Result, Wait Running, Wait Result(implicit?), Teleport Running, Teleport Result, Strategy Result
+        # Cycle Start, Phase Start, Launch Running, Launch Result, Wait Running,
+        # Wait Result(implicit?), Teleport Running, Teleport Result, Strategy Result
 
         # Check cycle start
         args, _ = mock_emitter.emit.call_args_list[0]
