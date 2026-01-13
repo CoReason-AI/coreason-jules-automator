@@ -1,7 +1,7 @@
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, Protocol
+from typing import Any, Dict, List, Protocol
 
 from coreason_jules_automator.utils.logger import logger
 
@@ -43,3 +43,27 @@ class LoguruEmitter:
                 logger.info(f"[{event.type.value}] {event.message} | {event.payload}")
         else:
             logger.info(f"[{event.type.value}] {event.message} | {event.payload}")
+
+
+class EventCollector:
+    """Collects events in memory."""
+
+    def __init__(self) -> None:
+        self.events: List[AutomationEvent] = []
+
+    def emit(self, event: AutomationEvent) -> None:
+        self.events.append(event)
+
+    def get_events(self) -> List[AutomationEvent]:
+        return self.events
+
+
+class CompositeEmitter:
+    """Broadcasts events to multiple emitters."""
+
+    def __init__(self, emitters: List[EventEmitter]) -> None:
+        self.emitters = emitters
+
+    def emit(self, event: AutomationEvent) -> None:
+        for emitter in self.emitters:
+            emitter.emit(event)
