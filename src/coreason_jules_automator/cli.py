@@ -15,8 +15,8 @@ import typer
 from coreason_jules_automator.agent.jules import JulesAgent
 from coreason_jules_automator.ci.git import GitInterface
 from coreason_jules_automator.ci.github import GitHubInterface
-from coreason_jules_automator.events import LoguruEmitter
 from coreason_jules_automator.config import get_settings
+from coreason_jules_automator.events import LoguruEmitter
 from coreason_jules_automator.interfaces.gemini import GeminiInterface
 from coreason_jules_automator.llm.factory import LLMFactory
 from coreason_jules_automator.llm.janitor import JanitorService
