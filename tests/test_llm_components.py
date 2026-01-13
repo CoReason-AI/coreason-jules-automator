@@ -21,10 +21,11 @@ def test_factory_get_client_api_openai(mock_settings: None, monkeypatch: pytest.
     """Test factory returns OpenAI client when configured."""
     monkeypatch.setenv("VIBE_OPENAI_API_KEY", "sk-test")
     get_settings.cache_clear()
+    settings = get_settings()
 
     mock_openai_module = MagicMock()
     with patch.dict(sys.modules, {"openai": mock_openai_module}):
-        client = LLMFactory.get_client()
+        client = LLMFactory().get_client(settings)
         mock_openai_module.OpenAI.assert_called_once()
         assert client is not None
 
@@ -34,10 +35,11 @@ def test_factory_get_client_api_deepseek(mock_settings: None, monkeypatch: pytes
     monkeypatch.delenv("VIBE_OPENAI_API_KEY", raising=False)
     monkeypatch.setenv("VIBE_DEEPSEEK_API_KEY", "sk-deepseek")
     get_settings.cache_clear()
+    settings = get_settings()
 
     mock_openai_module = MagicMock()
     with patch.dict(sys.modules, {"openai": mock_openai_module}):
-        client = LLMFactory.get_client()
+        client = LLMFactory().get_client(settings)
         call_kwargs = mock_openai_module.OpenAI.call_args[1]
         assert call_kwargs["api_key"] == "sk-deepseek"
         assert call_kwargs["base_url"] == "https://api.deepseek.com"
@@ -48,11 +50,12 @@ def test_factory_local_fallback(mock_settings: None, monkeypatch: pytest.MonkeyP
     """Test fallback to local if API key missing."""
     monkeypatch.delenv("VIBE_OPENAI_API_KEY", raising=False)
     get_settings.cache_clear()
+    settings = get_settings()
 
     mock_llama_module = MagicMock()
     with patch.dict(sys.modules, {"llama_cpp": mock_llama_module}):
         with patch("coreason_jules_automator.llm.model_manager.hf_hub_download", return_value="/tmp/model.gguf"):
-            client = LLMFactory.get_client()
+            client = LLMFactory().get_client(settings)
             mock_llama_module.Llama.assert_called_once()
             assert client is not None
 
