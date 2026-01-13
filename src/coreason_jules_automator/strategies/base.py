@@ -31,4 +31,4 @@ class DefenseStrategy(ABC):
         Returns:
             DefenseResult indicating success or failure.
         """
-        pass
+        pass  # pragma: no cover
