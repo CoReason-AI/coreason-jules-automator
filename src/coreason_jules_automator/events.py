@@ -26,7 +26,7 @@ class AutomationEvent:
 class EventEmitter(Protocol):
     def emit(self, event: AutomationEvent) -> None:
         """Emits an automation event."""
-        ...
+        ...  # pragma: no cover
 
 
 class LoguruEmitter:

@@ -61,3 +61,31 @@ def test_orchestrator_failure_events() -> None:
         last_event = calls[-1][0][0]
         assert last_event.type == EventType.ERROR
         assert "Max retries reached" in last_event.message
+
+
+def test_orchestrator_agent_failure_events() -> None:
+    """Test that events are emitted when the agent raises an exception."""
+    mock_agent = MagicMock(spec=JulesAgent)
+    mock_agent.start.side_effect = RuntimeError("Agent crash")
+    mock_strategy = MockStrategy(success=True)
+    mock_emitter = MagicMock()
+
+    orchestrator = Orchestrator(agent=mock_agent, strategies=[mock_strategy], event_emitter=mock_emitter)
+
+    with patch("coreason_jules_automator.orchestrator.get_settings") as mock_settings:
+        mock_settings.return_value.max_retries = 1
+
+        result = orchestrator.run_cycle("task", "branch")
+
+        assert result is False
+
+        # Verify calls
+        # We expect: Cycle Start, Phase Start, then Error
+        assert mock_emitter.emit.call_count >= 3
+
+        calls = mock_emitter.emit.call_args_list
+        # The last event should be the agent error
+        last_event = calls[-1][0][0]
+        assert last_event.type == EventType.ERROR
+        assert "Agent failed to execute" in last_event.message
+        assert "Agent crash" in last_event.payload["error"]
