@@ -1,6 +1,6 @@
 from typing import Optional
 
-from coreason_jules_automator.config import get_settings
+from coreason_jules_automator.config import Settings
 from coreason_jules_automator.llm.adapters import LlamaAdapter, LLMClient, OpenAIAdapter
 from coreason_jules_automator.llm.model_manager import ModelManager
 from coreason_jules_automator.utils.logger import logger
@@ -9,12 +9,10 @@ from coreason_jules_automator.utils.logger import logger
 class LLMFactory:
     """Factory for creating LLM clients based on configuration."""
 
-    @staticmethod
-    def get_client() -> Optional[LLMClient]:
+    def get_client(self, settings: Settings) -> Optional[LLMClient]:
         """
         Initializes the LLM client based on strategy and available keys.
         """
-        settings = get_settings()
         strategy = settings.llm_strategy
 
         if strategy == "api":
@@ -22,7 +20,7 @@ class LLMFactory:
                 from openai import OpenAI
             except ImportError:
                 logger.warning("openai package not installed. Falling back to local.")
-                return LLMFactory._initialize_local()
+                return self._initialize_local(settings)
 
             if settings.OPENAI_API_KEY:
                 logger.info("Initializing OpenAI client")
@@ -39,10 +37,9 @@ class LLMFactory:
                 logger.warning("No valid API key found (OPENAI_API_KEY or DEEPSEEK_API_KEY). Falling back to local.")
 
         # Fallback to local
-        return LLMFactory._initialize_local()
+        return self._initialize_local(settings)
 
-    @staticmethod
-    def _initialize_local() -> Optional[LLMClient]:
+    def _initialize_local(self, settings: Settings) -> Optional[LLMClient]:
         """Initializes the local Llama client."""
         logger.info("Initializing Local Llama client")
         try:
