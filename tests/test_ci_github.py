@@ -95,8 +95,20 @@ def test_push_to_branch_success(gh: GitHubInterface) -> None:
         assert mock_run.call_count == 3  # add, commit, push
         # Verify calls
         mock_run.assert_any_call(["git", "add", "."], capture_output=True, text=True, check=False, timeout=300)
-        mock_run.assert_any_call(["git", "commit", "-m", "commit message"], capture_output=True, text=True, check=False, timeout=300)
-        mock_run.assert_any_call(["git", "push", "origin", "feature/test"], capture_output=True, text=True, check=False, timeout=300)
+        mock_run.assert_any_call(
+            ["git", "commit", "-m", "commit message"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=300,
+        )
+        mock_run.assert_any_call(
+            ["git", "push", "origin", "feature/test"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=300,
+        )
 
 
 def test_push_to_branch_failure(gh: GitHubInterface) -> None:

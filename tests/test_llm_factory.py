@@ -7,7 +7,7 @@ from coreason_jules_automator.llm.factory import LLMFactory
 from coreason_jules_automator.config import Settings
 
 
-def test_get_client_api_openai_missing_import():
+def test_get_client_api_openai_missing_import() -> None:
     """Test fallback to local when openai is missing."""
     with patch("coreason_jules_automator.llm.factory.get_settings") as mock_settings:
         mock_settings.return_value.llm_strategy = "api"
@@ -17,7 +17,7 @@ def test_get_client_api_openai_missing_import():
                 mock_local.assert_called_once()
 
 
-def test_get_client_api_openai_key():
+def test_get_client_api_openai_key() -> None:
     """Test initialization with OpenAI key."""
     with patch("coreason_jules_automator.llm.factory.get_settings") as mock_settings:
         mock_settings.return_value.llm_strategy = "api"
@@ -29,7 +29,7 @@ def test_get_client_api_openai_key():
             mock_openai.assert_called_with(api_key="sk-test")
 
 
-def test_get_client_api_deepseek_key():
+def test_get_client_api_deepseek_key() -> None:
     """Test initialization with DeepSeek key."""
     with patch("coreason_jules_automator.llm.factory.get_settings") as mock_settings:
         mock_settings.return_value.llm_strategy = "api"
@@ -41,7 +41,7 @@ def test_get_client_api_deepseek_key():
             mock_openai.assert_called_with(api_key="sk-deepseek", base_url="https://api.deepseek.com")
 
 
-def test_get_client_api_no_keys():
+def test_get_client_api_no_keys() -> None:
     """Test fallback to local when no keys are present."""
     with patch("coreason_jules_automator.llm.factory.get_settings") as mock_settings:
         mock_settings.return_value.llm_strategy = "api"
@@ -53,7 +53,7 @@ def test_get_client_api_no_keys():
             mock_local.assert_called_once()
 
 
-def test_initialize_local_success():
+def test_initialize_local_success() -> None:
     """Test successful local initialization."""
     with patch("coreason_jules_automator.llm.factory.ModelManager") as mock_manager:
         mock_manager.return_value.ensure_model_downloaded.return_value = "/path/to/model"
@@ -65,7 +65,7 @@ def test_initialize_local_success():
             assert client is not None
 
 
-def test_initialize_local_download_failure():
+def test_initialize_local_download_failure() -> None:
     """Test failure when model download fails."""
     mock_llama_module = MagicMock()
     with patch.dict("sys.modules", {"llama_cpp": mock_llama_module}):
@@ -75,7 +75,7 @@ def test_initialize_local_download_failure():
             assert client is None
 
 
-def test_initialize_local_import_error():
+def test_initialize_local_import_error() -> None:
     """Test failure when llama_cpp is missing."""
     with patch.dict("sys.modules", {"llama_cpp": None}):
         # We also need to reload the module or patch where it's imported if it was already imported,
@@ -84,13 +84,13 @@ def test_initialize_local_import_error():
             LLMFactory._initialize_local()
 
 
-def test_initialize_local_load_failure():
+def test_initialize_local_load_failure() -> None:
     """Test failure when loading model fails."""
     mock_llama_module = MagicMock()
     mock_llama_module.Llama.side_effect = Exception("Load failed")
 
     with patch.dict("sys.modules", {"llama_cpp": mock_llama_module}):
         with patch("coreason_jules_automator.llm.factory.ModelManager") as mock_manager:
-             mock_manager.return_value.ensure_model_downloaded.return_value = "/path/to/model"
-             client = LLMFactory._initialize_local()
-             assert client is None
+            mock_manager.return_value.ensure_model_downloaded.return_value = "/path/to/model"
+            client = LLMFactory._initialize_local()
+            assert client is None

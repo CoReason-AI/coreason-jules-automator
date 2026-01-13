@@ -34,7 +34,9 @@ def test_run_command_success(gemini: GeminiInterface) -> None:
         output = gemini._run_command(["test", "arg"])
 
         assert output == "Scan complete. No issues found."
-        mock_run.assert_called_once_with(["gemini", "test", "arg"], capture_output=True, text=True, check=False, timeout=300)
+        mock_run.assert_called_once_with(
+            ["gemini", "test", "arg"], capture_output=True, text=True, check=False, timeout=300
+        )
 
 
 def test_run_command_failure_exit_code(gemini: GeminiInterface) -> None:

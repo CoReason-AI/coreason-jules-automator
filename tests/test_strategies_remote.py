@@ -5,24 +5,30 @@ from coreason_jules_automator.strategies.remote import RemoteDefenseStrategy
 from coreason_jules_automator.strategies.base import DefenseResult
 
 @pytest.fixture
-def mock_github():
+def mock_github() -> MagicMock:
     return MagicMock()
 
-@pytest.fixture
-def mock_janitor():
-    return MagicMock()
 
 @pytest.fixture
-def strategy(mock_github, mock_janitor):
+def mock_janitor() -> MagicMock:
+    return MagicMock()
+
+
+@pytest.fixture
+def strategy(mock_github: MagicMock, mock_janitor: MagicMock) -> RemoteDefenseStrategy:
     return RemoteDefenseStrategy(github=mock_github, janitor=mock_janitor)
 
-def test_execute_missing_branch(strategy):
+
+def test_execute_missing_branch(strategy: RemoteDefenseStrategy) -> None:
     """Test execution without branch name."""
     result = strategy.execute({})
     assert result.success is False
     assert "Missing branch_name" in result.message
 
-def test_execute_push_failure(strategy, mock_github, mock_janitor):
+
+def test_execute_push_failure(
+    strategy: RemoteDefenseStrategy, mock_github: MagicMock, mock_janitor: MagicMock
+) -> None:
     """Test execution when push fails."""
     mock_janitor.sanitize_commit.return_value = "clean commit"
     mock_github.push_to_branch.side_effect = RuntimeError("Push failed")
@@ -32,13 +38,16 @@ def test_execute_push_failure(strategy, mock_github, mock_janitor):
     assert result.success is False
     assert "Failed to push code: Push failed" in result.message
 
-def test_execute_success(strategy, mock_github, mock_janitor):
+
+def test_execute_success(
+    strategy: RemoteDefenseStrategy, mock_github: MagicMock, mock_janitor: MagicMock
+) -> None:
     """Test successful execution."""
     mock_janitor.sanitize_commit.return_value = "clean commit"
     # Return empty list first (wait), then success
     mock_github.get_pr_checks.side_effect = [
         [],
-        [{"name": "test", "status": "completed", "conclusion": "success"}]
+        [{"name": "test", "status": "completed", "conclusion": "success"}],
     ]
 
     # We need to speed up time.sleep
@@ -49,7 +58,10 @@ def test_execute_success(strategy, mock_github, mock_janitor):
     assert result.message == "CI checks passed"
     assert mock_github.get_pr_checks.call_count == 2
 
-def test_execute_check_failure(strategy, mock_github, mock_janitor):
+
+def test_execute_check_failure(
+    strategy: RemoteDefenseStrategy, mock_github: MagicMock, mock_janitor: MagicMock
+) -> None:
     """Test execution when a check fails."""
     mock_janitor.sanitize_commit.return_value = "clean commit"
     mock_github.get_pr_checks.return_value = [
@@ -64,7 +76,10 @@ def test_execute_check_failure(strategy, mock_github, mock_janitor):
     assert result.message == "Logs suggest failure X"
     mock_janitor.summarize_logs.assert_called_once()
 
-def test_execute_timeout(strategy, mock_github, mock_janitor):
+
+def test_execute_timeout(
+    strategy: RemoteDefenseStrategy, mock_github: MagicMock, mock_janitor: MagicMock
+) -> None:
     """Test execution when checks time out (never complete)."""
     mock_janitor.sanitize_commit.return_value = "clean commit"
     mock_github.get_pr_checks.return_value = [{"name": "test", "status": "in_progress"}]
@@ -76,7 +91,10 @@ def test_execute_timeout(strategy, mock_github, mock_janitor):
     assert "timeout" in result.message.lower()
     assert mock_github.get_pr_checks.call_count == 10  # max attempts
 
-def test_execute_poll_exception(strategy, mock_github, mock_janitor):
+
+def test_execute_poll_exception(
+    strategy: RemoteDefenseStrategy, mock_github: MagicMock, mock_janitor: MagicMock
+) -> None:
     """Test execution when polling raises exceptions repeatedly."""
     mock_janitor.sanitize_commit.return_value = "clean commit"
     mock_github.get_pr_checks.side_effect = RuntimeError("API Error")
@@ -87,7 +105,8 @@ def test_execute_poll_exception(strategy, mock_github, mock_janitor):
     assert result.success is False
     assert "timeout" in result.message.lower()
 
-def test_handle_ci_failure_fallback(strategy):
+
+def test_handle_ci_failure_fallback(strategy: RemoteDefenseStrategy) -> None:
     """Test fallback message when no specific failure is found."""
     # Pass a check that is successful, so next(...) returns None
     checks = [{"name": "test", "status": "completed", "conclusion": "success"}]

@@ -5,14 +5,16 @@ from coreason_jules_automator.strategies.local import LocalDefenseStrategy
 from coreason_jules_automator.strategies.base import DefenseResult
 
 @pytest.fixture
-def mock_gemini():
+def mock_gemini() -> MagicMock:
     return MagicMock()
 
+
 @pytest.fixture
-def strategy(mock_gemini):
+def strategy(mock_gemini: MagicMock) -> LocalDefenseStrategy:
     return LocalDefenseStrategy(gemini=mock_gemini)
 
-def test_execute_success(strategy, mock_gemini):
+
+def test_execute_success(strategy: LocalDefenseStrategy, mock_gemini: MagicMock) -> None:
     """Test successful execution of both security and code review."""
     with patch("coreason_jules_automator.strategies.local.get_settings") as mock_settings:
         mock_settings.return_value.extensions_enabled = ["security", "code-review"]
@@ -24,7 +26,8 @@ def test_execute_success(strategy, mock_gemini):
         mock_gemini.security_scan.assert_called_once()
         mock_gemini.code_review.assert_called_once()
 
-def test_execute_security_fail(strategy, mock_gemini):
+
+def test_execute_security_fail(strategy: LocalDefenseStrategy, mock_gemini: MagicMock) -> None:
     """Test failure in security scan."""
     with patch("coreason_jules_automator.strategies.local.get_settings") as mock_settings:
         mock_settings.return_value.extensions_enabled = ["security", "code-review"]
@@ -40,7 +43,8 @@ def test_execute_security_fail(strategy, mock_gemini):
         # So code review is skipped if security scan fails.
         mock_gemini.code_review.assert_not_called()
 
-def test_execute_code_review_fail(strategy, mock_gemini):
+
+def test_execute_code_review_fail(strategy: LocalDefenseStrategy, mock_gemini: MagicMock) -> None:
     """Test failure in code review."""
     with patch("coreason_jules_automator.strategies.local.get_settings") as mock_settings:
         mock_settings.return_value.extensions_enabled = ["security", "code-review"]
@@ -51,7 +55,8 @@ def test_execute_code_review_fail(strategy, mock_gemini):
         assert result.success is False
         assert "Code Review failed: Code Style Issue" in result.message
 
-def test_execute_disabled_extensions(strategy, mock_gemini):
+
+def test_execute_disabled_extensions(strategy: LocalDefenseStrategy, mock_gemini: MagicMock) -> None:
     """Test execution when extensions are disabled."""
     with patch("coreason_jules_automator.strategies.local.get_settings") as mock_settings:
         mock_settings.return_value.extensions_enabled = []

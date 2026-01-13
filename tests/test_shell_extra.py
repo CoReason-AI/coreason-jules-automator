@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from coreason_jules_automator.utils.shell import ShellExecutor, ShellError
 
-def test_run_failure_stdout_only():
+def test_run_failure_stdout_only() -> None:
     """Test command failure with stdout only (no stderr)."""
     shell = ShellExecutor()
     with patch("subprocess.run") as mock_run:

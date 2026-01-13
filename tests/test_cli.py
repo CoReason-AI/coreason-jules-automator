@@ -20,7 +20,7 @@ def test_run_success() -> None:
     with patch("coreason_jules_automator.llm.factory.get_settings") as mock_settings:
         mock_settings.return_value.llm_strategy = "api"
         # Also patch LLMFactory.get_client to avoid actual initialization
-        with patch("coreason_jules_automator.llm.factory.LLMFactory.get_client") as mock_get_client:
+        with patch("coreason_jules_automator.llm.factory.LLMFactory.get_client"):
             with patch("coreason_jules_automator.cli.Orchestrator") as MockOrchestrator:
                 mock_instance = MockOrchestrator.return_value
                 mock_instance.run_cycle.return_value = True
