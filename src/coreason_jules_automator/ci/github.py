@@ -18,7 +18,7 @@ class GitHubInterface:
         if not shutil.which(self.executable):
             logger.warning(f"GitHub CLI executable '{self.executable}' not found in PATH.")
 
-    def _run_command(self, args: List[str]) -> str:
+    async def _run_command(self, args: List[str]) -> str:
         """
         Executes a gh command.
 
@@ -33,13 +33,13 @@ class GitHubInterface:
         """
         command = [self.executable] + args
         try:
-            result = self.shell.run(command, check=True)
+            result = await self.shell.run_async(command, check=True)
             return result.stdout.strip()
         except ShellError as e:
             logger.error(str(e))
             raise RuntimeError(f"gh command failed: {e}") from e
 
-    def get_pr_checks(self) -> List[Dict[str, Any]]:
+    async def get_pr_checks(self) -> List[Dict[str, Any]]:
         """
         Polls GitHub Actions status for the current PR.
         Uses `gh pr checks` to get the status.
@@ -49,7 +49,7 @@ class GitHubInterface:
         """
         logger.info("Polling PR checks...")
         # using --json to get structured data
-        output = self._run_command(["pr", "checks", "--json", "bucket,name,status,conclusion,url"])
+        output = await self._run_command(["pr", "checks", "--json", "bucket,name,status,conclusion,url"])
         try:
             # We explicitly type the result of json.loads
             parsed: Any = json.loads(output)

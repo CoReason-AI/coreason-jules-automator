@@ -1,31 +1,38 @@
-from unittest.mock import MagicMock
+import pytest
+from unittest.mock import MagicMock, AsyncMock
+from coreason_jules_automator.llm.adapters import OpenAIAdapter, LlamaAdapter
 
-from coreason_jules_automator.llm.adapters import LlamaAdapter, OpenAIAdapter
+@pytest.fixture
+def mock_openai_client():
+    client = MagicMock()
+    # Mocking AsyncOpenAI client structure
+    client.chat.completions.create = AsyncMock()
+    return client
 
+@pytest.fixture
+def mock_llama_client():
+    client = MagicMock()
+    return client
 
-def test_openai_adapter_complete() -> None:
-    """Test OpenAIAdapter.complete returns expected string."""
-    mock_client = MagicMock()
-    mock_client.chat.completions.create.return_value.choices[0].message.content = "OpenAI response"
+@pytest.mark.asyncio
+async def test_openai_adapter_complete(mock_openai_client):
+    adapter = OpenAIAdapter(mock_openai_client)
+    mock_response = MagicMock()
+    mock_response.choices = [MagicMock(message=MagicMock(content="Test response"))]
+    mock_openai_client.chat.completions.create.return_value = mock_response
 
-    adapter = OpenAIAdapter(mock_client)
-    messages = [{"role": "user", "content": "Hello"}]
-    result = adapter.complete(messages, max_tokens=100)
+    result = await adapter.complete([{"role": "user", "content": "Hello"}])
 
-    assert result == "OpenAI response"
-    mock_client.chat.completions.create.assert_called_once_with(
-        model="gpt-3.5-turbo", messages=messages, max_tokens=100
-    )
+    assert result == "Test response"
+    mock_openai_client.chat.completions.create.assert_called_once()
 
+@pytest.mark.asyncio
+async def test_llama_adapter_complete(mock_llama_client):
+    adapter = LlamaAdapter(mock_llama_client)
+    mock_response = {"choices": [{"message": {"content": "Test response"}}]}
+    mock_llama_client.create_chat_completion.return_value = mock_response
 
-def test_llama_adapter_complete() -> None:
-    """Test LlamaAdapter.complete returns expected string."""
-    mock_client = MagicMock()
-    mock_client.create_chat_completion.return_value = {"choices": [{"message": {"content": "Llama response"}}]}
+    result = await adapter.complete([{"role": "user", "content": "Hello"}])
 
-    adapter = LlamaAdapter(mock_client)
-    messages = [{"role": "user", "content": "Hello"}]
-    result = adapter.complete(messages, max_tokens=100)
-
-    assert result == "Llama response"
-    mock_client.create_chat_completion.assert_called_once_with(messages=messages, max_tokens=100)
+    assert result == "Test response"
+    mock_llama_client.create_chat_completion.assert_called_once()

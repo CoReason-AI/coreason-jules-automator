@@ -8,6 +8,7 @@
 #
 # Source Code: https://github.com/CoReason-AI/coreason_jules_automator
 
+import asyncio
 from typing import List, Optional
 
 from coreason_jules_automator.agent.jules import JulesAgent
@@ -33,7 +34,7 @@ class Orchestrator:
         self.strategies = strategies
         self.event_emitter = event_emitter or LoguruEmitter()
 
-    def run_cycle(self, task_description: str, branch_name: str) -> bool:
+    async def run_cycle(self, task_description: str, branch_name: str) -> bool:
         """
         Executes the full development cycle:
         Agent -> Strategies -> Success/Retry.
@@ -60,7 +61,8 @@ class Orchestrator:
 
             # 1. Agent generates code
             try:
-                self.agent.start(task_description)
+                # Agent execution is blocking (pexpect), so run in thread
+                await asyncio.to_thread(self.agent.start, task_description)
             except Exception as e:
                 self.event_emitter.emit(
                     AutomationEvent(
@@ -74,7 +76,7 @@ class Orchestrator:
             # 2. Execute Defense Strategies
             cycle_passed = True
             for strategy in self.strategies:
-                result = strategy.execute(context={"branch_name": branch_name})
+                result = await strategy.execute(context={"branch_name": branch_name})
                 if not result.success:
                     # Strategy failure is logged by the strategy itself via events (ideally),
                     # but we also log high level warning here.

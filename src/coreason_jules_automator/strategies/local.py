@@ -17,7 +17,7 @@ class LocalDefenseStrategy(DefenseStrategy):
         super().__init__(event_emitter)
         self.gemini = gemini
 
-    def execute(self, context: Dict[str, Any]) -> DefenseResult:
+    async def execute(self, context: Dict[str, Any]) -> DefenseResult:
         settings = get_settings()
         self.event_emitter.emit(AutomationEvent(type=EventType.PHASE_START, message="Executing Line 1: Local Defense"))
         passed = True
@@ -33,7 +33,7 @@ class LocalDefenseStrategy(DefenseStrategy):
                 )
             )
             try:
-                self.gemini.security_scan()
+                await self.gemini.security_scan()
                 self.event_emitter.emit(
                     AutomationEvent(
                         type=EventType.CHECK_RESULT,
@@ -65,7 +65,7 @@ class LocalDefenseStrategy(DefenseStrategy):
                 )
             )
             try:
-                self.gemini.code_review()
+                await self.gemini.code_review()
                 self.event_emitter.emit(
                     AutomationEvent(
                         type=EventType.CHECK_RESULT,

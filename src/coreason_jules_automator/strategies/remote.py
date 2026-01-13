@@ -1,4 +1,4 @@
-import time
+import asyncio
 from typing import Any, Dict, List, Optional
 
 from coreason_jules_automator.ci.git import GitInterface
@@ -27,7 +27,7 @@ class RemoteDefenseStrategy(DefenseStrategy):
         self.janitor = janitor
         self.git = git
 
-    def execute(self, context: Dict[str, Any]) -> DefenseResult:
+    async def execute(self, context: Dict[str, Any]) -> DefenseResult:
         branch_name = context.get("branch_name")
         if not branch_name:
             return DefenseResult(success=False, message="Missing branch_name in context")
@@ -38,7 +38,7 @@ class RemoteDefenseStrategy(DefenseStrategy):
         try:
             self.event_emitter.emit(AutomationEvent(type=EventType.CHECK_RUNNING, message="Pushing Code"))
             commit_msg = self.janitor.sanitize_commit(f"feat: implementation for {branch_name}")
-            self.git.push_to_branch(branch_name, commit_msg)
+            await self.git.push_to_branch(branch_name, commit_msg)
             self.event_emitter.emit(
                 AutomationEvent(
                     type=EventType.CHECK_RESULT,
@@ -77,13 +77,13 @@ class RemoteDefenseStrategy(DefenseStrategy):
                     )
                 )
 
-                checks = self.github.get_pr_checks()
+                checks = await self.github.get_pr_checks()
                 # Analyze checks
                 all_completed = True
                 any_failure = False
 
                 if not checks:
-                    time.sleep(2)
+                    await asyncio.sleep(2)
                     continue
 
                 for check in checks:
@@ -104,7 +104,7 @@ class RemoteDefenseStrategy(DefenseStrategy):
                         return DefenseResult(success=True, message="CI checks passed")
                     else:
                         # Red - Get logs and summarize
-                        summary = self._handle_ci_failure(checks)
+                        summary = await self._handle_ci_failure(checks)
                         self.event_emitter.emit(
                             AutomationEvent(
                                 type=EventType.CHECK_RESULT,
@@ -114,7 +114,7 @@ class RemoteDefenseStrategy(DefenseStrategy):
                         )
                         return DefenseResult(success=False, message=summary)
 
-                time.sleep(2)  # Wait before next poll
+                await asyncio.sleep(2)  # Wait before next poll
 
             except RuntimeError as e:
                 logger.warning(f"Failed to poll checks: {e}")
@@ -123,13 +123,13 @@ class RemoteDefenseStrategy(DefenseStrategy):
                         type=EventType.ERROR, message=f"Poll attempt failed: {e}", payload={"error": str(e)}
                     )
                 )
-                time.sleep(2)
+                await asyncio.sleep(2)
 
         error_msg = "Line 2 timeout: Checks did not complete."
         logger.error(error_msg)
         return DefenseResult(success=False, message=error_msg)
 
-    def _handle_ci_failure(self, checks: List[Any]) -> str:
+    async def _handle_ci_failure(self, checks: List[Any]) -> str:
         """
         Uses Janitor to summarize failure logs.
         """
@@ -140,7 +140,7 @@ class RemoteDefenseStrategy(DefenseStrategy):
             log_snippet = (
                 f"Check {failed_check.get('name', 'unknown')} failed. URL: {failed_check.get('url', 'unknown')}"
             )
-            summary = self.janitor.summarize_logs(log_snippet)
+            summary = await self.janitor.summarize_logs(log_snippet)
             logger.info(f"Janitor Summary: {summary}")
             return summary
 

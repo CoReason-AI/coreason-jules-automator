@@ -21,7 +21,7 @@ class DefenseStrategy(ABC):
         self.event_emitter = event_emitter or LoguruEmitter()
 
     @abstractmethod
-    def execute(self, context: Dict[str, Any]) -> DefenseResult:
+    async def execute(self, context: Dict[str, Any]) -> DefenseResult:
         """
         Executes the defense strategy.
 

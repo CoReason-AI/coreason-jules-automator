@@ -8,6 +8,7 @@
 #
 # Source Code: https://github.com/CoReason-AI/coreason_jules_automator
 
+import asyncio
 import sys
 
 import typer
@@ -67,7 +68,7 @@ def run(
             event_emitter=event_emitter,
         )
 
-        success = orchestrator.run_cycle(task, branch)
+        success = asyncio.run(orchestrator.run_cycle(task, branch))
 
         if success:
             logger.info("Cycle completed successfully.")
