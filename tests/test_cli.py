@@ -41,10 +41,11 @@ def test_run_success() -> None:
 
 def test_run_failure() -> None:
     """Test failed run."""
-    with patch("coreason_jules_automator.llm.factory.get_settings"), \
-         patch("coreason_jules_automator.llm.factory.LLMFactory.get_client"), \
-         patch("coreason_jules_automator.cli.Orchestrator") as MockOrchestrator:
-
+    with (
+        patch("coreason_jules_automator.llm.factory.get_settings"),
+        patch("coreason_jules_automator.llm.factory.LLMFactory.get_client"),
+        patch("coreason_jules_automator.cli.Orchestrator") as MockOrchestrator,
+    ):
         mock_instance = MockOrchestrator.return_value
         mock_instance.run_cycle.return_value = False
 
@@ -61,9 +62,11 @@ def test_run_failure() -> None:
 
 def test_run_exception() -> None:
     """Test run with unexpected exception."""
-    with patch("coreason_jules_automator.llm.factory.get_settings"), \
-         patch("coreason_jules_automator.llm.factory.LLMFactory.get_client"), \
-         patch("coreason_jules_automator.cli.Orchestrator", side_effect=Exception("Crash")):
+    with (
+        patch("coreason_jules_automator.llm.factory.get_settings"),
+        patch("coreason_jules_automator.llm.factory.LLMFactory.get_client"),
+        patch("coreason_jules_automator.cli.Orchestrator", side_effect=Exception("Crash")),
+    ):
         result = runner.invoke(app, ["run", "Task", "--branch", "b"])
         if result.exit_code != 1:
             result = runner.invoke(app, ["Task", "--branch", "b"])

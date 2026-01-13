@@ -1,8 +1,9 @@
-import pytest
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from coreason_jules_automator.strategies.remote import RemoteDefenseStrategy
-from coreason_jules_automator.strategies.base import DefenseResult
+
 
 @pytest.fixture
 def mock_github() -> MagicMock:
@@ -26,9 +27,7 @@ def test_execute_missing_branch(strategy: RemoteDefenseStrategy) -> None:
     assert "Missing branch_name" in result.message
 
 
-def test_execute_push_failure(
-    strategy: RemoteDefenseStrategy, mock_github: MagicMock, mock_janitor: MagicMock
-) -> None:
+def test_execute_push_failure(strategy: RemoteDefenseStrategy, mock_github: MagicMock, mock_janitor: MagicMock) -> None:
     """Test execution when push fails."""
     mock_janitor.sanitize_commit.return_value = "clean commit"
     mock_github.push_to_branch.side_effect = RuntimeError("Push failed")
@@ -39,9 +38,7 @@ def test_execute_push_failure(
     assert "Failed to push code: Push failed" in result.message
 
 
-def test_execute_success(
-    strategy: RemoteDefenseStrategy, mock_github: MagicMock, mock_janitor: MagicMock
-) -> None:
+def test_execute_success(strategy: RemoteDefenseStrategy, mock_github: MagicMock, mock_janitor: MagicMock) -> None:
     """Test successful execution."""
     mock_janitor.sanitize_commit.return_value = "clean commit"
     # Return empty list first (wait), then success
@@ -77,9 +74,7 @@ def test_execute_check_failure(
     mock_janitor.summarize_logs.assert_called_once()
 
 
-def test_execute_timeout(
-    strategy: RemoteDefenseStrategy, mock_github: MagicMock, mock_janitor: MagicMock
-) -> None:
+def test_execute_timeout(strategy: RemoteDefenseStrategy, mock_github: MagicMock, mock_janitor: MagicMock) -> None:
     """Test execution when checks time out (never complete)."""
     mock_janitor.sanitize_commit.return_value = "clean commit"
     mock_github.get_pr_checks.return_value = [{"name": "test", "status": "in_progress"}]

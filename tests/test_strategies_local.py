@@ -1,8 +1,9 @@
-import pytest
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from coreason_jules_automator.strategies.local import LocalDefenseStrategy
-from coreason_jules_automator.strategies.base import DefenseResult
+
 
 @pytest.fixture
 def mock_gemini() -> MagicMock:

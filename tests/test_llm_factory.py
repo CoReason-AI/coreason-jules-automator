@@ -4,7 +4,6 @@ import pytest
 from pydantic import SecretStr
 
 from coreason_jules_automator.llm.factory import LLMFactory
-from coreason_jules_automator.config import Settings
 
 
 def test_get_client_api_openai_missing_import() -> None:
