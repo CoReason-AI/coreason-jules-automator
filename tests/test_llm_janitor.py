@@ -1,11 +1,14 @@
 from unittest.mock import MagicMock
+
 from coreason_jules_automator.llm.janitor import JanitorService
 from coreason_jules_automator.llm.prompts import PromptManager
+
 
 def test_janitor_initialization() -> None:
     """Test JanitorService initializes with default prompt manager."""
     service = JanitorService(llm_client=None)
     assert isinstance(service.prompt_manager, PromptManager)
+
 
 def test_janitor_sanitize_commit() -> None:
     """Test commit message sanitization."""
@@ -13,6 +16,7 @@ def test_janitor_sanitize_commit() -> None:
     raw = "feat: add feature\n\nCo-authored-by: bot\nSigned-off-by: me"
     clean = janitor.sanitize_commit(raw)
     assert clean == "feat: add feature"
+
 
 def test_janitor_summarize_logs_success() -> None:
     """Test summarize_logs with mocked LLM and PromptManager."""
@@ -28,7 +32,10 @@ def test_janitor_summarize_logs_success() -> None:
     assert summary == "Summary"
     # logs="long log..." is correct because "long log..." is much shorter than 2000 chars, so no slicing happens.
     mock_prompt_manager.render.assert_called_once_with("janitor_summarize.j2", logs="long log...")
-    mock_client.complete.assert_called_once_with(messages=[{"role": "user", "content": "Rendered Prompt"}], max_tokens=150)
+    mock_client.complete.assert_called_once_with(
+        messages=[{"role": "user", "content": "Rendered Prompt"}], max_tokens=150
+    )
+
 
 def test_janitor_summarize_logs_template_error() -> None:
     """Test handling of template rendering errors."""

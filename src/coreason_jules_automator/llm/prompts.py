@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound, select_autoescape
 
@@ -21,7 +21,7 @@ class PromptManager:
         self.template_dir = template_dir
 
         if not self.template_dir.exists():
-             logger.warning(f"Template directory does not exist: {self.template_dir}")
+            logger.warning(f"Template directory does not exist: {self.template_dir}")
 
         self.env = Environment(
             loader=FileSystemLoader(str(self.template_dir)),
@@ -36,10 +36,10 @@ class PromptManager:
         """
         try:
             template = self.env.get_template(template_name)
-            return template.render(**kwargs)
+            return cast(str, template.render(**kwargs))
         except TemplateNotFound:
             logger.error(f"Template not found: {template_name} in {self.template_dir}")
-            raise FileNotFoundError(f"Template not found: {template_name}")
+            raise FileNotFoundError(f"Template not found: {template_name}") from None
         except Exception as e:
             logger.error(f"Error rendering template {template_name}: {e}")
             raise
