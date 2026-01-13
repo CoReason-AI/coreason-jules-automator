@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Dict
+from typing import Any, Dict, Optional
+
+from coreason_jules_automator.events import EventEmitter, LoguruEmitter
 
 
 @dataclass
@@ -14,6 +16,9 @@ class DefenseResult:
 
 class DefenseStrategy(ABC):
     """Abstract base class for defense strategies."""
+
+    def __init__(self, event_emitter: Optional[EventEmitter] = None) -> None:
+        self.event_emitter = event_emitter or LoguruEmitter()
 
     @abstractmethod
     def execute(self, context: Dict[str, Any]) -> DefenseResult:
