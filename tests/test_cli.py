@@ -16,27 +16,36 @@ def test_run_help() -> None:
 
 def test_run_success() -> None:
     """Test successful run."""
-    with patch("coreason_jules_automator.cli.Orchestrator") as MockOrchestrator:
-        mock_instance = MockOrchestrator.return_value
-        mock_instance.run_cycle.return_value = True
+    # Mock get_settings to avoid missing env var errors
+    with patch("coreason_jules_automator.llm.factory.get_settings") as mock_settings:
+        mock_settings.return_value.llm_strategy = "api"
+        # Also patch LLMFactory.get_client to avoid actual initialization
+        with patch("coreason_jules_automator.llm.factory.LLMFactory.get_client"):
+            with patch("coreason_jules_automator.cli.Orchestrator") as MockOrchestrator:
+                mock_instance = MockOrchestrator.return_value
+                mock_instance.run_cycle.return_value = True
 
-        # Try without "run" subcommand if it fails
-        result = runner.invoke(app, ["run", "Task1", "--branch", "fix/bug"])
-        if result.exit_code != 0:
-            # Typer configuration issue? Try invoking without subcommand.
-            result = runner.invoke(app, ["Task1", "--branch", "fix/bug"])
+                # Try without "run" subcommand if it fails
+                result = runner.invoke(app, ["run", "Task1", "--branch", "fix/bug"])
+                if result.exit_code != 0:
+                    # Typer configuration issue? Try invoking without subcommand.
+                    result = runner.invoke(app, ["Task1", "--branch", "fix/bug"])
 
-        if result.exit_code != 0:
-            print(f"\nExit code: {result.exit_code}")
-            print(f"Output: {result.output}")
+                if result.exit_code != 0:
+                    print(f"\nExit code: {result.exit_code}")
+                    print(f"Output: {result.output}")
 
-        assert result.exit_code == 0
-        mock_instance.run_cycle.assert_called_with("Task1", "fix/bug")
+                assert result.exit_code == 0
+                mock_instance.run_cycle.assert_called_with("Task1", "fix/bug")
 
 
 def test_run_failure() -> None:
     """Test failed run."""
-    with patch("coreason_jules_automator.cli.Orchestrator") as MockOrchestrator:
+    with (
+        patch("coreason_jules_automator.llm.factory.get_settings"),
+        patch("coreason_jules_automator.llm.factory.LLMFactory.get_client"),
+        patch("coreason_jules_automator.cli.Orchestrator") as MockOrchestrator,
+    ):
         mock_instance = MockOrchestrator.return_value
         mock_instance.run_cycle.return_value = False
 
@@ -53,7 +62,11 @@ def test_run_failure() -> None:
 
 def test_run_exception() -> None:
     """Test run with unexpected exception."""
-    with patch("coreason_jules_automator.cli.Orchestrator", side_effect=Exception("Crash")):
+    with (
+        patch("coreason_jules_automator.llm.factory.get_settings"),
+        patch("coreason_jules_automator.llm.factory.LLMFactory.get_client"),
+        patch("coreason_jules_automator.cli.Orchestrator", side_effect=Exception("Crash")),
+    ):
         result = runner.invoke(app, ["run", "Task", "--branch", "b"])
         if result.exit_code != 1:
             result = runner.invoke(app, ["Task", "--branch", "b"])
