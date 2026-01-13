@@ -126,14 +126,16 @@ def test_cli_file_execution() -> None:
         or "Usage: cli.py" in clean_stdout
     )
 
+
 def test_run_report_exception() -> None:
     """Test run with exception during report generation."""
-    with patch("coreason_jules_automator.cli.get_settings"), \
-         patch("coreason_jules_automator.llm.factory.LLMFactory.get_client"), \
-         patch("coreason_jules_automator.cli.Orchestrator") as MockOrchestrator, \
-         patch("coreason_jules_automator.cli.MarkdownReporter") as MockReporter, \
-         patch("coreason_jules_automator.cli.logger") as mock_logger:
-
+    with (
+        patch("coreason_jules_automator.cli.get_settings"),
+        patch("coreason_jules_automator.llm.factory.LLMFactory.get_client"),
+        patch("coreason_jules_automator.cli.Orchestrator") as MockOrchestrator,
+        patch("coreason_jules_automator.cli.MarkdownReporter") as MockReporter,
+        patch("coreason_jules_automator.cli.logger") as mock_logger,
+    ):
         mock_instance = MockOrchestrator.return_value
         mock_instance.run_cycle.return_value = True
 

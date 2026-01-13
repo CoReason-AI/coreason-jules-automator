@@ -59,6 +59,7 @@ def test_markdown_reporter_renders_full_template(tmp_path: Path) -> None:
     assert "CI Build" in report
     assert "I am fixing the build" in report
 
+
 def test_markdown_reporter_fallback_logic(tmp_path: Path) -> None:
     # Setup template
     template_dir = tmp_path / "templates"
@@ -83,6 +84,7 @@ def test_markdown_reporter_fallback_logic(tmp_path: Path) -> None:
 
     assert "Local: Unknown Check," in report
     assert "Remote: GitHub Action,Remote Build," in report
+
 
 def test_markdown_reporter_missing_cycle_start(tmp_path: Path) -> None:
     # Setup template
