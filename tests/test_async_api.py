@@ -353,7 +353,6 @@ async def test_async_jules_agent_launch_signal_complete() -> None:
             mock_process.wait = AsyncMock()
             mock_exec.return_value = mock_process
 
-
             # We must NOT patch JulesProtocol if we want to test that the agent LOGS the signal.
             # The agent instantiates JulesProtocol() inside launch_session.
             # If we don't patch it, the real JulesProtocol will run.
