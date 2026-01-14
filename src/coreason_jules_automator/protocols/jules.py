@@ -37,6 +37,7 @@ class JulesProtocol:
     """
     Sans-I/O Protocol for the Jules agent interaction.
     Parses output chunks and yields actions.
+    Extracted from the legacy `JulesAgent` to separate logic from I/O.
     """
 
     def __init__(self) -> None:
