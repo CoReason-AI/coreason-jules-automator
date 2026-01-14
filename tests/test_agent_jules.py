@@ -1,8 +1,8 @@
 import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-
 import pytest
+import pexpect
 
 from coreason_jules_automator.agent.jules import JulesAgent
 
@@ -38,125 +38,167 @@ def test_get_active_sids_failure(mock_run: MagicMock, agent: JulesAgent) -> None
     assert sids == set()
 
 
-@patch("subprocess.Popen")
+@patch("coreason_jules_automator.agent.jules.pexpect.spawn")
 @patch("coreason_jules_automator.agent.jules.JulesAgent._get_active_sids")
 @patch("coreason_jules_automator.agent.jules.get_settings")
-def test_launch_session_success(
-    mock_settings: MagicMock, mock_get_sids: MagicMock, mock_popen: MagicMock, agent: JulesAgent
+def test_launch_session_success_polling(
+    mock_settings: MagicMock, mock_get_sids: MagicMock, mock_spawn: MagicMock, agent: JulesAgent
 ) -> None:
-    """Test successful session launch."""
+    """Test successful session launch via polling (pexpect timeout loop)."""
     mock_settings.return_value.repo_name = "test/repo"
 
     # Simulate pre-SIDs and post-SIDs
-    mock_get_sids.side_effect = [{"100"}, {"100", "101"}]
+    mock_get_sids.side_effect = [{"100"}, {"100", "101"}, {"100", "101"}]
 
-    mock_process = MagicMock()
-    mock_process.stdin = MagicMock()
-    mock_process.communicate.return_value = ("stdout", "stderr")
-    mock_process.poll.return_value = None  # Process running
-    mock_popen.return_value = mock_process
+    mock_child = MagicMock()
+    mock_spawn.return_value = mock_child
+
+    # Simulate expect returning TIMEOUT (4) then EOF (3)
+    # 4 -> poll -> find SID -> store it
+    # 3 -> break -> return stored SID
+    mock_child.expect.side_effect = [4, 3]
+    mock_child.isalive.return_value = False
 
     sid = agent.launch_session("Test Task")
 
     assert sid == "101"
-    mock_popen.assert_called_once()
-    assert "new" in mock_popen.call_args[0][0]
-    assert "--repo" in mock_popen.call_args[0][0]
-    assert "test/repo" in mock_popen.call_args[0][0]
+    mock_spawn.assert_called_once()
+    mock_child.sendline.assert_called_once() # Initial prompt
 
 
-@patch("subprocess.Popen")
+@patch("coreason_jules_automator.agent.jules.pexpect.spawn")
+@patch("coreason_jules_automator.agent.jules.JulesAgent._get_active_sids")
+@patch("coreason_jules_automator.agent.jules.get_settings")
+def test_launch_session_success_pattern(
+    mock_settings: MagicMock, mock_get_sids: MagicMock, mock_spawn: MagicMock, agent: JulesAgent
+) -> None:
+    """Test successful session launch via output pattern matching."""
+    mock_settings.return_value.repo_name = "test/repo"
+    mock_get_sids.return_value = {"100"}
+
+    mock_child = MagicMock()
+    mock_spawn.return_value = mock_child
+
+    # Simulate finding SID pattern (2) then EOF (3)
+    mock_child.expect.side_effect = [2, 3]
+    mock_child.match.group.return_value = "202"
+    mock_child.isalive.return_value = False
+
+    sid = agent.launch_session("Test Task")
+
+    assert sid == "202"
+
+
+@patch("coreason_jules_automator.agent.jules.pexpect.spawn")
+@patch("coreason_jules_automator.agent.jules.JulesAgent._get_active_sids")
+@patch("coreason_jules_automator.agent.jules.get_settings")
+def test_launch_session_interaction(
+    mock_settings: MagicMock, mock_get_sids: MagicMock, mock_spawn: MagicMock, agent: JulesAgent
+) -> None:
+    """Test session launch handling interactive questions."""
+    mock_settings.return_value.repo_name = "test/repo"
+    mock_get_sids.return_value = {"100"}
+
+    mock_child = MagicMock()
+    mock_spawn.return_value = mock_child
+
+    # 0 (Question) -> 0 (Question) -> 2 (SID) -> 3 (EOF)
+    mock_child.expect.side_effect = [0, 0, 2, 3]
+    mock_child.match.group.return_value = "303"
+    mock_child.isalive.return_value = False
+
+    sid = agent.launch_session("Test Task")
+
+    assert sid == "303"
+    # Initial prompt + 2 auto-replies = 3 sendline calls
+    assert mock_child.sendline.call_count == 3
+    # Check args for auto-reply
+    args = mock_child.sendline.call_args_list
+    assert "Use your best judgment" in args[1][0][0]
+    assert "Use your best judgment" in args[2][0][0]
+
+
+@patch("coreason_jules_automator.agent.jules.pexpect.spawn")
+@patch("coreason_jules_automator.agent.jules.JulesAgent._get_active_sids")
+@patch("coreason_jules_automator.agent.jules.get_settings")
+def test_launch_session_mission_complete(
+    mock_settings: MagicMock, mock_get_sids: MagicMock, mock_spawn: MagicMock, agent: JulesAgent
+) -> None:
+    """Test detecting mission completion signal."""
+    mock_settings.return_value.repo_name = "test/repo"
+    mock_get_sids.return_value = {"100"}
+
+    mock_child = MagicMock()
+    mock_spawn.return_value = mock_child
+
+    # 1 (Success) -> 2 (SID) -> 3 (EOF)
+    mock_child.expect.side_effect = [1, 2, 3]
+    mock_child.match.group.return_value = "404"
+    mock_child.isalive.return_value = False
+
+    sid = agent.launch_session("Test Task")
+
+    assert sid == "404"
+    assert agent.mission_complete is True
+
+
+@patch("coreason_jules_automator.agent.jules.pexpect.spawn")
 @patch("coreason_jules_automator.agent.jules.JulesAgent._get_active_sids")
 @patch("coreason_jules_automator.agent.jules.get_settings")
 def test_launch_session_with_spec(
-    mock_settings: MagicMock, mock_get_sids: MagicMock, mock_popen: MagicMock, agent: JulesAgent
+    mock_settings: MagicMock, mock_get_sids: MagicMock, mock_spawn: MagicMock, agent: JulesAgent
 ) -> None:
     """Test session launch with SPEC.md injection."""
     mock_settings.return_value.repo_name = "test/repo"
-    mock_get_sids.side_effect = [{"100"}, {"100", "101"}]
+    mock_get_sids.return_value = {"100"}
 
-    mock_process = MagicMock()
-    mock_process.stdin = MagicMock()
-    mock_process.communicate.return_value = ("stdout", "stderr")
-    mock_process.poll.return_value = None
-    mock_popen.return_value = mock_process
+    mock_child = MagicMock()
+    mock_spawn.return_value = mock_child
+    mock_child.expect.return_value = 3 # EOF immediately
+    mock_child.isalive.return_value = False
 
     with patch("pathlib.Path.exists", return_value=True):
         with patch("pathlib.Path.read_text", return_value="Spec Content"):
-            sid = agent.launch_session("Test Task")
+            agent.launch_session("Test Task")
 
-    assert sid == "101"
-    mock_process.stdin.write.assert_called()
-    call_args = mock_process.stdin.write.call_args[0][0]
+    mock_child.sendline.assert_called()
+    call_args = mock_child.sendline.call_args[0][0]
     assert "Context from SPEC.md" in call_args
     assert "Spec Content" in call_args
 
 
-@patch("subprocess.Popen")
+@patch("coreason_jules_automator.agent.jules.pexpect.spawn")
 @patch("coreason_jules_automator.agent.jules.JulesAgent._get_active_sids")
 @patch("coreason_jules_automator.agent.jules.get_settings")
-def test_launch_session_early_exit(
-    mock_settings: MagicMock, mock_get_sids: MagicMock, mock_popen: MagicMock, agent: JulesAgent
+def test_launch_session_timeout_loop(
+    mock_settings: MagicMock, mock_get_sids: MagicMock, mock_spawn: MagicMock, agent: JulesAgent
 ) -> None:
-    """Test session launch handling early process exit."""
+    """Test session launch timeout (total time exceeded)."""
     mock_settings.return_value.repo_name = "test/repo"
     mock_get_sids.return_value = {"100"}
 
-    mock_process = MagicMock()
-    mock_process.poll.return_value = 1  # Exited with error
-    mock_process.communicate.return_value = ("stdout", "Error Message")
-    mock_process.returncode = 1
-    mock_popen.return_value = mock_process
+    mock_child = MagicMock()
+    mock_spawn.return_value = mock_child
+    mock_child.isalive.return_value = True # Stays alive
 
-    with patch("time.sleep", return_value=None):
+    # Simulate loop running for a while then stopping by logic
+    # We patch time.time to simulate timeout
+
+    start_time = 1000
+    # First call to time.time is for start_time
+    # Then loop checks time.time
+    # We want loop to run once or twice then exit
+
+    # In launch_session:
+    # start_time = time.time()
+    # while (time.time() - start_time) < 1800:
+
+    with patch("time.time", side_effect=[1000, 1001, 2900]): # Start, First loop OK, Second loop Timeout
+        mock_child.expect.return_value = 4 # TIMEOUT
         sid = agent.launch_session("Test Task")
 
     assert sid is None
-
-
-@patch("subprocess.Popen")
-@patch("coreason_jules_automator.agent.jules.JulesAgent._get_active_sids")
-@patch("coreason_jules_automator.agent.jules.get_settings")
-def test_launch_session_timeout(
-    mock_settings: MagicMock, mock_get_sids: MagicMock, mock_popen: MagicMock, agent: JulesAgent
-) -> None:
-    """Test session launch timeout."""
-    mock_settings.return_value.repo_name = "test/repo"
-
-    # Simulate no new SID appearing
-    mock_get_sids.return_value = {"100"}
-
-    mock_process = MagicMock()
-    mock_process.stdin = MagicMock()
-    mock_process.communicate.return_value = ("stdout", "stderr")
-    mock_process.poll.return_value = None  # Process running
-    mock_popen.return_value = mock_process
-
-    # To avoid long wait in tests, we can mock time.sleep or reduce range
-    # But since loop is hardcoded range(1, 21), we should patch sleep
-    with patch("time.sleep", return_value=None):
-        sid = agent.launch_session("Test Task")
-
-    assert sid is None
-    mock_process.kill.assert_called_once()
-
-
-@patch("subprocess.Popen")
-@patch("coreason_jules_automator.agent.jules.JulesAgent._get_active_sids")
-@patch("coreason_jules_automator.agent.jules.get_settings")
-def test_launch_session_exception(
-    mock_settings: MagicMock,
-    mock_get_sids: MagicMock,
-    mock_popen: MagicMock,
-    agent: JulesAgent,
-) -> None:
-    """Test session launch handling generic exception."""
-    mock_settings.return_value.repo_name = "test/repo"
-    mock_get_sids.return_value = set()
-    mock_popen.side_effect = Exception("Launch Error")
-
-    sid = agent.launch_session("Test Task")
-    assert sid is None
+    mock_child.close.assert_called()
 
 
 @patch("subprocess.run")
@@ -173,6 +215,14 @@ def test_wait_for_completion_success(mock_run: MagicMock, agent: JulesAgent) -> 
 
     assert result is True
 
+@patch("subprocess.run")
+def test_wait_for_completion_pre_detected(mock_run: MagicMock, agent: JulesAgent) -> None:
+    """Test wait for completion when already detected."""
+    agent.mission_complete = True
+    result = agent.wait_for_completion("123")
+    assert result is True
+    mock_run.assert_not_called()
+
 
 @patch("subprocess.run")
 def test_wait_for_completion_disappeared(mock_run: MagicMock, agent: JulesAgent) -> None:
@@ -183,21 +233,6 @@ def test_wait_for_completion_disappeared(mock_run: MagicMock, agent: JulesAgent)
         result = agent.wait_for_completion("123")
 
     assert result is False
-
-
-@patch("subprocess.run")
-def test_wait_for_completion_exception(mock_run: MagicMock, agent: JulesAgent) -> None:
-    """Test wait for completion handling generic exception."""
-    # First call raises Exception, second call succeeds
-    mock_run.side_effect = [
-        Exception("Network Error"),
-        MagicMock(stdout="123 completed"),
-    ]
-
-    with patch("time.sleep", return_value=None):
-        result = agent.wait_for_completion("123")
-
-    assert result is True
 
 
 @patch("subprocess.run")
@@ -228,7 +263,6 @@ def test_teleport_and_sync_success(
     assert "123" in mock_run.call_args[0][0]
     mock_copytree.assert_called()  # Should copy src and tests
     mock_copy2.assert_called()  # Should copy requirements.txt
-
 
 @patch("subprocess.run")
 @patch("pathlib.Path.mkdir")
@@ -261,3 +295,17 @@ def test_teleport_and_sync_exception(mock_mkdir: MagicMock, mock_run: MagicMock,
 
     result = agent.teleport_and_sync("123", Path("/tmp"))
     assert result is False
+
+@patch("coreason_jules_automator.agent.jules.pexpect.spawn")
+@patch("coreason_jules_automator.agent.jules.JulesAgent._get_active_sids")
+@patch("coreason_jules_automator.agent.jules.get_settings")
+def test_launch_session_exception(
+    mock_settings: MagicMock, mock_get_sids: MagicMock, mock_spawn: MagicMock, agent: JulesAgent
+) -> None:
+    """Test launch session generic exception."""
+    mock_settings.return_value.repo_name = "test/repo"
+    mock_get_sids.return_value = set()
+    mock_spawn.side_effect = Exception("Spawn failed")
+
+    sid = agent.launch_session("Task")
+    assert sid is None

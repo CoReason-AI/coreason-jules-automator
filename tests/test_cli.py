@@ -200,3 +200,30 @@ def test_campaign_exception() -> None:
         result = runner.invoke(app, ["campaign", "Task1"])
 
         assert result.exit_code == 1
+
+
+def test_campaign_command_infinite() -> None:
+    """Test campaign command with infinite loop (count=0)."""
+    with (
+        patch("coreason_jules_automator.cli.get_settings"),
+        patch("coreason_jules_automator.llm.factory.LLMFactory.get_client"),
+        patch("coreason_jules_automator.cli.Orchestrator") as MockOrchestrator,
+        patch("coreason_jules_automator.cli.GitInterface"),
+        patch("coreason_jules_automator.cli.GitHubInterface"),
+        patch("coreason_jules_automator.cli.GeminiInterface"),
+        patch("coreason_jules_automator.cli.JanitorService"),
+        patch("coreason_jules_automator.cli.JulesAgent"),
+        patch("coreason_jules_automator.cli.ShellExecutor"),
+    ):
+        mock_instance = MockOrchestrator.return_value
+
+        # count=0
+        result = runner.invoke(app, ["campaign", "Task1", "--count", "0"])
+
+        assert result.exit_code == 0
+        mock_instance.run_campaign.assert_called_with("Task1", "develop", 0)
+
+        # Default count (should be 0)
+        result_default = runner.invoke(app, ["campaign", "Task1"])
+        assert result_default.exit_code == 0
+        mock_instance.run_campaign.assert_called_with("Task1", "develop", 0)
