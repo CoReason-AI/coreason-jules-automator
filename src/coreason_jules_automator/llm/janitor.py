@@ -62,9 +62,7 @@ class JanitorService:
 
         for attempt in range(3):
             try:
-                response_text = self.client.complete(
-                    messages=[{"role": "user", "content": prompt}], max_tokens=200
-                )
+                response_text = self.client.complete(messages=[{"role": "user", "content": prompt}], max_tokens=200)
 
                 # Extract JSON object
                 start = response_text.find("{")

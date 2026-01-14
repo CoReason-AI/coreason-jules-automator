@@ -91,7 +91,7 @@ def test_get_latest_run_log_success(gh: GitHubInterface) -> None:
     with patch.object(gh, "_run_command") as mock_run:
         mock_run.side_effect = [
             '[{"databaseId": 12345}]',  # run list output
-            "Log content..."             # run view output
+            "Log content...",  # run view output
         ]
 
         log = gh.get_latest_run_log("feature/test")

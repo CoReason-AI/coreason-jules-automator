@@ -68,10 +68,7 @@ def test_professionalize_commit_retry_success() -> None:
     """Test professionalize_commit retries on invalid JSON."""
     mock_client = MagicMock()
     # First call: invalid JSON, Second call: valid JSON
-    mock_client.complete.side_effect = [
-        "Not JSON",
-        '{"commit_text": "feat: retry success"}'
-    ]
+    mock_client.complete.side_effect = ["Not JSON", '{"commit_text": "feat: retry success"}']
 
     mock_prompt_manager = MagicMock()
     mock_prompt_manager.render.return_value = "Rendered Prompt"

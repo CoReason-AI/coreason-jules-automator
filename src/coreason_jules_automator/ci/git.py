@@ -96,10 +96,7 @@ class GitInterface:
         """
         try:
             # git log base..head --pretty=format:"%s"
-            result = self.shell.run(
-                ["git", "log", f"{base_branch}..{head_branch}", "--pretty=format:%s"],
-                check=True
-            )
+            result = self.shell.run(["git", "log", f"{base_branch}..{head_branch}", "--pretty=format:%s"], check=True)
             return result.stdout.strip()
         except ShellError as e:
             logger.error(f"Failed to get commit log: {e}")
