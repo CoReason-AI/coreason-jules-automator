@@ -167,12 +167,20 @@ class Orchestrator:
         )
         return False, last_error
 
-    def run_campaign(self, task: str, base_branch: str = "develop", iterations: int = 50) -> None:
+    def run_campaign(
+        self, task: str, base_branch: str = "develop", iterations: Optional[int] = 50
+    ) -> None:
         """
         Runs a campaign of multiple iterations to solve a task.
+        If iterations is 0 or None, it runs in Infinite Mode (up to a safety limit).
         """
         if not self.git or not self.janitor:
             raise RuntimeError("GitInterface and JanitorService are required for Campaign mode.")
+
+        # Determine limit
+        limit = iterations if iterations and iterations > 0 else 1000
+        is_infinite = not iterations or iterations == 0
+        logger.info(f"Campaign Mode: {'Infinite (Safety Limit: 1000)' if is_infinite else f'Fixed ({limit})'}")
 
         # Generate ID
         run_id = "".join(random.choices(string.digits, k=10))
@@ -182,10 +190,10 @@ class Orchestrator:
         self.git.checkout_new_branch(agg_branch, base_branch)
 
         i = 0
-        while i < iterations:
+        while i < limit:
             i += 1
             iter_branch = f"vibe_run_{run_id}_{i:03d}"
-            logger.info(f"--- Campaign Iteration {i}/{iterations}: {iter_branch} ---")
+            logger.info(f"--- Campaign Iteration {i}/{limit}: {iter_branch} ---")
 
             try:
                 # Checkout iteration branch from AGGREGATION branch

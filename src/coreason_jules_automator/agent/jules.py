@@ -8,7 +8,7 @@
 #
 # Source Code: https://github.com/CoReason-AI/coreason_jules_automator
 
-import select
+import pexpect
 import shutil
 import subprocess
 import time
@@ -66,70 +66,55 @@ class JulesAgent:
         full_prompt = context + task
 
         try:
-            # Launch process with pipes for interaction
-            process = subprocess.Popen(
-                [self.executable, "new", "--repo", settings.repo_name],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                bufsize=1,  # Line buffered
+            # Launch process with pexpect
+            child = pexpect.spawn(
+                self.executable,
+                ["new", "--repo", settings.repo_name],
+                encoding="utf-8",
+                timeout=300,  # Default timeout for prompt
             )
-
-            if process.stdin is None or process.stdout is None:  # pragma: no cover
-                logger.error("Failed to initialize process pipes.")
-                process.kill()
-                return None
 
             # Send initial prompt
             logger.debug("Sending initial task prompt...")
-            process.stdin.write(f"{full_prompt}\n")
-            process.stdin.flush()
+            child.sendline(full_prompt)
 
             # Monitoring Loop (Wait for SID or Exit)
-            # We monitor stdout for questions or completion signals
             start_time = time.time()
             detected_sid = None
 
             logger.info("Monitoring Jules output for queries...")
 
-            while process.poll() is None:
-                # Check for timeout (e.g. 60 seconds to launch)
-                if time.time() - start_time > 60:
+            # Regex patterns
+            # 0: Question
+            # 1: Success Signal
+            # 2: EOF
+            # 3: TIMEOUT (We use short timeout to check SIDs)
+            patterns = [r"\?|\[y/n\]", "100% of the requirements is met", pexpect.EOF, pexpect.TIMEOUT]
+
+            while True:
+                # Check for global timeout (30 minutes)
+                if time.time() - start_time > 1800:
+                    logger.error("❌ Session launch timed out (30m).")
                     break
 
-                # Non-blocking read of stdout
-                # MyPy check: process.stdout is asserted not None above
-                assert process.stdout is not None
-                reads = [process.stdout.fileno()]
-                ret = select.select(reads, [], [], 1.0)
+                # Expect with 5-second timeout to allow polling SIDs
+                index = child.expect(patterns, timeout=5)
 
-                if ret[0]:
-                    try:
-                        # Read line-by-line (approximated for non-blocking)
-                        # We read what's available to avoid blocking on readline if no newline
-                        line = process.stdout.readline()
-                        if line:
-                            clean_line = line.strip()
-                            logger.debug(f"[Jules]: {clean_line}")
+                if index == 0:  # Question
+                    clean_line = child.after.strip() if isinstance(child.after, str) else ""
+                    logger.info(f"🤖 Auto-replying to query: {clean_line}")
+                    child.sendline("Use your best judgment and make autonomous decisions.")
 
-                            # Termination Detection
-                            if "100% of the requirements is met" in clean_line.lower():
-                                self.mission_complete = True
-                                logger.info("✅ Mission Complete Signal Detected.")
+                elif index == 1:  # Success Signal
+                    self.mission_complete = True
+                    logger.info("✅ Mission Complete Signal Detected.")
 
-                            # Auto-Reply Logic
-                            if "?" in line or "[y/n]" in line.lower():
-                                logger.info(f"🤖 Auto-replying to query: {clean_line}")
-                                if process.stdin:
-                                    process.stdin.write("Use your best judgment and make autonomous decisions.\n")
-                                    process.stdin.flush()
-                    except OSError as e:
-                        logger.error(f"Error reading stdout: {e}")
+                elif index == 2:  # EOF
+                    logger.info("Process finished (EOF).")
+                    break
 
-                # 2. Check for SID in background
-                # We poll less frequently to avoid spamming
-                if int(time.time()) % 5 == 0:
+                elif index == 3:  # TIMEOUT
+                    # Check for new SIDs
                     post_sids = self._get_active_sids()
                     new_sids = post_sids - pre_sids
                     if new_sids:
@@ -143,13 +128,15 @@ class JulesAgent:
                 # We don't kill the process immediately as it might be uploading context
                 # We let it run for a bit longer or until it exits
                 time.sleep(5)
-                if process.poll() is None:
-                    process.terminate()
+                if child.isalive():
+                    child.terminate(force=True)
+                child.close()
                 return detected_sid
 
             logger.error("❌ Failed to detect new session ID.")
-            if process.poll() is None:
-                process.kill()
+            if child.isalive():
+                child.terminate(force=True)
+            child.close()
             return None
 
         except Exception as e:

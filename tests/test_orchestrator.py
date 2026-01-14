@@ -369,3 +369,41 @@ def test_orchestrator_retry_feedback() -> None:
         assert "original task" in task_arg
         assert "IMPORTANT: The previous attempt failed" in task_arg
         assert "First failure" in task_arg
+
+
+def test_run_campaign_infinite() -> None:
+    """Test infinite campaign execution (runs until limit or mission complete)."""
+    mock_agent = MagicMock(spec=JulesAgent)
+    mock_agent.mission_complete = False
+    mock_strategy = MockStrategy(success=True)
+    mock_emitter = MagicMock()
+    mock_git = MagicMock(spec=GitInterface)
+    mock_janitor = MagicMock(spec=JanitorService)
+
+    orchestrator = Orchestrator(
+        agent=mock_agent,
+        strategies=[mock_strategy],
+        event_emitter=mock_emitter,
+        git_interface=mock_git,
+        janitor_service=mock_janitor,
+    )
+
+    with patch.object(orchestrator, "run_cycle") as mock_run_cycle:
+        mock_git.get_commit_log.return_value = "log"
+        mock_janitor.professionalize_commit.return_value = "msg"
+
+        call_counter = 0
+        def side_effect(*args: Any, **kwargs: Any) -> Tuple[bool, str]:
+            nonlocal call_counter
+            call_counter += 1
+            if call_counter >= 3:
+                mock_agent.mission_complete = True
+            return (True, "Success")
+
+        mock_run_cycle.side_effect = side_effect
+
+        # Test with iterations=0 (infinite)
+        orchestrator.run_campaign("task", iterations=0)
+
+        # It should run 3 times and stop because mission_complete became true
+        assert mock_run_cycle.call_count == 3
