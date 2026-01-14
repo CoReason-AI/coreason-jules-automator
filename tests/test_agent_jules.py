@@ -1,7 +1,6 @@
 import subprocess
-import os
 from pathlib import Path
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 
@@ -50,7 +49,7 @@ def test_launch_session_success(
     mock_popen: MagicMock,
     mock_select: MagicMock,
     mock_read: MagicMock,
-    agent: JulesAgent
+    agent: JulesAgent,
 ) -> None:
     """Test successful session launch with interactive loop."""
     mock_settings.return_value.repo_name = "test/repo"
@@ -70,13 +69,50 @@ def test_launch_session_success(
 
     with patch("time.sleep", return_value=None):
         with patch("time.time") as mock_time:
-             # start_time, loop1 check, loop1 %5 check (fail), loop2 check, loop2 %5 check (pass)
-             mock_time.side_effect = [1000, 1001, 1001, 1005, 1005, 1005, 1005]
-             sid = agent.launch_session("Test Task")
+            # start_time, loop1 check, loop1 %5 check (fail), loop2 check, loop2 %5 check (pass)
+            mock_time.side_effect = [1000, 1001, 1001, 1005, 1005, 1005, 1005]
+            sid = agent.launch_session("Test Task")
 
     assert sid == "101"
     mock_popen.assert_called_once()
     mock_process.terminate.assert_called_once()
+
+
+@patch("select.select")
+@patch("subprocess.Popen")
+@patch("coreason_jules_automator.agent.jules.JulesAgent._get_active_sids")
+@patch("coreason_jules_automator.agent.jules.get_settings")
+def test_launch_session_with_spec(
+    mock_settings: MagicMock,
+    mock_get_sids: MagicMock,
+    mock_popen: MagicMock,
+    mock_select: MagicMock,
+    agent: JulesAgent,
+) -> None:
+    """Test session launch with SPEC.md injection."""
+    mock_settings.return_value.repo_name = "test/repo"
+    mock_get_sids.side_effect = [{"100"}, {"100", "101"}]
+
+    mock_process = MagicMock()
+    mock_process.stdin = MagicMock()
+    mock_process.stdout = MagicMock()
+    mock_process.stdout.fileno.return_value = 1
+    mock_process.poll.return_value = None
+    mock_popen.return_value = mock_process
+
+    mock_select.return_value = ([], [], [])
+
+    with patch("pathlib.Path.exists", return_value=True):
+        with patch("pathlib.Path.read_text", return_value="Spec Content"):
+            with patch("time.sleep", return_value=None):
+                with patch("time.time", side_effect=[1000, 1001, 1001, 1005, 1005, 1005, 1005]):
+                    sid = agent.launch_session("Test Task")
+
+    assert sid == "101"
+    mock_process.stdin.write.assert_called()
+    call_args = mock_process.stdin.write.call_args[0][0]
+    assert b"Context from SPEC.md" in call_args
+    assert b"Spec Content" in call_args
 
 
 @patch("os.read")
@@ -90,12 +126,12 @@ def test_launch_session_auto_reply(
     mock_popen: MagicMock,
     mock_select: MagicMock,
     mock_read: MagicMock,
-    agent: JulesAgent
+    agent: JulesAgent,
 ) -> None:
     """Test session launch with auto-reply."""
     mock_settings.return_value.repo_name = "test/repo"
 
-    mock_get_sids.return_value = {"100"} # Initial
+    mock_get_sids.return_value = {"100"}  # Initial
 
     mock_process = MagicMock()
     mock_process.stdin = MagicMock()
@@ -120,20 +156,20 @@ def test_launch_session_auto_reply(
 
     with patch("time.sleep", return_value=None):
         with patch("time.time") as mock_time:
-             # start_time (1000)
-             # loop 1 check timeout (1001)
-             # loop 1 check % 5 (1001) -> False
-             # loop 2 check timeout (1005)
-             # loop 2 check % 5 (1005) -> True -> Calls get_active_sids -> finds new -> Break
-             mock_time.side_effect = [1000, 1001, 1001, 1005, 1005, 1005, 1005]
+            # start_time (1000)
+            # loop 1 check timeout (1001)
+            # loop 1 check % 5 (1001) -> False
+            # loop 2 check timeout (1005)
+            # loop 2 check % 5 (1005) -> True -> Calls get_active_sids -> finds new -> Break
+            mock_time.side_effect = [1000, 1001, 1001, 1005, 1005, 1005, 1005]
 
-             sid = agent.launch_session("Test Task")
+            sid = agent.launch_session("Test Task")
 
     assert sid == "101"
     # Check auto-reply
-    mock_process.stdin.write.assert_has_calls([
-        call("Use your best judgment and make autonomous decisions.\n")
-    ], any_order=True)
+    mock_process.stdin.write.assert_has_calls(
+        [call(b"Use your best judgment and make autonomous decisions.\n")], any_order=True
+    )
 
 
 @patch("select.select")
@@ -141,11 +177,7 @@ def test_launch_session_auto_reply(
 @patch("coreason_jules_automator.agent.jules.JulesAgent._get_active_sids")
 @patch("coreason_jules_automator.agent.jules.get_settings")
 def test_launch_session_timeout(
-    mock_settings: MagicMock,
-    mock_get_sids: MagicMock,
-    mock_popen: MagicMock,
-    mock_select: MagicMock,
-    agent: JulesAgent
+    mock_settings: MagicMock, mock_get_sids: MagicMock, mock_popen: MagicMock, mock_select: MagicMock, agent: JulesAgent
 ) -> None:
     """Test session launch timeout."""
     mock_settings.return_value.repo_name = "test/repo"
@@ -255,7 +287,7 @@ def test_wait_for_completion_exception(mock_run: MagicMock, agent: JulesAgent) -
     with patch("time.sleep", return_value=None):
         # Prevent timeout
         with patch("time.time", return_value=0):
-             result = agent.wait_for_completion("123")
+            result = agent.wait_for_completion("123")
 
     assert result is True
 

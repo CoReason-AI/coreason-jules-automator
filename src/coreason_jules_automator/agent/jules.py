@@ -8,11 +8,11 @@
 #
 # Source Code: https://github.com/CoReason-AI/coreason_jules_automator
 
+import os
+import select
 import shutil
 import subprocess
 import time
-import select
-import os
 from pathlib import Path
 from typing import Optional, Set
 
@@ -66,20 +66,25 @@ class JulesAgent:
 
         try:
             # Launch process with pipes for interaction
+            # We use text=False (binary) to allow bufsize=0 and direct unbuffered reading/writing
             process = subprocess.Popen(
                 [self.executable, "new", "--repo", settings.repo_name],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                text=True,
-                bufsize=0, # Unbuffered to help with read/write
+                text=False,
+                bufsize=0,  # Unbuffered
             )
 
+            if process.stdin is None or process.stdout is None:
+                logger.error("Failed to initialize process pipes.")
+                process.kill()
+                return None
+
             # Send initial prompt
-            if process.stdin:
-                logger.debug("Sending initial task prompt...")
-                process.stdin.write(f"{full_prompt}\n")
-                process.stdin.flush()
+            logger.debug("Sending initial task prompt...")
+            process.stdin.write(f"{full_prompt}\n".encode("utf-8"))
+            process.stdin.flush()
 
             # Monitoring Loop (Wait for SID or Exit)
             # We monitor stdout for questions or completion signals
@@ -94,13 +99,14 @@ class JulesAgent:
                     break
 
                 # Non-blocking read of stdout
+                # MyPy check: process.stdout is asserted not None above
+                assert process.stdout is not None
                 reads = [process.stdout.fileno()]
                 ret = select.select(reads, [], [], 1.0)
 
                 if ret[0]:
-                    # Use os.read to avoid blocking on newline
                     try:
-                        chunk = os.read(process.stdout.fileno(), 1024).decode('utf-8', errors='replace')
+                        chunk = os.read(process.stdout.fileno(), 1024).decode("utf-8", errors="replace")
                         if chunk:
                             logger.debug(f"[Jules]: {chunk.strip()}")
 
@@ -108,8 +114,11 @@ class JulesAgent:
                             # Detect common CLI prompts like "Continue? [y/N]" or "Input required:"
                             if "?" in chunk or "input" in chunk.lower() or "action" in chunk.lower():
                                 logger.info(f"🤖 Auto-replying to query: {chunk.strip()}")
-                                process.stdin.write("Use your best judgment and make autonomous decisions.\n")
-                                process.stdin.flush()
+                                if process.stdin:
+                                    process.stdin.write(
+                                        "Use your best judgment and make autonomous decisions.\n".encode("utf-8")
+                                    )
+                                    process.stdin.flush()
                     except OSError as e:
                         logger.error(f"Error reading stdout: {e}")
 
@@ -123,10 +132,7 @@ class JulesAgent:
                         logger.info(f"✨ Captured SID: {detected_sid}")
                         break
 
-            # Cleanup: We can let the process run in background or detach
-            # But since 'jules new' might be an interactive client wrapper,
-            # once we have the SID, we might need to let it finish its handoff.
-
+            # Cleanup
             # If we got the SID, we assume success.
             if detected_sid:
                 # We don't kill the process immediately as it might be uploading context
@@ -156,8 +162,7 @@ class JulesAgent:
         while (time.time() - start) < (timeout_minutes * 60):
             try:
                 result = subprocess.run(
-                    [self.executable, "remote", "list", "--session"],
-                    capture_output=True, text=True, check=True
+                    [self.executable, "remote", "list", "--session"], capture_output=True, text=True, check=True
                 )
 
                 status_line = ""
