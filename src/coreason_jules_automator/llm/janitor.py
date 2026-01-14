@@ -1,3 +1,4 @@
+import json
 import re
 from typing import Optional
 
@@ -44,3 +45,41 @@ class JanitorService:
                 logger.error(f"LLM generation failed: {e}")
 
         return "Log summarization failed. Please check the logs directly."
+
+    def professionalize_commit(self, raw_text: str) -> str:
+        """
+        Rewrites the commit message to be professional using LLM.
+        """
+        try:
+            prompt = self.prompt_manager.render("janitor_professionalize.j2", commit_text=raw_text)
+        except Exception as e:
+            logger.error(f"Failed to render prompt: {e}")
+            return raw_text
+
+        if not self.client:
+            logger.warning("No LLM client available for professionalize_commit.")
+            return raw_text
+
+        for attempt in range(3):
+            try:
+                response_text = self.client.complete(messages=[{"role": "user", "content": prompt}], max_tokens=200)
+
+                # Extract JSON object
+                start = response_text.find("{")
+                end = response_text.rfind("}")
+                if start != -1 and end != -1:
+                    json_str = response_text[start : end + 1]
+                    data = json.loads(json_str)
+                    if "commit_text" in data:
+                        return str(data["commit_text"])
+                else:
+                    # If no braces found, trigger retry
+                    raise json.JSONDecodeError("No JSON found", response_text, 0)
+
+            except json.JSONDecodeError:
+                logger.warning(f"JSON parse failed (Attempt {attempt + 1}/3). Retrying...")
+            except Exception as e:
+                logger.error(f"LLM generation failed: {e}")
+                break
+
+        return raw_text

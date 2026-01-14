@@ -84,3 +84,47 @@ def test_get_pr_checks_unexpected_format(gh: GitHubInterface) -> None:
         with pytest.raises(RuntimeError) as excinfo:
             gh.get_pr_checks()
         assert "Unexpected format from gh: expected list" in str(excinfo.value)
+
+
+def test_get_latest_run_log_success(gh: GitHubInterface) -> None:
+    """Test get_latest_run_log success."""
+    with patch.object(gh, "_run_command") as mock_run:
+        mock_run.side_effect = [
+            '[{"databaseId": 12345}]',  # run list output
+            "Log content...",  # run view output
+        ]
+
+        log = gh.get_latest_run_log("feature/test")
+
+        assert log == "Log content..."
+        assert mock_run.call_count == 2
+        mock_run.assert_any_call(["run", "list", "--branch", "feature/test", "--limit", "1", "--json", "databaseId"])
+        mock_run.assert_any_call(["run", "view", "12345", "--log"])
+
+
+def test_get_latest_run_log_no_runs(gh: GitHubInterface) -> None:
+    """Test get_latest_run_log when no runs found."""
+    with patch.object(gh, "_run_command", return_value="[]"):
+        log = gh.get_latest_run_log("feature/test")
+        assert log == "No workflow runs found."
+
+
+def test_get_latest_run_log_json_error(gh: GitHubInterface) -> None:
+    """Test get_latest_run_log handles json error."""
+    with patch.object(gh, "_run_command", return_value="invalid json"):
+        log = gh.get_latest_run_log("feature/test")
+        assert "Failed to parse run list" in log
+
+
+def test_get_latest_run_log_missing_id(gh: GitHubInterface) -> None:
+    """Test get_latest_run_log when run ID is missing/null."""
+    with patch.object(gh, "_run_command", return_value='[{"databaseId": null}]'):
+        log = gh.get_latest_run_log("feature/test")
+        assert "Run ID not found" in log
+
+
+def test_get_latest_run_log_generic_error(gh: GitHubInterface) -> None:
+    """Test get_latest_run_log handles generic exception."""
+    with patch.object(gh, "_run_command", side_effect=Exception("Generic Error")):
+        log = gh.get_latest_run_log("feature/test")
+        assert "Failed to fetch run logs" in log

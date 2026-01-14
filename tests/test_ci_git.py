@@ -39,21 +39,6 @@ def test_has_changes_error(git: GitInterface, mock_shell: MagicMock) -> None:
 def test_push_to_branch_success(git: GitInterface, mock_shell: MagicMock) -> None:
     """Test push_to_branch success when changes exist."""
     # Setup has_changes to return True (M file.txt)
-    # The sequence of calls:
-    # 1. rm -f .git/index.lock
-    # 2. git add .
-    # 3. git status --porcelain (inside has_changes)
-    # 4. git commit
-    # 5. git push
-
-    # We need to configure side_effect or return_value carefully if the mock is reused
-    # but here we can just ensure the return value for status call works.
-    # Since run is called multiple times, we can use side_effect to return different values based on command?
-    # Or simpler: just ensure that when called, it returns what we want.
-    # The other commands don't use the return value (except for check=True which raises if needed, but we mock run).
-
-    # Let's use side_effect to match commands if needed, but here a simple return value is okay
-    # because only `has_changes` checks the output. Other commands output is ignored.
     mock_shell.run.return_value = CommandResult(0, "M file.txt", "")
 
     result = git.push_to_branch("feature/test", "commit message")
@@ -97,3 +82,53 @@ def test_push_to_branch_failure(git: GitInterface, mock_shell: MagicMock) -> Non
         git.push_to_branch("feature/test", "msg")
 
     assert "Git push failed" in str(excinfo.value)
+
+
+def test_checkout_new_branch_success(git: GitInterface, mock_shell: MagicMock) -> None:
+    """Test checkout_new_branch success."""
+    git.checkout_new_branch("new-branch", "base")
+    mock_shell.run.assert_any_call(["git", "checkout", "base"], check=True)
+    mock_shell.run.assert_any_call(["git", "pull", "origin", "base"], check=True)
+    mock_shell.run.assert_any_call(["git", "checkout", "-b", "new-branch"], check=True)
+
+
+def test_checkout_new_branch_failure(git: GitInterface, mock_shell: MagicMock) -> None:
+    """Test checkout_new_branch failure."""
+    # Ensure checking out base fails to trigger first error path
+    # But side_effect applies to ALL calls.
+    mock_shell.run.side_effect = ShellError("error", CommandResult(1, "", "error"))
+    with pytest.raises(RuntimeError) as excinfo:
+        git.checkout_new_branch("new", "base")
+    assert "Failed to checkout new branch" in str(excinfo.value)
+
+
+def test_merge_squash_success(git: GitInterface, mock_shell: MagicMock) -> None:
+    """Test merge_squash success."""
+    git.merge_squash("feature", "develop", "msg")
+    mock_shell.run.assert_any_call(["git", "checkout", "develop"], check=True)
+    mock_shell.run.assert_any_call(["git", "merge", "--squash", "feature"], check=True)
+    mock_shell.run.assert_any_call(["git", "commit", "-m", "msg"], check=True)
+
+
+def test_merge_squash_failure(git: GitInterface, mock_shell: MagicMock) -> None:
+    """Test merge_squash failure."""
+    mock_shell.run.side_effect = ShellError("error", CommandResult(1, "", "error"))
+    with pytest.raises(RuntimeError) as excinfo:
+        git.merge_squash("feature", "develop", "msg")
+    assert "Failed to squash merge" in str(excinfo.value)
+
+
+def test_get_commit_log_success(git: GitInterface, mock_shell: MagicMock) -> None:
+    """Test get_commit_log success."""
+    mock_shell.run.return_value = CommandResult(0, "feat: a\nfix: b", "")
+    log = git.get_commit_log("base", "head")
+    assert log == "feat: a\nfix: b"
+    mock_shell.run.assert_called_with(["git", "log", "base..head", "--pretty=format:%s"], check=True)
+
+
+def test_get_commit_log_failure(git: GitInterface, mock_shell: MagicMock) -> None:
+    """Test get_commit_log failure."""
+    mock_shell.run.side_effect = ShellError("error", CommandResult(1, "", "error"))
+    with pytest.raises(RuntimeError) as excinfo:
+        git.get_commit_log("base", "head")
+    assert "Failed to get commit log" in str(excinfo.value)
