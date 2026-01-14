@@ -54,6 +54,7 @@ async def test_async_shell_executor_timeout() -> None:
             # kill is synchronous
             mock_process.kill.assert_called()
 
+
 @pytest.mark.asyncio
 async def test_async_shell_executor_timeout_check_true() -> None:
     executor = AsyncShellExecutor()
@@ -70,6 +71,7 @@ async def test_async_shell_executor_timeout_check_true() -> None:
             assert "Command timed out" in str(exc.value)
             mock_process.kill.assert_called()
 
+
 @pytest.mark.asyncio
 async def test_async_shell_executor_exception() -> None:
     executor = AsyncShellExecutor()
@@ -80,15 +82,17 @@ async def test_async_shell_executor_exception() -> None:
         assert result.exit_code == -1
         assert "Boom" in result.stderr
 
+
 @pytest.mark.asyncio
 async def test_async_shell_executor_exception_check_true() -> None:
     executor = AsyncShellExecutor()
 
     with patch("asyncio.create_subprocess_exec", side_effect=Exception("Boom")):
         with pytest.raises(ShellError) as exc:
-             await executor.run(["echo", "fail"], check=True)
+            await executor.run(["echo", "fail"], check=True)
         assert "Failed to execute command" in str(exc.value)
         assert "Boom" in str(exc.value)
+
 
 @pytest.mark.asyncio
 async def test_async_shell_executor_check_failure() -> None:
@@ -100,9 +104,10 @@ async def test_async_shell_executor_check_failure() -> None:
         mock_exec.return_value = mock_process
 
         with pytest.raises(ShellError) as exc:
-             await executor.run(["fail"], check=True)
+            await executor.run(["fail"], check=True)
         assert "Command failed" in str(exc.value)
         assert "error" in str(exc.value)
+
 
 @pytest.mark.asyncio
 async def test_async_shell_executor_check_failure_stdout() -> None:
@@ -114,9 +119,10 @@ async def test_async_shell_executor_check_failure_stdout() -> None:
         mock_exec.return_value = mock_process
 
         with pytest.raises(ShellError) as exc:
-             await executor.run(["fail"], check=True)
+            await executor.run(["fail"], check=True)
         assert "Command failed" in str(exc.value)
         assert "out" in str(exc.value)
+
 
 @pytest.mark.asyncio
 async def test_async_jules_agent_launch() -> None:
@@ -151,7 +157,7 @@ async def test_async_jules_agent_launch() -> None:
             # Mock SPEC.md existence
             with patch.object(Path, "exists", return_value=True):
                 with patch.object(Path, "read_text", return_value="Spec Content"):
-                     # Use AsyncMock for sleep
+                    # Use AsyncMock for sleep
                     with patch("asyncio.sleep", new_callable=AsyncMock):
                         sid = await agent.launch_session("Fix the bug")
 
@@ -168,6 +174,7 @@ async def test_async_jules_agent_launch() -> None:
             context_sent = any("Spec Content" in str(call[0][0]) for call in calls)
             assert context_sent
 
+
 @pytest.mark.asyncio
 async def test_async_jules_agent_launch_failure() -> None:
     agent = AsyncJulesAgent()
@@ -175,6 +182,7 @@ async def test_async_jules_agent_launch_failure() -> None:
         with patch("asyncio.create_subprocess_exec", side_effect=Exception("Launch failed")):
             sid = await agent.launch_session("task")
             assert sid is None
+
 
 @pytest.mark.asyncio
 async def test_async_jules_agent_launch_stdin_error() -> None:
@@ -185,7 +193,7 @@ async def test_async_jules_agent_launch_stdin_error() -> None:
             mock_process.stdin = MagicMock()
             mock_process.stdin.write.side_effect = Exception("Write failed")
             mock_process.stdout = MagicMock()
-            mock_process.stdout.read = AsyncMock(return_value=b"") # EOF immediately
+            mock_process.stdout.read = AsyncMock(return_value=b"")  # EOF immediately
             mock_process.returncode = 0
             mock_process.wait = AsyncMock()
             mock_exec.return_value = mock_process
@@ -196,6 +204,7 @@ async def test_async_jules_agent_launch_stdin_error() -> None:
             # Stdin write was attempted
             mock_process.stdin.write.assert_called()
 
+
 @pytest.mark.asyncio
 async def test_async_jules_agent_launch_no_stdout() -> None:
     agent = AsyncJulesAgent()
@@ -203,7 +212,7 @@ async def test_async_jules_agent_launch_no_stdout() -> None:
         with patch("asyncio.create_subprocess_exec", new_callable=AsyncMock) as mock_exec:
             mock_process = MagicMock()
             mock_process.stdin = MagicMock()
-            mock_process.stdout = None # No stdout
+            mock_process.stdout = None  # No stdout
             mock_process.returncode = 0
             mock_process.wait = AsyncMock()
             mock_exec.return_value = mock_process
@@ -211,6 +220,7 @@ async def test_async_jules_agent_launch_no_stdout() -> None:
             with patch("asyncio.sleep", new_callable=AsyncMock):
                 sid = await agent.launch_session("task")
             assert sid is None
+
 
 @pytest.mark.asyncio
 async def test_async_jules_agent_launch_cleanup_no_timeout() -> None:
@@ -221,10 +231,10 @@ async def test_async_jules_agent_launch_cleanup_no_timeout() -> None:
             mock_process = MagicMock()
             mock_process.stdin = MagicMock()
             mock_process.stdout = MagicMock()
-            mock_process.stdout.read = AsyncMock(return_value=b"") # EOF
-            mock_process.returncode = None # Still running
+            mock_process.stdout.read = AsyncMock(return_value=b"")  # EOF
+            mock_process.returncode = None  # Still running
             mock_process.terminate = MagicMock()
-            mock_process.wait = AsyncMock() # Wait succeeds
+            mock_process.wait = AsyncMock()  # Wait succeeds
             mock_exec.return_value = mock_process
 
             with patch("asyncio.sleep", new_callable=AsyncMock):
@@ -232,6 +242,7 @@ async def test_async_jules_agent_launch_cleanup_no_timeout() -> None:
 
             mock_process.terminate.assert_called()
             mock_process.wait.assert_called()
+
 
 @pytest.mark.asyncio
 async def test_async_jules_agent_cleanup_process() -> None:
@@ -270,6 +281,7 @@ async def test_async_jules_agent_cleanup_process() -> None:
     await agent._cleanup_process(mock_process)
     mock_process.terminate.assert_not_called()
 
+
 @pytest.mark.asyncio
 async def test_async_jules_agent_launch_loop_timeout() -> None:
     agent = AsyncJulesAgent()
@@ -290,7 +302,7 @@ async def test_async_jules_agent_launch_loop_timeout() -> None:
 
             # Mock loop time to simulate timeout
             mock_loop = MagicMock()
-            mock_loop.time.side_effect = [0] + [10]*50 + [2000]
+            mock_loop.time.side_effect = [0] + [10] * 50 + [2000]
 
             with patch("asyncio.get_running_loop", return_value=mock_loop):
                 with patch("asyncio.sleep", new_callable=AsyncMock):
@@ -299,6 +311,7 @@ async def test_async_jules_agent_launch_loop_timeout() -> None:
                         mock_cleanup.assert_awaited_once_with(mock_process)
 
             assert sid is None
+
 
 @pytest.mark.asyncio
 async def test_async_jules_agent_wait() -> None:
@@ -314,6 +327,7 @@ async def test_async_jules_agent_wait() -> None:
         result = await agent.wait_for_completion("12345")
         assert result is True
         assert mock_shell.run.call_count == 2
+
 
 @pytest.mark.asyncio
 async def test_async_jules_agent_wait_failures() -> None:
@@ -339,7 +353,7 @@ async def test_async_jules_agent_wait_failures() -> None:
     mock_shell.run.side_effect = None
     mock_shell.run.return_value = CommandResult(0, "123 running", "")
     mock_loop = MagicMock()
-    mock_loop.time.side_effect = [0, 2000] # Trigger timeout
+    mock_loop.time.side_effect = [0, 2000]  # Trigger timeout
     with patch("asyncio.get_running_loop", return_value=mock_loop):
         with patch("asyncio.sleep", new_callable=AsyncMock):
             assert await agent.wait_for_completion("123") is False
@@ -372,6 +386,7 @@ async def test_async_jules_agent_teleport() -> None:
                                 mock_process.communicate.assert_awaited_with(input=b"y\n")
                                 mock_copytree.assert_called()
 
+
 @pytest.mark.asyncio
 async def test_async_jules_agent_teleport_failures() -> None:
     agent = AsyncJulesAgent()
@@ -385,7 +400,7 @@ async def test_async_jules_agent_teleport_failures() -> None:
         mock_exec.return_value = mock_process
         with patch.object(Path, "mkdir"):
             with patch("shutil.rmtree"):
-                 assert await agent.teleport_and_sync("123", target) is False
+                assert await agent.teleport_and_sync("123", target) is False
 
     # Case 2: Sync failed (no folder)
     with patch("asyncio.create_subprocess_exec", new_callable=AsyncMock) as mock_exec:
@@ -395,14 +410,15 @@ async def test_async_jules_agent_teleport_failures() -> None:
         mock_exec.return_value = mock_process
         with patch.object(Path, "mkdir"):
             with patch.object(Path, "glob", return_value=[]):
-                 with patch("shutil.rmtree"):
-                     assert await agent.teleport_and_sync("123", target) is False
+                with patch("shutil.rmtree"):
+                    assert await agent.teleport_and_sync("123", target) is False
 
     # Case 3: Exception
     with patch("asyncio.create_subprocess_exec", side_effect=Exception("Fail")):
-         with patch.object(Path, "mkdir"):
-             with patch("shutil.rmtree"):
+        with patch.object(Path, "mkdir"):
+            with patch("shutil.rmtree"):
                 assert await agent.teleport_and_sync("123", target) is False
+
 
 @pytest.mark.asyncio
 async def test_async_openai_adapter() -> None:
