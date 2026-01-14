@@ -243,17 +243,17 @@ def test_launch_session_os_error(
     mock_select.return_value = ([1], [], [])
     mock_read.side_effect = OSError("Read failed")
 
-    with patch("time.time", side_effect=[0, 1, 1, 5, 5, 5, 5]) as mock_time:
+    with patch("time.time", side_effect=[0, 1, 1, 5, 5, 5, 5]):
         with patch("time.sleep", return_value=None):
-             # Just trigger timeout eventually
-             mock_get_sids.side_effect = [{"100"}, {"100"}, {"100"}]
-             # Force break by simulating timeout logic
-             # Actually, simpler: let it run one loop and then fail or succeed
-             # We want to cover the exception catch block.
-             # We can make get_active_sids succeed on second call to exit loop.
-             mock_get_sids.side_effect = [{"100"}, {"100", "101"}]
+            # Just trigger timeout eventually
+            mock_get_sids.side_effect = [{"100"}, {"100"}, {"100"}]
+            # Force break by simulating timeout logic
+            # Actually, simpler: let it run one loop and then fail or succeed
+            # We want to cover the exception catch block.
+            # We can make get_active_sids succeed on second call to exit loop.
+            mock_get_sids.side_effect = [{"100"}, {"100", "101"}]
 
-             sid = agent.launch_session("Test Task")
+            sid = agent.launch_session("Test Task")
 
     # Assert logic continued and didn't crash
     assert sid == "101"
