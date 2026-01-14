@@ -206,7 +206,7 @@ class Orchestrator:
                     raw_log = self.git.get_commit_log(agg_branch, iter_branch)
 
                     # Sans-I/O Refactor: Professionalize Commit
-                    clean_msg = raw_log # Default fallback
+                    clean_msg = raw_log  # Default fallback
                     if self.janitor and self.llm_client:
                         try:
                             req = self.janitor.build_professionalize_request(raw_log)
@@ -215,7 +215,9 @@ class Orchestrator:
                             # Replicating simple retry loop here:
                             for _ in range(3):
                                 try:
-                                    resp_text = self.llm_client.complete(messages=req.messages, max_tokens=req.max_tokens)
+                                    resp_text = self.llm_client.complete(
+                                        messages=req.messages, max_tokens=req.max_tokens
+                                    )
                                     parsed = self.janitor.parse_professionalize_response(raw_log, resp_text)
                                     # If parsed is diff from sanitized original (meaning success?),
                                     # actually parse_professionalize_response returns sanitized original on failure.
