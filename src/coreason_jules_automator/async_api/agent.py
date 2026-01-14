@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 from coreason_jules_automator.config import get_settings
-from coreason_jules_automator.protocols.jules import JulesProtocol, SendStdin, SignalComplete, SignalSessionId
+from coreason_jules_automator.protocols.jules import JulesProtocol, SendStdin, SignalSessionId
 from coreason_jules_automator.utils.logger import logger
 
 from .shell import AsyncShellExecutor
@@ -87,21 +87,13 @@ class AsyncJulesAgent:
                         detected_sid = action.sid
                         logger.info(f"✨ Captured SID: {detected_sid}")
                         break
-                    elif isinstance(action, SignalComplete):
-                        logger.info("✅ Mission Complete Signal Detected.")
-                        pass
 
                 if detected_sid:
                     break
 
             # Cleanup
             await asyncio.sleep(5)
-            if process.returncode is None:
-                process.terminate()
-                try:
-                    await asyncio.wait_for(process.wait(), timeout=5.0)
-                except asyncio.TimeoutError:
-                    process.kill()
+            await self._cleanup_process(process)
 
             return detected_sid
 
@@ -110,6 +102,15 @@ class AsyncJulesAgent:
             if process.returncode is None:
                 process.kill()
             return None
+
+    async def _cleanup_process(self, process: asyncio.subprocess.Process) -> None:
+        """Terminates the process if it's still running."""
+        if process.returncode is None:
+            process.terminate()
+            try:
+                await asyncio.wait_for(process.wait(), timeout=5.0)
+            except asyncio.TimeoutError:
+                process.kill()
 
     async def wait_for_completion(self, sid: str) -> bool:
         logger.info(f"Monitoring status for SID: {sid}")
