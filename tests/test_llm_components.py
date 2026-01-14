@@ -7,6 +7,7 @@ from coreason_jules_automator.config import get_settings
 from coreason_jules_automator.llm.factory import LLMFactory
 from coreason_jules_automator.llm.janitor import JanitorService
 from coreason_jules_automator.llm.model_manager import ModelManager
+from coreason_jules_automator.llm.types import LLMRequest
 
 
 @pytest.fixture
@@ -81,29 +82,25 @@ def test_model_manager_download_failure() -> None:
 
 def test_janitor_sanitize_commit() -> None:
     """Test commit message sanitization."""
-    janitor = JanitorService(llm_client=None)
+    janitor = JanitorService()
     raw = "feat: add feature\n\nCo-authored-by: bot\nSigned-off-by: me"
     clean = janitor.sanitize_commit(raw)
     assert clean == "feat: add feature"
 
 
-def test_janitor_summarize_logs_success() -> None:
-    """Test summarize_logs with a valid LLMClient."""
-    mock_client = MagicMock()
-    # Mock the complete method
-    mock_client.complete.return_value = "Summary"
+def test_janitor_build_summarize_request() -> None:
+    """Test build_summarize_request returns correct request."""
+    # This test replaces the old test_janitor_summarize_logs_success which tested I/O
+    janitor = JanitorService()
+    # We mock PromptManager implicitly or just check result if default is used
+    # But init uses default.
+    # To control prompt output, we can inject mock prompt manager if needed,
+    # but let's just rely on the real one's behavior or mocked one.
 
-    janitor = JanitorService(llm_client=mock_client)
-    summary = janitor.summarize_logs("long log...")
-    assert summary == "Summary"
-    mock_client.complete.assert_called_once()
+    mock_pm = MagicMock()
+    mock_pm.render.return_value = "Rendered Prompt"
+    janitor = JanitorService(prompt_manager=mock_pm)
 
-
-def test_janitor_summarize_logs_failure() -> None:
-    """Test summarize_logs failure handling."""
-    mock_client = MagicMock()
-    mock_client.complete.side_effect = Exception("API Error")
-
-    janitor = JanitorService(llm_client=mock_client)
-    summary = janitor.summarize_logs("log")
-    assert summary == "Log summarization failed. Please check the logs directly."
+    req = janitor.build_summarize_request("long log...")
+    assert isinstance(req, LLMRequest)
+    assert req.messages == [{"role": "user", "content": "Rendered Prompt"}]

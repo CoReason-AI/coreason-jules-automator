@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional
 from coreason_jules_automator.ci.git import GitInterface
 from coreason_jules_automator.ci.github import GitHubInterface
 from coreason_jules_automator.events import AutomationEvent, EventEmitter, EventType
+from coreason_jules_automator.llm.adapters import LLMClient
 from coreason_jules_automator.llm.janitor import JanitorService
 from coreason_jules_automator.strategies.base import DefenseResult, DefenseStrategy
 from coreason_jules_automator.utils.logger import logger
@@ -20,12 +21,14 @@ class RemoteDefenseStrategy(DefenseStrategy):
         github: GitHubInterface,
         janitor: JanitorService,
         git: GitInterface,
+        llm_client: Optional[LLMClient] = None,
         event_emitter: Optional[EventEmitter] = None,
     ):
         super().__init__(event_emitter)
         self.github = github
         self.janitor = janitor
         self.git = git
+        self.llm_client = llm_client
 
     def execute(self, context: Dict[str, Any]) -> DefenseResult:
         branch_name = context.get("branch_name")
@@ -154,8 +157,19 @@ class RemoteDefenseStrategy(DefenseStrategy):
             log_snippet = (
                 f"Check {failed_check.get('name', 'unknown')} failed. URL: {failed_check.get('url', 'unknown')}"
             )
-            summary = self.janitor.summarize_logs(log_snippet)
-            logger.info(f"Janitor Summary: {summary}")
-            return summary
+
+            # Sans-I/O: Build Request -> Execute -> Return
+            if not self.llm_client:
+                logger.warning("No LLM client available for log summarization.")
+                return f"CI checks failed. {log_snippet}"
+
+            try:
+                req = self.janitor.build_summarize_request(log_snippet)
+                summary = self.llm_client.complete(messages=req.messages, max_tokens=req.max_tokens)
+                logger.info(f"Janitor Summary: {summary}")
+                return summary
+            except Exception as e:
+                logger.error(f"Janitor summarization failed: {e}")
+                return "Log summarization failed. Please check the logs directly."
 
         return "CI checks failed but could not identify specific check failure."

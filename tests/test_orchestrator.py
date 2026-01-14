@@ -166,6 +166,7 @@ def test_run_campaign_success() -> None:
     mock_emitter = MagicMock()
     mock_git = MagicMock(spec=GitInterface)
     mock_janitor = MagicMock(spec=JanitorService)
+    mock_client = MagicMock()
 
     orchestrator = Orchestrator(
         agent=mock_agent,
@@ -173,12 +174,17 @@ def test_run_campaign_success() -> None:
         event_emitter=mock_emitter,
         git_interface=mock_git,
         janitor_service=mock_janitor,
+        llm_client=mock_client,
     )
 
     with patch.object(orchestrator, "run_cycle") as mock_run_cycle:
         mock_run_cycle.return_value = (True, "Success")
         mock_git.get_commit_log.return_value = "raw log"
-        mock_janitor.professionalize_commit.return_value = "clean message"
+        # Setup Janitor mocks for Sans-I/O
+        mock_req = MagicMock()
+        mock_janitor.build_professionalize_request.return_value = mock_req
+        mock_client.complete.return_value = '{"commit_text": "clean message"}'
+        mock_janitor.parse_professionalize_response.return_value = "clean message"
 
         orchestrator.run_campaign("task", "base", iterations=2)
 
@@ -188,6 +194,10 @@ def test_run_campaign_success() -> None:
         assert mock_git.merge_squash.call_count == 2
         # Verify cleanup
         assert mock_git.delete_branch.call_count == 2
+        # Verify LLM interaction
+        assert mock_janitor.build_professionalize_request.called
+        assert mock_client.complete.called
+        assert mock_janitor.parse_professionalize_response.called
 
 
 def test_run_campaign_completion() -> None:
@@ -199,6 +209,7 @@ def test_run_campaign_completion() -> None:
     mock_emitter = MagicMock()
     mock_git = MagicMock(spec=GitInterface)
     mock_janitor = MagicMock(spec=JanitorService)
+    mock_client = MagicMock()
 
     orchestrator = Orchestrator(
         agent=mock_agent,
@@ -206,6 +217,7 @@ def test_run_campaign_completion() -> None:
         event_emitter=mock_emitter,
         git_interface=mock_git,
         janitor_service=mock_janitor,
+        llm_client=mock_client,
     )
 
     call_counter = 0
@@ -219,7 +231,9 @@ def test_run_campaign_completion() -> None:
 
     with patch.object(orchestrator, "run_cycle", side_effect=side_effect) as mock_run_cycle:
         mock_git.get_commit_log.return_value = "raw log"
-        mock_janitor.professionalize_commit.return_value = "clean message"
+        mock_janitor.build_professionalize_request.return_value = MagicMock()
+        mock_janitor.parse_professionalize_response.return_value = "clean"
+        mock_client.complete.return_value = "{}"
 
         orchestrator.run_campaign("task", iterations=10)
 
@@ -280,6 +294,7 @@ def test_run_campaign_iteration_error() -> None:
     mock_emitter = MagicMock()
     mock_git = MagicMock(spec=GitInterface)
     mock_janitor = MagicMock(spec=JanitorService)
+    mock_client = MagicMock()
 
     orchestrator = Orchestrator(
         agent=mock_agent,
@@ -287,13 +302,16 @@ def test_run_campaign_iteration_error() -> None:
         event_emitter=mock_emitter,
         git_interface=mock_git,
         janitor_service=mock_janitor,
+        llm_client=mock_client,
     )
 
     with patch.object(orchestrator, "run_cycle") as mock_run_cycle:
         # First iteration raises exception, Second succeeds (to check continuation)
         mock_run_cycle.side_effect = [Exception("Loop Error"), (True, "Success")]
         mock_git.get_commit_log.return_value = "log"
-        mock_janitor.professionalize_commit.return_value = "msg"
+        mock_janitor.build_professionalize_request.return_value = MagicMock()
+        mock_client.complete.return_value = "{}"
+        mock_janitor.parse_professionalize_response.return_value = "clean"
 
         orchestrator.run_campaign("task", iterations=2)
 
@@ -308,6 +326,7 @@ def test_run_campaign_failure_continue() -> None:
     mock_emitter = MagicMock()
     mock_git = MagicMock(spec=GitInterface)
     mock_janitor = MagicMock(spec=JanitorService)
+    mock_client = MagicMock()
 
     orchestrator = Orchestrator(
         agent=mock_agent,
@@ -315,13 +334,16 @@ def test_run_campaign_failure_continue() -> None:
         event_emitter=mock_emitter,
         git_interface=mock_git,
         janitor_service=mock_janitor,
+        llm_client=mock_client,
     )
 
     with patch.object(orchestrator, "run_cycle") as mock_run_cycle:
         # First fails, Second succeeds
         mock_run_cycle.side_effect = [(False, "Cycle Failed"), (True, "Success")]
         mock_git.get_commit_log.return_value = "log"
-        mock_janitor.professionalize_commit.return_value = "msg"
+        mock_janitor.build_professionalize_request.return_value = MagicMock()
+        mock_client.complete.return_value = "{}"
+        mock_janitor.parse_professionalize_response.return_value = "clean"
 
         orchestrator.run_campaign("task", iterations=2)
 
@@ -379,6 +401,7 @@ def test_run_campaign_infinite() -> None:
     mock_emitter = MagicMock()
     mock_git = MagicMock(spec=GitInterface)
     mock_janitor = MagicMock(spec=JanitorService)
+    mock_client = MagicMock()
 
     orchestrator = Orchestrator(
         agent=mock_agent,
@@ -386,11 +409,14 @@ def test_run_campaign_infinite() -> None:
         event_emitter=mock_emitter,
         git_interface=mock_git,
         janitor_service=mock_janitor,
+        llm_client=mock_client,
     )
 
     with patch.object(orchestrator, "run_cycle") as mock_run_cycle:
         mock_git.get_commit_log.return_value = "log"
-        mock_janitor.professionalize_commit.return_value = "msg"
+        mock_janitor.build_professionalize_request.return_value = MagicMock()
+        mock_client.complete.return_value = "{}"
+        mock_janitor.parse_professionalize_response.return_value = "clean"
 
         call_counter = 0
 
@@ -408,3 +434,112 @@ def test_run_campaign_infinite() -> None:
 
         # It should run 3 times and stop because mission_complete became true
         assert mock_run_cycle.call_count == 3
+
+
+def test_run_campaign_professionalize_exception() -> None:
+    """Test fallback when professionalization fails."""
+    mock_agent = MagicMock(spec=JulesAgent)
+    mock_agent.mission_complete = False  # Default
+    mock_strategy = MockStrategy(success=True)
+    mock_emitter = MagicMock()
+    mock_git = MagicMock(spec=GitInterface)
+    mock_janitor = MagicMock(spec=JanitorService)
+    mock_client = MagicMock()
+
+    orchestrator = Orchestrator(
+        agent=mock_agent,
+        strategies=[mock_strategy],
+        event_emitter=mock_emitter,
+        git_interface=mock_git,
+        janitor_service=mock_janitor,
+        llm_client=mock_client,
+    )
+
+    # Patch random.choices to have predictable ID for branch naming
+    with patch("random.choices", return_value=["1", "2", "3"]):
+        # run_id will be "123"
+        # agg_branch: vibe_run_123
+        # iter_branch: vibe_run_123_001
+
+        with patch.object(orchestrator, "run_cycle") as mock_run_cycle:
+            mock_run_cycle.return_value = (True, "Success")
+            mock_git.get_commit_log.return_value = "raw log"
+
+            # Trigger exception in professionalize request
+            mock_janitor.build_professionalize_request.side_effect = Exception("Build Error")
+
+            # Mock sanitize so we can verify fallback
+            mock_janitor.sanitize_commit.return_value = "sanitized fallback"
+
+            orchestrator.run_campaign("task", iterations=1)
+
+            mock_git.merge_squash.assert_called_with("vibe_run_123_001", "vibe_run_123", "raw log")
+
+
+def test_run_campaign_professionalize_no_client() -> None:
+    """Test professionalization logic when no client is present."""
+    mock_agent = MagicMock(spec=JulesAgent)
+    mock_agent.mission_complete = False
+    mock_strategy = MockStrategy(success=True)
+    mock_emitter = MagicMock()
+    mock_git = MagicMock(spec=GitInterface)
+    mock_janitor = MagicMock(spec=JanitorService)
+
+    # Initialize without llm_client
+    orchestrator = Orchestrator(
+        agent=mock_agent,
+        strategies=[mock_strategy],
+        event_emitter=mock_emitter,
+        git_interface=mock_git,
+        janitor_service=mock_janitor,
+        llm_client=None,
+    )
+
+    with patch("random.choices", return_value=["1", "2", "3"]):
+        with patch.object(orchestrator, "run_cycle") as mock_run_cycle:
+            mock_run_cycle.return_value = (True, "Success")
+            mock_git.get_commit_log.return_value = "raw log"
+            mock_janitor.sanitize_commit.return_value = "sanitized"
+
+            orchestrator.run_campaign("task", iterations=1)
+
+            # verify sanitize_commit was called and used for merge
+            mock_janitor.sanitize_commit.assert_called_with("raw log")
+            mock_git.merge_squash.assert_called_with("vibe_run_123_001", "vibe_run_123", "sanitized")
+
+
+def test_run_campaign_retry_loop_fail() -> None:
+    """Test retry loop exhaustion in professionalize commit."""
+    mock_agent = MagicMock(spec=JulesAgent)
+    mock_agent.mission_complete = False
+    mock_strategy = MockStrategy(success=True)
+    mock_emitter = MagicMock()
+    mock_git = MagicMock(spec=GitInterface)
+    mock_janitor = MagicMock(spec=JanitorService)
+    mock_client = MagicMock()
+
+    orchestrator = Orchestrator(
+        agent=mock_agent,
+        strategies=[mock_strategy],
+        event_emitter=mock_emitter,
+        git_interface=mock_git,
+        janitor_service=mock_janitor,
+        llm_client=mock_client,
+    )
+
+    with patch("random.choices", return_value=["1", "2", "3"]):
+        with patch.object(orchestrator, "run_cycle") as mock_run_cycle:
+            mock_run_cycle.return_value = (True, "Success")
+            mock_git.get_commit_log.return_value = "raw log"
+
+            mock_janitor.build_professionalize_request.return_value = MagicMock()
+
+            # Client execution fails every time
+            mock_client.complete.side_effect = Exception("Exec Error")
+
+            orchestrator.run_campaign("task", iterations=1)
+
+            # Should fall back to raw log (initial value of clean_msg)
+            mock_git.merge_squash.assert_called_with("vibe_run_123_001", "vibe_run_123", "raw log")
+            # Verify called 3 times (loop range 3)
+            assert mock_client.complete.call_count == 3

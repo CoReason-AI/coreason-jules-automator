@@ -27,10 +27,25 @@ def mock_emitter() -> MagicMock:
 
 
 @pytest.fixture
+def mock_client() -> MagicMock:
+    return MagicMock()
+
+
+@pytest.fixture
 def strategy(
-    mock_github: MagicMock, mock_janitor: MagicMock, mock_git: MagicMock, mock_emitter: MagicMock
+    mock_github: MagicMock,
+    mock_janitor: MagicMock,
+    mock_git: MagicMock,
+    mock_emitter: MagicMock,
+    mock_client: MagicMock,
 ) -> RemoteDefenseStrategy:
-    return RemoteDefenseStrategy(github=mock_github, janitor=mock_janitor, git=mock_git, event_emitter=mock_emitter)
+    return RemoteDefenseStrategy(
+        github=mock_github,
+        janitor=mock_janitor,
+        git=mock_git,
+        event_emitter=mock_emitter,
+        llm_client=mock_client,
+    )
 
 
 def test_execute_missing_branch(strategy: RemoteDefenseStrategy) -> None:
@@ -109,7 +124,11 @@ def test_execute_success(
 
 
 def test_execute_check_failure(
-    strategy: RemoteDefenseStrategy, mock_github: MagicMock, mock_janitor: MagicMock, mock_git: MagicMock
+    strategy: RemoteDefenseStrategy,
+    mock_github: MagicMock,
+    mock_janitor: MagicMock,
+    mock_git: MagicMock,
+    mock_client: MagicMock,
 ) -> None:
     """Test execution when a check fails."""
     mock_git.push_to_branch.return_value = True
@@ -117,14 +136,19 @@ def test_execute_check_failure(
     mock_github.get_pr_checks.return_value = [
         {"name": "test", "status": "completed", "conclusion": "failure", "url": "http://logs"}
     ]
-    mock_janitor.summarize_logs.return_value = "Logs suggest failure X"
+
+    # Sans-I/O Refactor updates
+    mock_req = MagicMock()
+    mock_janitor.build_summarize_request.return_value = mock_req
+    mock_client.complete.return_value = "Logs suggest failure X"
 
     with patch("time.sleep"):
         result = strategy.execute({"branch_name": "feature/test"})
 
     assert result.success is False
     assert result.message == "Logs suggest failure X"
-    mock_janitor.summarize_logs.assert_called_once()
+    mock_janitor.build_summarize_request.assert_called_once()
+    mock_client.complete.assert_called_once()
 
 
 def test_execute_timeout(
@@ -164,3 +188,32 @@ def test_handle_ci_failure_fallback(strategy: RemoteDefenseStrategy) -> None:
     checks = [{"name": "test", "status": "completed", "conclusion": "success"}]
     summary = strategy._handle_ci_failure(checks)
     assert summary == "CI checks failed but could not identify specific check failure."
+
+
+def test_handle_ci_failure_exception(
+    strategy: RemoteDefenseStrategy, mock_client: MagicMock, mock_janitor: MagicMock
+) -> None:
+    """Test fallback message when summarization raises an exception."""
+    # Mock finding a failed check
+    checks = [{"name": "test", "status": "completed", "conclusion": "failure"}]
+
+    # Trigger exception during summarization
+    mock_janitor.build_summarize_request.side_effect = Exception("Summarize Error")
+
+    summary = strategy._handle_ci_failure(checks)
+    assert summary == "Log summarization failed. Please check the logs directly."
+
+
+def test_handle_ci_failure_no_client(
+    mock_github: MagicMock, mock_janitor: MagicMock, mock_git: MagicMock, mock_emitter: MagicMock
+) -> None:
+    """Test fallback message when no LLM client is available."""
+    # Initialize strategy without LLM client
+    strategy_no_client = RemoteDefenseStrategy(
+        github=mock_github, janitor=mock_janitor, git=mock_git, event_emitter=mock_emitter, llm_client=None
+    )
+
+    checks = [{"name": "test", "status": "completed", "conclusion": "failure", "url": "http://logs"}]
+    summary = strategy_no_client._handle_ci_failure(checks)
+    assert "CI checks failed" in summary
+    assert "http://logs" in summary

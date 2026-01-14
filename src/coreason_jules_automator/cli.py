@@ -61,11 +61,15 @@ def run(
         settings = get_settings()
         llm_client = LLMFactory().get_client(settings)
         prompt_manager = PromptManager()
-        janitor = JanitorService(llm_client=llm_client, prompt_manager=prompt_manager)
+        janitor = JanitorService(prompt_manager=prompt_manager)
 
         local_strategy = LocalDefenseStrategy(gemini=gemini, event_emitter=composite_emitter)
         remote_strategy = RemoteDefenseStrategy(
-            github=github, janitor=janitor, git=git, event_emitter=composite_emitter
+            github=github,
+            janitor=janitor,
+            git=git,
+            llm_client=llm_client,
+            event_emitter=composite_emitter,
         )
 
         agent = JulesAgent()
@@ -76,6 +80,7 @@ def run(
             event_emitter=composite_emitter,
             git_interface=git,
             janitor_service=janitor,
+            llm_client=llm_client,
         )
 
         success, _ = orchestrator.run_cycle(task, branch)
@@ -135,11 +140,15 @@ def campaign(
         settings = get_settings()
         llm_client = LLMFactory().get_client(settings)
         prompt_manager = PromptManager()
-        janitor = JanitorService(llm_client=llm_client, prompt_manager=prompt_manager)
+        janitor = JanitorService(prompt_manager=prompt_manager)
 
         local_strategy = LocalDefenseStrategy(gemini=gemini, event_emitter=composite_emitter)
         remote_strategy = RemoteDefenseStrategy(
-            github=github, janitor=janitor, git=git, event_emitter=composite_emitter
+            github=github,
+            janitor=janitor,
+            git=git,
+            llm_client=llm_client,
+            event_emitter=composite_emitter,
         )
 
         agent = JulesAgent()
@@ -150,6 +159,7 @@ def campaign(
             event_emitter=composite_emitter,
             git_interface=git,
             janitor_service=janitor,
+            llm_client=llm_client,
         )
 
         orchestrator.run_campaign(task, base, count)
