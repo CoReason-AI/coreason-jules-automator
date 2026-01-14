@@ -8,6 +8,8 @@
 #
 # Source Code: https://github.com/CoReason-AI/coreason_jules_automator
 
+import os
+import select
 import shutil
 import subprocess
 import time
@@ -21,15 +23,14 @@ from coreason_jules_automator.utils.logger import logger
 class JulesAgent:
     """
     Wrapper around the Jules agent that implements the Remote Session + Teleport workflow.
+    Includes interactive monitoring to auto-reply to agent queries.
     """
 
     def __init__(self, executable: str = "jules") -> None:
         self.executable = executable
 
     def _get_active_sids(self) -> Set[str]:
-        """
-        Runs `jules remote list --session` and returns a set of active numeric SIDs.
-        """
+        """Runs `jules remote list --session` and returns active SIDs."""
         try:
             result = subprocess.run(
                 [self.executable, "remote", "list", "--session"],
@@ -49,15 +50,13 @@ class JulesAgent:
 
     def launch_session(self, task: str) -> Optional[str]:
         """
-        Launches a new Jules session in bootstrap mode and captures the new SID.
+        Launches a new Jules session and handles interactive prompts.
         """
         settings = get_settings()
-
-        # 1. Snapshot existing sessions
         pre_sids = self._get_active_sids()
         logger.info(f"Launching Jules session for repo: {settings.repo_name}...")
 
-        # 2. Prepare prompt input
+        # Prepare prompt
         context = ""
         spec_path = Path("SPEC.md")
         if spec_path.exists():
@@ -65,46 +64,87 @@ class JulesAgent:
 
         full_prompt = context + task
 
-        # 3. Durable Launch
         try:
+            # Launch process with pipes for interaction
+            # We use text=False (binary) to allow bufsize=0 and direct unbuffered reading/writing
             process = subprocess.Popen(
                 [self.executable, "new", "--repo", settings.repo_name],
                 stdin=subprocess.PIPE,
-                stdout=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                text=True,
+                text=False,
+                bufsize=0,  # Unbuffered
             )
-            # Send prompt to stdin
-            if process.stdin:
-                process.stdin.write(full_prompt)
-                process.stdin.close()
 
-            logger.info("Jules process launched. Polling for SID...")
+            if process.stdin is None or process.stdout is None:  # pragma: no cover
+                logger.error("Failed to initialize process pipes.")
+                process.kill()
+                return None
 
-            # 4. Polling for SID registry
-            for attempt in range(1, 21):
-                # Check if process died prematurely
-                if process.poll() is not None:
-                    _, stderr = process.communicate()
-                    logger.error(f"❌ Jules process exited early (code {process.returncode}). Stderr: {stderr}")
-                    return None
+            # Send initial prompt
+            logger.debug("Sending initial task prompt...")
+            process.stdin.write(f"{full_prompt}\n".encode("utf-8"))
+            process.stdin.flush()
 
-                post_sids = self._get_active_sids()
-                new_sids = post_sids - pre_sids
+            # Monitoring Loop (Wait for SID or Exit)
+            # We monitor stdout for questions or completion signals
+            start_time = time.time()
+            detected_sid = None
 
-                if new_sids:
-                    sid = list(new_sids)[0]
-                    logger.info(f"✨ Captured SID: {sid}")
-                    return sid
+            logger.info("Monitoring Jules output for queries...")
 
-                logger.debug(f"Discovery Attempt {attempt}/20: Waiting for cloud sync...")
-                time.sleep(4)
+            while process.poll() is None:
+                # Check for timeout (e.g. 60 seconds to launch)
+                if time.time() - start_time > 60:
+                    break
 
-            logger.error("❌ Jules failed to register a session within timeout.")
-            process.kill()
-            _, stderr = process.communicate()
-            if stderr:
-                logger.error(f"Timeout stderr: {stderr}")
+                # Non-blocking read of stdout
+                # MyPy check: process.stdout is asserted not None above
+                assert process.stdout is not None
+                reads = [process.stdout.fileno()]
+                ret = select.select(reads, [], [], 1.0)
+
+                if ret[0]:
+                    try:
+                        chunk = os.read(process.stdout.fileno(), 1024).decode("utf-8", errors="replace")
+                        if chunk:
+                            logger.debug(f"[Jules]: {chunk.strip()}")
+
+                            # 1. Auto-Reply Logic
+                            # Detect common CLI prompts like "Continue? [y/N]" or "Input required:"
+                            if "?" in chunk or "input" in chunk.lower() or "action" in chunk.lower():
+                                logger.info(f"🤖 Auto-replying to query: {chunk.strip()}")
+                                if process.stdin:
+                                    process.stdin.write(
+                                        "Use your best judgment and make autonomous decisions.\n".encode("utf-8")
+                                    )
+                                    process.stdin.flush()
+                    except OSError as e:
+                        logger.error(f"Error reading stdout: {e}")
+
+                # 2. Check for SID in background
+                # We poll less frequently to avoid spamming
+                if int(time.time()) % 5 == 0:
+                    post_sids = self._get_active_sids()
+                    new_sids = post_sids - pre_sids
+                    if new_sids:
+                        detected_sid = list(new_sids)[0]
+                        logger.info(f"✨ Captured SID: {detected_sid}")
+                        break
+
+            # Cleanup
+            # If we got the SID, we assume success.
+            if detected_sid:
+                # We don't kill the process immediately as it might be uploading context
+                # We let it run for a bit longer or until it exits
+                time.sleep(5)
+                if process.poll() is None:
+                    process.terminate()
+                return detected_sid
+
+            logger.error("❌ Failed to detect new session ID.")
+            if process.poll() is None:
+                process.kill()
             return None
 
         except Exception as e:
@@ -112,12 +152,14 @@ class JulesAgent:
             return None
 
     def wait_for_completion(self, sid: str) -> bool:
-        """
-        Monitors the session status until it reaches 'Completed'.
-        """
+        """Monitors the session status until it reaches 'Completed'."""
         logger.info(f"Monitoring status for SID: {sid}")
 
-        while True:
+        # Increased timeout for long campaigns
+        timeout_minutes = 30
+        start = time.time()
+
+        while (time.time() - start) < (timeout_minutes * 60):
             try:
                 result = subprocess.run(
                     [self.executable, "remote", "list", "--session"], capture_output=True, text=True, check=True
@@ -137,24 +179,33 @@ class JulesAgent:
                     logger.info("✅ Final Signal Detected (Completed).")
                     return True
 
-                display_status = " ".join(status_line.split()[4:])
-                logger.info(f"Jules Status: {display_status}")
+                if "failed" in status_line.lower() or "error" in status_line.lower():
+                    logger.error(f"❌ Session failed: {status_line}")
+                    return False
+
+                # Log heartbeat every minute
+                if int(time.time()) % 60 == 0:  # pragma: no cover
+                    display_status = " ".join(status_line.split()[4:])
+                    logger.info(f"Status heartbeat: {display_status}")
+
                 time.sleep(20)
 
             except Exception as e:
                 logger.error(f"Error monitoring status: {e}")
                 time.sleep(10)
 
+        logger.error("❌ Session timed out.")
+        return False
+
     def teleport_and_sync(self, sid: str, target_root: Path) -> bool:
-        """
-        Runs teleport in a temp folder and syncs src/ and tests/ to target_root.
-        """
+        """Runs teleport in a temp folder and syncs src/ and tests/ to target_root."""
         logger.info(f"📥 Running authoritative teleport for SID {sid}...")
 
         temp_dir = target_root / f"jules_relay_{sid}"
         temp_dir.mkdir(parents=True, exist_ok=True)
 
         try:
+            # Using input='y\n' to auto-accept any overwrite prompts
             subprocess.run(
                 [self.executable, "teleport", sid],
                 input="y\n",
@@ -172,14 +223,14 @@ class JulesAgent:
             source_folder = jules_folders[0]
             logger.info(f"🎉 Teleport Success. Syncing from {source_folder.name}...")
 
+            # Sync logic
             dirs_to_sync = ["src", "tests"]
-            files_to_sync = ["requirements.txt"]
+            files_to_sync = ["requirements.txt", "pyproject.toml"]
 
             for d in dirs_to_sync:
                 src_path = source_folder / d
                 dst_path = target_root / d
                 if src_path.exists():
-                    logger.info(f"Syncing directory: {d}")
                     if dst_path.exists():
                         shutil.rmtree(dst_path)
                     shutil.copytree(src_path, dst_path)
@@ -188,7 +239,6 @@ class JulesAgent:
                 src_file = source_folder / f
                 dst_file = target_root / f
                 if src_file.exists():
-                    logger.info(f"Syncing file: {f}")
                     shutil.copy2(src_file, dst_file)
 
             return True
@@ -202,4 +252,3 @@ class JulesAgent:
         finally:
             if temp_dir.exists():
                 shutil.rmtree(temp_dir)
-                logger.debug(f"Cleaned up {temp_dir}")
