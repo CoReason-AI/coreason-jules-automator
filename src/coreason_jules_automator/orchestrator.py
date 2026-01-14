@@ -70,13 +70,20 @@ class Orchestrator:
                 )
             )
 
+            # Prepare prompt with feedback if retry
+            current_task = task_description
+            if attempt > 1 and last_error:
+                prefix = "\n\nIMPORTANT: The previous attempt failed with the following error:\n"
+                current_task = f"{task_description}{prefix}{last_error}"
+                logger.info("Appending feedback to task description for retry.")
+
             # --- PHASE 1: REMOTE GENERATION & TELEPORT ---
             try:
                 # 1. Launch Session
                 self.event_emitter.emit(
                     AutomationEvent(type=EventType.CHECK_RUNNING, message="Launching Remote Jules Session...")
                 )
-                sid = self.agent.launch_session(task_description)
+                sid = self.agent.launch_session(current_task)
 
                 if not sid:
                     raise RuntimeError("Failed to obtain Session ID (SID).")

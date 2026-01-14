@@ -11,7 +11,7 @@ class LLMClient(Protocol):
 class OpenAIAdapter:
     """Adapter for OpenAI-compatible clients."""
 
-    def __init__(self, client: Any, model_name: str = "gpt-3.5-turbo") -> None:
+    def __init__(self, client: Any, model_name: str) -> None:
         self.client = client
         self.model_name = model_name
 

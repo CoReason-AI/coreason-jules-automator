@@ -32,7 +32,7 @@ class LLMFactory:
             elif settings.OPENAI_API_KEY:
                 logger.info("Initializing OpenAI client")
                 client = OpenAI(api_key=settings.OPENAI_API_KEY.get_secret_value())
-                return OpenAIAdapter(client)
+                return OpenAIAdapter(client, model_name="gpt-3.5-turbo")
             else:
                 logger.warning("No valid API key found (OPENAI_API_KEY or DEEPSEEK_API_KEY). Falling back to local.")
 
