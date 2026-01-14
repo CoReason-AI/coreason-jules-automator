@@ -17,6 +17,7 @@ from coreason_jules_automator.agent.jules import JulesAgent
 from coreason_jules_automator.ci.git import GitInterface
 from coreason_jules_automator.config import get_settings
 from coreason_jules_automator.events import AutomationEvent, EventEmitter, EventType, LoguruEmitter
+from coreason_jules_automator.llm.adapters import LLMClient
 from coreason_jules_automator.llm.janitor import JanitorService
 from coreason_jules_automator.strategies.base import DefenseStrategy
 from coreason_jules_automator.utils.logger import logger
@@ -36,12 +37,14 @@ class Orchestrator:
         event_emitter: Optional[EventEmitter] = None,
         git_interface: Optional[GitInterface] = None,
         janitor_service: Optional[JanitorService] = None,
+        llm_client: Optional[LLMClient] = None,
     ) -> None:
         self.agent = agent
         self.strategies = strategies
         self.event_emitter = event_emitter or LoguruEmitter()
         self.git = git_interface
         self.janitor = janitor_service
+        self.llm_client = llm_client
 
     def run_cycle(self, task_description: str, branch_name: str) -> Tuple[bool, str]:
         """
@@ -201,7 +204,32 @@ class Orchestrator:
                 if success:
                     logger.info(f"Iteration {i} Succeeded. Merging into {agg_branch}...")
                     raw_log = self.git.get_commit_log(agg_branch, iter_branch)
-                    clean_msg = self.janitor.professionalize_commit(raw_log)
+
+                    # Sans-I/O Refactor: Professionalize Commit
+                    clean_msg = raw_log # Default fallback
+                    if self.janitor and self.llm_client:
+                        try:
+                            req = self.janitor.build_professionalize_request(raw_log)
+                            # Simple single attempt for now, bypassing original retry logic for brevity in refactor
+                            # or implementing a simple loop here if needed.
+                            # Replicating simple retry loop here:
+                            for _ in range(3):
+                                try:
+                                    resp_text = self.llm_client.complete(messages=req.messages, max_tokens=req.max_tokens)
+                                    parsed = self.janitor.parse_professionalize_response(raw_log, resp_text)
+                                    # If parsed is diff from sanitized original (meaning success?),
+                                    # actually parse_professionalize_response returns sanitized original on failure.
+                                    # So we just use what it returns.
+                                    clean_msg = parsed
+                                    break
+                                except Exception:
+                                    continue
+                        except Exception as e:
+                            logger.error(f"Professionalize commit failed: {e}")
+                    else:
+                        if self.janitor:
+                            clean_msg = self.janitor.sanitize_commit(raw_log)
+
                     self.git.merge_squash(iter_branch, agg_branch, clean_msg)
 
                     # Cleanup

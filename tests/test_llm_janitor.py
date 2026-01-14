@@ -1,4 +1,5 @@
 from unittest.mock import MagicMock
+
 import pytest
 
 from coreason_jules_automator.llm.janitor import JanitorService
@@ -89,12 +90,14 @@ def test_janitor_parse_professionalize_response_no_braces() -> None:
     result = janitor.parse_professionalize_response("original", llm_response)
     assert result == "original"
 
+
 def test_janitor_parse_professionalize_response_incomplete_json() -> None:
     """Test parse_professionalize_response with malformed JSON returns fallback."""
     janitor = JanitorService()
     llm_response = '{"commit_text": "incomplete'
     result = janitor.parse_professionalize_response("original", llm_response)
     assert result == "original"
+
 
 def test_janitor_parse_professionalize_response_json_decode_error() -> None:
     """Test parse_professionalize_response catches JSONDecodeError."""

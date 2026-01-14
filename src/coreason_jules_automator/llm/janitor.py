@@ -31,10 +31,7 @@ class JanitorService:
         Builds an LLMRequest to convert detailed logs into a 3-sentence hint.
         """
         prompt = self.prompt_manager.render("janitor_summarize.j2", logs=log_text[-2000:])
-        return LLMRequest(
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=150
-        )
+        return LLMRequest(messages=[{"role": "user", "content": prompt}], max_tokens=150)
 
     def build_professionalize_request(self, raw_text: str) -> LLMRequest:
         """
@@ -44,10 +41,7 @@ class JanitorService:
         cleaned_text = self.sanitize_commit(raw_text)
 
         prompt = self.prompt_manager.render("janitor_professionalize.j2", commit_text=cleaned_text)
-        return LLMRequest(
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=200
-        )
+        return LLMRequest(messages=[{"role": "user", "content": prompt}], max_tokens=200)
 
     def parse_professionalize_response(self, original_text: str, llm_response_text: str) -> str:
         """
@@ -66,7 +60,7 @@ class JanitorService:
             except json.JSONDecodeError:
                 logger.warning("JSON parse failed during professionalize response parsing.")
         else:
-             logger.warning("No JSON braces found in response.")
+            logger.warning("No JSON braces found in response.")
 
         # Fallback
         return self.sanitize_commit(original_text)
