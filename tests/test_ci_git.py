@@ -132,3 +132,19 @@ def test_get_commit_log_failure(git: GitInterface, mock_shell: MagicMock) -> Non
     with pytest.raises(RuntimeError) as excinfo:
         git.get_commit_log("base", "head")
     assert "Failed to get commit log" in str(excinfo.value)
+
+
+def test_delete_branch_success(git: GitInterface, mock_shell: MagicMock) -> None:
+    """Test delete_branch success."""
+    git.delete_branch("feature")
+    mock_shell.run.assert_any_call(["git", "push", "origin", "--delete", "feature"], check=True)
+    mock_shell.run.assert_any_call(["git", "branch", "-D", "feature"], check=True)
+
+
+def test_delete_branch_failure(git: GitInterface, mock_shell: MagicMock) -> None:
+    """Test delete_branch failure logging (no exception raised)."""
+    mock_shell.run.side_effect = ShellError("error", CommandResult(1, "", "error"))
+    # Should not raise exception
+    git.delete_branch("feature")
+    # Verify both were attempted (or at least first one called)
+    mock_shell.run.assert_any_call(["git", "push", "origin", "--delete", "feature"], check=True)

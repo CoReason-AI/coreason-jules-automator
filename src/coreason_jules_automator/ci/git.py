@@ -103,3 +103,20 @@ class GitInterface:
         except ShellError as e:
             logger.error(f"Failed to get commit log: {e}")
             raise RuntimeError(f"Failed to get commit log: {e}") from e
+
+    def delete_branch(self, branch_name: str) -> None:
+        """
+        Deletes a branch both locally and remotely.
+        Logs warnings if deletion fails but does not raise exceptions.
+        """
+        try:
+            # Delete remote branch
+            self.shell.run(["git", "push", "origin", "--delete", branch_name], check=True)
+        except ShellError as e:
+            logger.warning(f"Failed to delete remote branch {branch_name}: {e}")
+
+        try:
+            # Delete local branch
+            self.shell.run(["git", "branch", "-D", branch_name], check=True)
+        except ShellError as e:
+            logger.warning(f"Failed to delete local branch {branch_name}: {e}")

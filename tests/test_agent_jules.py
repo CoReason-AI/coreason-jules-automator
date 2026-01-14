@@ -38,7 +38,6 @@ def test_get_active_sids_failure(mock_run: MagicMock, agent: JulesAgent) -> None
     assert sids == set()
 
 
-@patch("os.read")
 @patch("select.select")
 @patch("subprocess.Popen")
 @patch("coreason_jules_automator.agent.jules.JulesAgent._get_active_sids")
@@ -48,7 +47,6 @@ def test_launch_session_success(
     mock_get_sids: MagicMock,
     mock_popen: MagicMock,
     mock_select: MagicMock,
-    mock_read: MagicMock,
     agent: JulesAgent,
 ) -> None:
     """Test successful session launch with interactive loop."""
@@ -111,11 +109,10 @@ def test_launch_session_with_spec(
     assert sid == "101"
     mock_process.stdin.write.assert_called()
     call_args = mock_process.stdin.write.call_args[0][0]
-    assert b"Context from SPEC.md" in call_args
-    assert b"Spec Content" in call_args
+    assert "Context from SPEC.md" in call_args
+    assert "Spec Content" in call_args
 
 
-@patch("os.read")
 @patch("select.select")
 @patch("subprocess.Popen")
 @patch("coreason_jules_automator.agent.jules.JulesAgent._get_active_sids")
@@ -125,7 +122,6 @@ def test_launch_session_auto_reply(
     mock_get_sids: MagicMock,
     mock_popen: MagicMock,
     mock_select: MagicMock,
-    mock_read: MagicMock,
     agent: JulesAgent,
 ) -> None:
     """Test session launch with auto-reply."""
@@ -148,7 +144,7 @@ def test_launch_session_auto_reply(
         ([], [], []),
     ]
 
-    mock_read.side_effect = [b"Continue? [y/N]", b""]
+    mock_process.stdout.readline.side_effect = ["Continue? [y/N]\n", ""]
 
     # Trigger SID detection to exit loop
     # We set side_effect to: initial, check1 (fail), check2 (success)
@@ -168,8 +164,44 @@ def test_launch_session_auto_reply(
     assert sid == "101"
     # Check auto-reply
     mock_process.stdin.write.assert_has_calls(
-        [call(b"Use your best judgment and make autonomous decisions.\n")], any_order=True
+        [call("Use your best judgment and make autonomous decisions.\n")], any_order=True
     )
+
+
+@patch("select.select")
+@patch("subprocess.Popen")
+@patch("coreason_jules_automator.agent.jules.JulesAgent._get_active_sids")
+@patch("coreason_jules_automator.agent.jules.get_settings")
+def test_launch_session_mission_complete(
+    mock_settings: MagicMock,
+    mock_get_sids: MagicMock,
+    mock_popen: MagicMock,
+    mock_select: MagicMock,
+    agent: JulesAgent,
+) -> None:
+    """Test session launch detecting mission complete signal."""
+    mock_settings.return_value.repo_name = "test/repo"
+    mock_get_sids.return_value = {"100"}
+
+    mock_process = MagicMock()
+    mock_process.stdin = MagicMock()
+    mock_process.stdout = MagicMock()
+    mock_process.stdout.fileno.return_value = 1
+    mock_process.poll.return_value = None
+    mock_popen.return_value = mock_process
+
+    mock_select.return_value = ([mock_process.stdout.fileno()], [], [])
+    mock_process.stdout.readline.return_value = "Success! 100% of the requirements is met.\n"
+
+    # Trigger SID detection
+    mock_get_sids.side_effect = [{"100"}, {"100", "101"}]
+
+    with patch("time.sleep", return_value=None):
+        with patch("time.time", side_effect=[1000, 1001, 1001, 1005, 1005]):
+             sid = agent.launch_session("Task")
+
+    assert sid == "101"
+    assert agent.mission_complete is True
 
 
 @patch("select.select")
@@ -218,7 +250,6 @@ def test_launch_session_exception(
     assert sid is None
 
 
-@patch("os.read")
 @patch("select.select")
 @patch("subprocess.Popen")
 @patch("coreason_jules_automator.agent.jules.JulesAgent._get_active_sids")
@@ -228,7 +259,6 @@ def test_launch_session_os_error(
     mock_get_sids: MagicMock,
     mock_popen: MagicMock,
     mock_select: MagicMock,
-    mock_read: MagicMock,
     agent: JulesAgent,
 ) -> None:
     """Test handling of OSError during stdout read."""
@@ -241,17 +271,13 @@ def test_launch_session_os_error(
     mock_popen.return_value = mock_process
 
     mock_select.return_value = ([1], [], [])
-    mock_read.side_effect = OSError("Read failed")
+    mock_process.stdout.readline.side_effect = OSError("Read failed")
 
     with patch("time.time", side_effect=[0, 1, 1, 5, 5, 5, 5]):
         with patch("time.sleep", return_value=None):
             # Just trigger timeout eventually
-            mock_get_sids.side_effect = [{"100"}, {"100"}, {"100"}]
+            mock_get_sids.side_effect = [{"100"}, {"100"}, {"100", "101"}]
             # Force break by simulating timeout logic
-            # Actually, simpler: let it run one loop and then fail or succeed
-            # We want to cover the exception catch block.
-            # We can make get_active_sids succeed on second call to exit loop.
-            mock_get_sids.side_effect = [{"100"}, {"100", "101"}]
 
             sid = agent.launch_session("Test Task")
 

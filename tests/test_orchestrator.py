@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any, Dict, Tuple
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -161,6 +161,7 @@ def test_orchestrator_agent_failure_teleport() -> None:
 def test_run_campaign_success() -> None:
     """Test successful campaign execution."""
     mock_agent = MagicMock(spec=JulesAgent)
+    mock_agent.mission_complete = False
     mock_strategy = MockStrategy(success=True)
     mock_emitter = MagicMock()
     mock_git = MagicMock(spec=GitInterface)
@@ -185,6 +186,76 @@ def test_run_campaign_success() -> None:
         assert mock_git.checkout_new_branch.call_count == 3
         assert mock_run_cycle.call_count == 2
         assert mock_git.merge_squash.call_count == 2
+        # Verify cleanup
+        assert mock_git.delete_branch.call_count == 2
+
+
+def test_run_campaign_completion() -> None:
+    """Test campaign stops when mission_complete is detected."""
+    mock_agent = MagicMock(spec=JulesAgent)
+    mock_agent.mission_complete = False  # Default
+
+    mock_strategy = MockStrategy(success=True)
+    mock_emitter = MagicMock()
+    mock_git = MagicMock(spec=GitInterface)
+    mock_janitor = MagicMock(spec=JanitorService)
+
+    orchestrator = Orchestrator(
+        agent=mock_agent,
+        strategies=[mock_strategy],
+        event_emitter=mock_emitter,
+        git_interface=mock_git,
+        janitor_service=mock_janitor,
+    )
+
+    call_counter = 0
+
+    def side_effect(*args: Any, **kwargs: Any) -> Tuple[bool, str]:
+        nonlocal call_counter
+        call_counter += 1
+        if call_counter >= 2:
+            mock_agent.mission_complete = True
+        return (True, "Success")
+
+    with patch.object(orchestrator, "run_cycle", side_effect=side_effect) as mock_run_cycle:
+        mock_git.get_commit_log.return_value = "raw log"
+        mock_janitor.professionalize_commit.return_value = "clean message"
+
+        orchestrator.run_campaign("task", iterations=10)
+
+        # Should stop after 2 iterations because mission_complete became True
+        assert mock_run_cycle.call_count == 2
+        assert mock_git.delete_branch.call_count == 2
+
+
+def test_run_campaign_cleanup_exception() -> None:
+    """Test cleanup failure handling during exception recovery."""
+    mock_agent = MagicMock(spec=JulesAgent)
+    mock_strategy = MockStrategy(success=True)
+    mock_emitter = MagicMock()
+    mock_git = MagicMock(spec=GitInterface)
+    mock_janitor = MagicMock(spec=JanitorService)
+
+    orchestrator = Orchestrator(
+        agent=mock_agent,
+        strategies=[mock_strategy],
+        event_emitter=mock_emitter,
+        git_interface=mock_git,
+        janitor_service=mock_janitor,
+    )
+
+    # Trigger exception in run_cycle
+    with patch.object(orchestrator, "run_cycle", side_effect=Exception("Cycle Error")):
+        # Trigger exception in delete_branch (cleanup)
+        mock_git.delete_branch.side_effect = Exception("Cleanup Error")
+
+        # Should not crash
+        orchestrator.run_campaign("task", iterations=1)
+
+        # Verify run_cycle called
+        # Note: run_campaign calls run_cycle inside the loop
+        # Verify delete_branch called
+        assert mock_git.delete_branch.called
 
 
 def test_run_campaign_missing_deps() -> None:
