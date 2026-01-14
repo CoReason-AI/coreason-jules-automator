@@ -1,8 +1,9 @@
 import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-import pytest
+
 import pexpect
+import pytest
 
 from coreason_jules_automator.agent.jules import JulesAgent
 
@@ -63,7 +64,7 @@ def test_launch_session_success_polling(
 
     assert sid == "101"
     mock_spawn.assert_called_once()
-    mock_child.sendline.assert_called_once() # Initial prompt
+    mock_child.sendline.assert_called_once()  # Initial prompt
 
 
 @patch("coreason_jules_automator.agent.jules.pexpect.spawn")
@@ -154,7 +155,7 @@ def test_launch_session_with_spec(
 
     mock_child = MagicMock()
     mock_spawn.return_value = mock_child
-    mock_child.expect.return_value = 3 # EOF immediately
+    mock_child.expect.return_value = 3  # EOF immediately
     mock_child.isalive.return_value = False
 
     with patch("pathlib.Path.exists", return_value=True):
@@ -179,22 +180,17 @@ def test_launch_session_timeout_loop(
 
     mock_child = MagicMock()
     mock_spawn.return_value = mock_child
-    mock_child.isalive.return_value = True # Stays alive
+    mock_child.isalive.return_value = True  # Stays alive
 
     # Simulate loop running for a while then stopping by logic
     # We patch time.time to simulate timeout
-
-    start_time = 1000
-    # First call to time.time is for start_time
-    # Then loop checks time.time
-    # We want loop to run once or twice then exit
 
     # In launch_session:
     # start_time = time.time()
     # while (time.time() - start_time) < 1800:
 
-    with patch("time.time", side_effect=[1000, 1001, 2900]): # Start, First loop OK, Second loop Timeout
-        mock_child.expect.return_value = 4 # TIMEOUT
+    with patch("time.time", side_effect=[1000, 1001, 2900]):  # Start, First loop OK, Second loop Timeout
+        mock_child.expect.return_value = 4  # TIMEOUT
         sid = agent.launch_session("Test Task")
 
     assert sid is None
@@ -214,6 +210,7 @@ def test_wait_for_completion_success(mock_run: MagicMock, agent: JulesAgent) -> 
         result = agent.wait_for_completion("123")
 
     assert result is True
+
 
 @patch("subprocess.run")
 def test_wait_for_completion_pre_detected(mock_run: MagicMock, agent: JulesAgent) -> None:
@@ -264,6 +261,7 @@ def test_teleport_and_sync_success(
     mock_copytree.assert_called()  # Should copy src and tests
     mock_copy2.assert_called()  # Should copy requirements.txt
 
+
 @patch("subprocess.run")
 @patch("pathlib.Path.mkdir")
 def test_teleport_and_sync_no_folder(mock_mkdir: MagicMock, mock_run: MagicMock, agent: JulesAgent) -> None:
@@ -295,6 +293,7 @@ def test_teleport_and_sync_exception(mock_mkdir: MagicMock, mock_run: MagicMock,
 
     result = agent.teleport_and_sync("123", Path("/tmp"))
     assert result is False
+
 
 @patch("coreason_jules_automator.agent.jules.pexpect.spawn")
 @patch("coreason_jules_automator.agent.jules.JulesAgent._get_active_sids")

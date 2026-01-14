@@ -13,6 +13,7 @@ import subprocess
 import time
 from pathlib import Path
 from typing import Optional, Set
+
 import pexpect
 
 from coreason_jules_automator.config import get_settings
@@ -82,11 +83,11 @@ class JulesAgent:
 
             # Regex patterns
             patterns = [
-                r"\?|\[y/n\]",                      # 0: Question
-                r"100% of the requirements is met", # 1: Success
-                r"SID:\s*(\d+)",                    # 2: SID detection (if printed)
-                pexpect.EOF,                        # 3: End of process
-                pexpect.TIMEOUT                     # 4: Timeout (internal poll interval)
+                r"\?|\[y/n\]",  # 0: Question
+                r"100% of the requirements is met",  # 1: Success
+                r"SID:\s*(\d+)",  # 2: SID detection (if printed)
+                pexpect.EOF,  # 3: End of process
+                pexpect.TIMEOUT,  # 4: Timeout (internal poll interval)
             ]
 
             detected_sid: Optional[str] = None
@@ -97,11 +98,11 @@ class JulesAgent:
                 # Use a short timeout for expect to allow periodic polling of SIDs
                 index = child.expect(patterns, timeout=5)
 
-                if index == 0: # Question
+                if index == 0:  # Question
                     logger.info("Detected prompt. Auto-replying...")
                     child.sendline("Use your best judgment and make autonomous decisions.")
 
-                elif index == 1: # Success
+                elif index == 1:  # Success
                     logger.info("✅ Mission Complete Signal Detected.")
                     self.mission_complete = True
                     # If we found SID, we might continue until EOF or return?
@@ -109,17 +110,17 @@ class JulesAgent:
                     # but if we have SID, we can technically return.
                     # However, sticking to the loop allows the process to finish cleanly if it wants to exit.
 
-                elif index == 2: # SID Pattern
+                elif index == 2:  # SID Pattern
                     if child.match:
                         sid_str = child.match.group(1)
                         logger.info(f"✨ Captured SID from output: {sid_str}")
                         detected_sid = sid_str
 
-                elif index == 3: # EOF
+                elif index == 3:  # EOF
                     logger.info("Jules process finished (EOF).")
                     break
 
-                elif index == 4: # TIMEOUT (5s)
+                elif index == 4:  # TIMEOUT (5s)
                     # Poll SIDs via external command as a fallback
                     if not detected_sid:
                         post_sids = self._get_active_sids()

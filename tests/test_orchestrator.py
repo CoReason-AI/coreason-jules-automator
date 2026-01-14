@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any, Dict, Tuple
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -261,10 +261,11 @@ def test_run_campaign_failure_continue() -> None:
         assert mock_run_cycle.call_count == 2
         # Verify warning was logged (implicit via coverage, or we could patch logger)
 
+
 def test_run_campaign_infinite_success() -> None:
     """Test infinite campaign breaking on mission completion."""
     mock_agent = MagicMock(spec=JulesAgent)
-    mock_agent.mission_complete = False # Initially false
+    mock_agent.mission_complete = False  # Initially false
 
     mock_strategy = MockStrategy(success=True)
     mock_emitter = MagicMock()
@@ -285,7 +286,7 @@ def test_run_campaign_infinite_success() -> None:
         mock_janitor.professionalize_commit.return_value = "msg"
 
         # Side effect to set mission_complete after 2nd call
-        def side_effect(*args, **kwargs):
+        def side_effect(*args: Any, **kwargs: Any) -> Tuple[bool, str]:
             if mock_run_cycle.call_count >= 2:
                 mock_agent.mission_complete = True
             return (True, "Success")
@@ -297,6 +298,7 @@ def test_run_campaign_infinite_success() -> None:
 
         assert mock_run_cycle.call_count == 2
         # Check that it stopped
+
 
 def test_run_campaign_safety_limit() -> None:
     """Test infinite campaign hitting safety limit."""
