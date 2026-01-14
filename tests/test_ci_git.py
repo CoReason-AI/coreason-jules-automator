@@ -1,7 +1,6 @@
 from unittest.mock import MagicMock
 
 import pytest
-
 from coreason_jules_automator.ci.git import GitInterface
 from coreason_jules_automator.utils.shell import CommandResult, ShellError
 

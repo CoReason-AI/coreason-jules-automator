@@ -1,8 +1,7 @@
 from pathlib import Path
 
-from huggingface_hub import hf_hub_download
-
 from coreason_jules_automator.utils.logger import logger
+from huggingface_hub import hf_hub_download
 
 
 class ModelManager:
@@ -24,7 +23,7 @@ class ModelManager:
                 filename=filename,
                 cache_dir=cache_dir,
                 local_dir=cache_dir,  # Force download to specific dir for simplicity
-                local_dir_use_symlinks=False,
+                local_dir_use_symlinks=False,  # type: ignore[call-overload]
             )
             # Explicitly cast to str for mypy, as hf_hub_download returns str | None in some versions or Any
             return str(model_path)
