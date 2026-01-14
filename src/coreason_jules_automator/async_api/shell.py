@@ -1,5 +1,4 @@
 import asyncio
-import subprocess
 from typing import List
 
 from coreason_jules_automator.utils.logger import logger

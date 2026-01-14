@@ -4,10 +4,9 @@ from pathlib import Path
 from typing import Optional
 
 from coreason_jules_automator.config import get_settings
-from coreason_jules_automator.protocols.jules import (
-    JulesProtocol, SendStdin, SignalComplete, SignalSessionId
-)
+from coreason_jules_automator.protocols.jules import JulesProtocol, SendStdin, SignalComplete, SignalSessionId
 from coreason_jules_automator.utils.logger import logger
+
 from .shell import AsyncShellExecutor
 
 
@@ -34,7 +33,10 @@ class AsyncJulesAgent:
         # Start process
         try:
             process = await asyncio.create_subprocess_exec(
-                self.executable, "new", "--repo", settings.repo_name,
+                self.executable,
+                "new",
+                "--repo",
+                settings.repo_name,
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,  # Merge stderr to stdout for parsing
@@ -50,7 +52,7 @@ class AsyncJulesAgent:
                 process.stdin.write(b"\n")
                 await process.stdin.drain()
             except Exception as e:
-                 logger.error(f"Failed to write to stdin: {e}")
+                logger.error(f"Failed to write to stdin: {e}")
 
         try:
             start_time = asyncio.get_running_loop().time()
@@ -86,8 +88,8 @@ class AsyncJulesAgent:
                         logger.info(f"✨ Captured SID: {detected_sid}")
                         break
                     elif isinstance(action, SignalComplete):
-                         logger.info("✅ Mission Complete Signal Detected.")
-                         pass
+                        logger.info("✅ Mission Complete Signal Detected.")
+                        pass
 
                 if detected_sid:
                     break
@@ -116,10 +118,7 @@ class AsyncJulesAgent:
 
         while (asyncio.get_running_loop().time() - start) < (timeout_minutes * 60):
             try:
-                result = await self.shell.run(
-                    [self.executable, "remote", "list", "--session"],
-                    check=True
-                )
+                result = await self.shell.run([self.executable, "remote", "list", "--session"], check=True)
 
                 status_line = ""
                 for line in result.stdout.splitlines():
@@ -142,8 +141,8 @@ class AsyncJulesAgent:
                 await asyncio.sleep(20)
 
             except Exception as e:
-                 logger.error(f"Error monitoring status: {e}")
-                 await asyncio.sleep(10)
+                logger.error(f"Error monitoring status: {e}")
+                await asyncio.sleep(10)
 
         logger.error("❌ Session timed out.")
         return False
@@ -156,15 +155,16 @@ class AsyncJulesAgent:
 
         try:
             process = await asyncio.create_subprocess_exec(
-                self.executable, "teleport", sid,
+                self.executable,
+                "teleport",
+                sid,
                 cwd=str(temp_dir),
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
             )
 
-            stdout_bytes, stderr_bytes = await process.communicate(input=b"y\n")
-            stdout = stdout_bytes.decode()
+            _, stderr_bytes = await process.communicate(input=b"y\n")
             stderr = stderr_bytes.decode()
 
             if process.returncode != 0:
@@ -209,5 +209,5 @@ class AsyncJulesAgent:
             logger.error(f"Sync failed: {e}")
             return False
         finally:
-             if temp_dir.exists():
+            if temp_dir.exists():
                 await asyncio.to_thread(shutil.rmtree, temp_dir)
