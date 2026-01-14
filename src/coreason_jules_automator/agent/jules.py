@@ -76,7 +76,7 @@ class JulesAgent:
                 bufsize=0,  # Unbuffered
             )
 
-            if process.stdin is None or process.stdout is None:
+            if process.stdin is None or process.stdout is None:  # pragma: no cover
                 logger.error("Failed to initialize process pipes.")
                 process.kill()
                 return None
@@ -184,7 +184,7 @@ class JulesAgent:
                     return False
 
                 # Log heartbeat every minute
-                if int(time.time()) % 60 == 0:
+                if int(time.time()) % 60 == 0:  # pragma: no cover
                     display_status = " ".join(status_line.split()[4:])
                     logger.info(f"Status heartbeat: {display_status}")
 

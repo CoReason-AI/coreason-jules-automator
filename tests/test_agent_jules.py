@@ -218,6 +218,47 @@ def test_launch_session_exception(
     assert sid is None
 
 
+@patch("os.read")
+@patch("select.select")
+@patch("subprocess.Popen")
+@patch("coreason_jules_automator.agent.jules.JulesAgent._get_active_sids")
+@patch("coreason_jules_automator.agent.jules.get_settings")
+def test_launch_session_os_error(
+    mock_settings: MagicMock,
+    mock_get_sids: MagicMock,
+    mock_popen: MagicMock,
+    mock_select: MagicMock,
+    mock_read: MagicMock,
+    agent: JulesAgent,
+) -> None:
+    """Test handling of OSError during stdout read."""
+    mock_settings.return_value.repo_name = "test/repo"
+    mock_get_sids.return_value = {"100"}
+
+    mock_process = MagicMock()
+    mock_process.stdout.fileno.return_value = 1
+    mock_process.poll.return_value = None
+    mock_popen.return_value = mock_process
+
+    mock_select.return_value = ([1], [], [])
+    mock_read.side_effect = OSError("Read failed")
+
+    with patch("time.time", side_effect=[0, 1, 1, 5, 5, 5, 5]) as mock_time:
+        with patch("time.sleep", return_value=None):
+             # Just trigger timeout eventually
+             mock_get_sids.side_effect = [{"100"}, {"100"}, {"100"}]
+             # Force break by simulating timeout logic
+             # Actually, simpler: let it run one loop and then fail or succeed
+             # We want to cover the exception catch block.
+             # We can make get_active_sids succeed on second call to exit loop.
+             mock_get_sids.side_effect = [{"100"}, {"100", "101"}]
+
+             sid = agent.launch_session("Test Task")
+
+    # Assert logic continued and didn't crash
+    assert sid == "101"
+
+
 @patch("subprocess.Popen")
 @patch("coreason_jules_automator.agent.jules.JulesAgent._get_active_sids")
 @patch("coreason_jules_automator.agent.jules.get_settings")
@@ -290,6 +331,20 @@ def test_wait_for_completion_exception(mock_run: MagicMock, agent: JulesAgent) -
             result = agent.wait_for_completion("123")
 
     assert result is True
+
+
+@patch("subprocess.run")
+def test_wait_for_completion_timeout(mock_run: MagicMock, agent: JulesAgent) -> None:
+    """Test wait for completion timeout."""
+    mock_run.return_value.stdout = "123 running"
+
+    # 30 mins * 60 = 1800
+    # Simulate time passing: start=0, then 1801
+    with patch("time.time", side_effect=[0, 1801, 1801]):
+        with patch("time.sleep", return_value=None):
+            result = agent.wait_for_completion("123")
+
+    assert result is False
 
 
 @patch("subprocess.run")
