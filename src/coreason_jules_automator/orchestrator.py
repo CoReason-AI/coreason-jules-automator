@@ -167,7 +167,7 @@ class Orchestrator:
         )
         return False, last_error
 
-    def run_campaign(self, task: str, base_branch: str = "develop", iterations: int = 10) -> None:
+    def run_campaign(self, task: str, base_branch: str = "develop", iterations: int = 50) -> None:
         """
         Runs a campaign of multiple iterations to solve a task.
         """
@@ -181,22 +181,38 @@ class Orchestrator:
         logger.info(f"Starting Campaign ID: {run_id}. Aggregation Branch: {agg_branch}")
         self.git.checkout_new_branch(agg_branch, base_branch)
 
-        for i in range(1, iterations + 1):
+        i = 0
+        while i < iterations:
+            i += 1
             iter_branch = f"vibe_run_{run_id}_{i:03d}"
             logger.info(f"--- Campaign Iteration {i}/{iterations}: {iter_branch} ---")
 
             try:
-                self.git.checkout_new_branch(iter_branch, base_branch)
+                # Checkout iteration branch from AGGREGATION branch
+                self.git.checkout_new_branch(iter_branch, agg_branch)
                 success, feedback = self.run_cycle(task, iter_branch)
 
                 if success:
                     logger.info(f"Iteration {i} Succeeded. Merging into {agg_branch}...")
-                    raw_log = self.git.get_commit_log(base_branch, iter_branch)
+                    raw_log = self.git.get_commit_log(agg_branch, iter_branch)
                     clean_msg = self.janitor.professionalize_commit(raw_log)
                     self.git.merge_squash(iter_branch, agg_branch, clean_msg)
+
+                    # Cleanup
+                    self.git.delete_branch(iter_branch)
+
+                    # Termination Check
+                    if self.agent.mission_complete:
+                        logger.info("🎉 Mission Complete! '100% of the requirements is met' signal received.")
+                        break
                 else:
                     logger.warning(f"Iteration {i} Failed: {feedback}. Continuing to next iteration.")
+                    self.git.delete_branch(iter_branch)
 
             except Exception as e:
                 logger.error(f"Iteration {i} encountered an error: {e}")
-                # Continue to next iteration
+                # Try to cleanup
+                try:
+                    self.git.delete_branch(iter_branch)
+                except Exception:
+                    pass
