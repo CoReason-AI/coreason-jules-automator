@@ -49,7 +49,9 @@ class AsyncShellExecutor:
                 raise ShellError(f"Failed to execute command: {e}", result) from e
             return result
 
-        result = CommandResult(exit_code=process.returncode, stdout=stdout, stderr=stderr)
+        # process.returncode is expected to be int after communicate()
+        exit_code = process.returncode if process.returncode is not None else -1
+        result = CommandResult(exit_code=exit_code, stdout=stdout, stderr=stderr)
 
         if check and result.exit_code != 0:
             error_msg = f"Command failed with exit code {result.exit_code}"

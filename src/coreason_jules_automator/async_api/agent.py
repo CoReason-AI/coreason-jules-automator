@@ -1,7 +1,7 @@
 import asyncio
 import shutil
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 from coreason_jules_automator.config import get_settings
 from coreason_jules_automator.protocols.jules import JulesProtocol, SendStdin, SignalComplete, SignalSessionId
@@ -172,7 +172,7 @@ class AsyncJulesAgent:
                 return False
 
             # Sync logic in thread to avoid blocking
-            def _sync_files():
+            def _sync_files() -> Tuple[bool, str]:
                 jules_folders = list(temp_dir.glob("jules-*"))
                 if not jules_folders:
                     return False, "No 'jules-*' folder found."
