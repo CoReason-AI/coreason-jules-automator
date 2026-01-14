@@ -193,4 +193,3 @@ class Orchestrator:
             except Exception as e:
                 logger.error(f"Iteration {i} encountered an error: {e}")
                 # Continue to next iteration
-                continue

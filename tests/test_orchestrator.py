@@ -228,3 +228,32 @@ def test_run_campaign_iteration_error() -> None:
 
         # Verify called twice
         assert mock_run_cycle.call_count == 2
+
+
+def test_run_campaign_failure_continue() -> None:
+    """Test campaign continuation on cycle failure (False return)."""
+    mock_agent = MagicMock(spec=JulesAgent)
+    mock_strategy = MockStrategy(success=True)
+    mock_emitter = MagicMock()
+    mock_git = MagicMock(spec=GitInterface)
+    mock_janitor = MagicMock(spec=JanitorService)
+
+    orchestrator = Orchestrator(
+        agent=mock_agent,
+        strategies=[mock_strategy],
+        event_emitter=mock_emitter,
+        git_interface=mock_git,
+        janitor_service=mock_janitor,
+    )
+
+    with patch.object(orchestrator, "run_cycle") as mock_run_cycle:
+        # First fails, Second succeeds
+        mock_run_cycle.side_effect = [(False, "Cycle Failed"), (True, "Success")]
+        mock_git.get_commit_log.return_value = "log"
+        mock_janitor.professionalize_commit.return_value = "msg"
+
+        orchestrator.run_campaign("task", iterations=2)
+
+        # Verify called twice
+        assert mock_run_cycle.call_count == 2
+        # Verify warning was logged (implicit via coverage, or we could patch logger)
