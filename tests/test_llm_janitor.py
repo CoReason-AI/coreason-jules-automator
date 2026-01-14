@@ -1,151 +1,105 @@
 from unittest.mock import MagicMock
+import pytest
 
 from coreason_jules_automator.llm.janitor import JanitorService
 from coreason_jules_automator.llm.prompts import PromptManager
+from coreason_jules_automator.llm.types import LLMRequest
 
 
 def test_janitor_initialization() -> None:
     """Test JanitorService initializes with default prompt manager."""
-    service = JanitorService(llm_client=None)
+    service = JanitorService()
     assert isinstance(service.prompt_manager, PromptManager)
 
 
 def test_janitor_sanitize_commit() -> None:
     """Test commit message sanitization."""
-    janitor = JanitorService(llm_client=None)
+    janitor = JanitorService()
     raw = "feat: add feature\n\nCo-authored-by: bot\nSigned-off-by: me"
     clean = janitor.sanitize_commit(raw)
     assert clean == "feat: add feature"
 
 
-def test_janitor_summarize_logs_success() -> None:
-    """Test summarize_logs with mocked LLM and PromptManager."""
-    mock_client = MagicMock()
-    mock_client.complete.return_value = "Summary"
-
+def test_janitor_build_summarize_request() -> None:
+    """Test build_summarize_request returns correct LLMRequest."""
     mock_prompt_manager = MagicMock()
     mock_prompt_manager.render.return_value = "Rendered Prompt"
 
-    janitor = JanitorService(llm_client=mock_client, prompt_manager=mock_prompt_manager)
-    summary = janitor.summarize_logs("long log...")
+    janitor = JanitorService(prompt_manager=mock_prompt_manager)
+    request = janitor.build_summarize_request("long log...")
 
-    assert summary == "Summary"
-    # logs="long log..." is correct because "long log..." is much shorter than 2000 chars, so no slicing happens.
+    assert isinstance(request, LLMRequest)
+    assert request.messages == [{"role": "user", "content": "Rendered Prompt"}]
+    assert request.max_tokens == 150
     mock_prompt_manager.render.assert_called_once_with("janitor_summarize.j2", logs="long log...")
-    mock_client.complete.assert_called_once_with(
-        messages=[{"role": "user", "content": "Rendered Prompt"}], max_tokens=150
-    )
 
 
-def test_janitor_summarize_logs_template_error() -> None:
-    """Test handling of template rendering errors."""
+def test_janitor_build_summarize_request_template_error() -> None:
+    """Test build_summarize_request raises error on template failure."""
     mock_prompt_manager = MagicMock()
     mock_prompt_manager.render.side_effect = Exception("Template Error")
 
-    janitor = JanitorService(llm_client=None, prompt_manager=mock_prompt_manager)
-    summary = janitor.summarize_logs("log")
+    janitor = JanitorService(prompt_manager=mock_prompt_manager)
 
-    assert summary == "Log summarization failed due to template error."
+    with pytest.raises(Exception, match="Template Error"):
+        janitor.build_summarize_request("log")
 
 
-def test_janitor_summarize_logs_llm_error() -> None:
-    """Test handling of LLM errors during summarization."""
-    mock_client = MagicMock()
-    mock_client.complete.side_effect = Exception("LLM Error")
-
+def test_janitor_build_professionalize_request() -> None:
+    """Test build_professionalize_request returns correct LLMRequest."""
     mock_prompt_manager = MagicMock()
-    mock_prompt_manager.render.return_value = "Rendered Prompt"
+    mock_prompt_manager.render.return_value = "Professionalize Prompt"
 
-    janitor = JanitorService(llm_client=mock_client, prompt_manager=mock_prompt_manager)
-    summary = janitor.summarize_logs("log")
+    janitor = JanitorService(prompt_manager=mock_prompt_manager)
 
-    assert summary == "Log summarization failed. Please check the logs directly."
+    # Check simple case
+    request = janitor.build_professionalize_request("simple feature")
+    assert isinstance(request, LLMRequest)
+    assert request.messages == [{"role": "user", "content": "Professionalize Prompt"}]
+    assert request.max_tokens == 200
 
-
-def test_professionalize_commit_success() -> None:
-    """Test professionalize_commit success."""
-    mock_client = MagicMock()
-    # Mock return value including JSON
-    mock_client.complete.return_value = 'Sure! Here is the JSON:\n```json\n{"commit_text": "feat: new feature"}\n```'
-
-    mock_prompt_manager = MagicMock()
-    mock_prompt_manager.render.return_value = "Rendered Prompt"
-
-    janitor = JanitorService(llm_client=mock_client, prompt_manager=mock_prompt_manager)
-    result = janitor.professionalize_commit("wip feature")
-
-    assert result == "feat: new feature"
+    # Check sanitization
+    raw = "wip feature\nCo-authored-by: bot"
+    janitor.build_professionalize_request(raw)
     mock_prompt_manager.render.assert_called_with("janitor_professionalize.j2", commit_text="wip feature")
 
 
-def test_professionalize_commit_retry_success() -> None:
-    """Test professionalize_commit retries on invalid JSON."""
-    mock_client = MagicMock()
-    # First call: invalid JSON, Second call: valid JSON
-    mock_client.complete.side_effect = ["Not JSON", '{"commit_text": "feat: retry success"}']
-
-    mock_prompt_manager = MagicMock()
-    mock_prompt_manager.render.return_value = "Rendered Prompt"
-
-    janitor = JanitorService(llm_client=mock_client, prompt_manager=mock_prompt_manager)
-    result = janitor.professionalize_commit("wip feature")
-
-    assert result == "feat: retry success"
-    assert mock_client.complete.call_count == 2
+def test_janitor_parse_professionalize_response_success() -> None:
+    """Test parse_professionalize_response with valid JSON."""
+    janitor = JanitorService()
+    llm_response = 'Sure! Here is the JSON:\n```json\n{"commit_text": "feat: new feature"}\n```'
+    result = janitor.parse_professionalize_response("original", llm_response)
+    assert result == "feat: new feature"
 
 
-def test_professionalize_commit_failure() -> None:
-    """Test professionalize_commit returns raw text after max retries."""
-    mock_client = MagicMock()
-    mock_client.complete.return_value = "Not JSON"
-
-    mock_prompt_manager = MagicMock()
-    mock_prompt_manager.render.return_value = "Rendered Prompt"
-
-    janitor = JanitorService(llm_client=mock_client, prompt_manager=mock_prompt_manager)
-    result = janitor.professionalize_commit("wip feature")
-
-    assert result == "wip feature"
-    assert mock_client.complete.call_count == 3
+def test_janitor_parse_professionalize_response_invalid_json() -> None:
+    """Test parse_professionalize_response with invalid JSON returns fallback."""
+    janitor = JanitorService()
+    llm_response = "Not JSON"
+    # Fallback should be sanitized original
+    original = "original\nCo-authored-by: bot"
+    result = janitor.parse_professionalize_response(original, llm_response)
+    assert result == "original"
 
 
-def test_professionalize_commit_prompt_error() -> None:
-    """Test professionalize_commit handles prompt rendering error."""
-    mock_prompt_manager = MagicMock()
-    mock_prompt_manager.render.side_effect = Exception("Prompt Error")
+def test_janitor_parse_professionalize_response_no_braces() -> None:
+    """Test parse_professionalize_response with no braces returns fallback."""
+    janitor = JanitorService()
+    llm_response = "Just some text"
+    result = janitor.parse_professionalize_response("original", llm_response)
+    assert result == "original"
 
-    janitor = JanitorService(llm_client=MagicMock(), prompt_manager=mock_prompt_manager)
-    result = janitor.professionalize_commit("wip feature")
+def test_janitor_parse_professionalize_response_incomplete_json() -> None:
+    """Test parse_professionalize_response with malformed JSON returns fallback."""
+    janitor = JanitorService()
+    llm_response = '{"commit_text": "incomplete'
+    result = janitor.parse_professionalize_response("original", llm_response)
+    assert result == "original"
 
-    assert result == "wip feature"
-
-
-def test_professionalize_commit_no_client() -> None:
-    """Test professionalize_commit handles missing client."""
-    mock_prompt_manager = MagicMock()
-    mock_prompt_manager.render.return_value = "Prompt"
-
-    janitor = JanitorService(llm_client=None, prompt_manager=mock_prompt_manager)
-    result = janitor.professionalize_commit("wip feature")
-
-    assert result == "wip feature"
-
-
-def test_professionalize_commit_llm_exception() -> None:
-    """Test professionalize_commit handles generic LLM exception."""
-    mock_client = MagicMock()
-    mock_client.complete.side_effect = Exception("LLM Error")
-
-    mock_prompt_manager = MagicMock()
-    mock_prompt_manager.render.return_value = "Prompt"
-
-    janitor = JanitorService(llm_client=mock_client, prompt_manager=mock_prompt_manager)
-    result = janitor.professionalize_commit("wip feature")
-
-    assert result == "wip feature"
-    # Should stop after first exception, not retry loop for generic exceptions?
-    # The code breaks on generic exception:
-    # except Exception as e:
-    #    logger.error(f"LLM generation failed: {e}")
-    #    break
-    assert mock_client.complete.call_count == 1
+def test_janitor_parse_professionalize_response_json_decode_error() -> None:
+    """Test parse_professionalize_response catches JSONDecodeError."""
+    janitor = JanitorService()
+    # Has braces, but invalid JSON content
+    llm_response = "{ invalid json }"
+    result = janitor.parse_professionalize_response("original", llm_response)
+    assert result == "original"
