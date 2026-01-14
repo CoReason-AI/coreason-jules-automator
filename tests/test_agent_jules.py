@@ -198,7 +198,7 @@ def test_launch_session_mission_complete(
 
     with patch("time.sleep", return_value=None):
         with patch("time.time", side_effect=[1000, 1001, 1001, 1005, 1005]):
-             sid = agent.launch_session("Task")
+            sid = agent.launch_session("Task")
 
     assert sid == "101"
     assert agent.mission_complete is True

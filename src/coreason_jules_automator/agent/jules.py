@@ -8,7 +8,6 @@
 #
 # Source Code: https://github.com/CoReason-AI/coreason_jules_automator
 
-import os
 import select
 import shutil
 import subprocess
@@ -123,9 +122,7 @@ class JulesAgent:
                             if "?" in line or "[y/n]" in line.lower():
                                 logger.info(f"🤖 Auto-replying to query: {clean_line}")
                                 if process.stdin:
-                                    process.stdin.write(
-                                        "Use your best judgment and make autonomous decisions.\n"
-                                    )
+                                    process.stdin.write("Use your best judgment and make autonomous decisions.\n")
                                     process.stdin.flush()
                     except OSError as e:
                         logger.error(f"Error reading stdout: {e}")
