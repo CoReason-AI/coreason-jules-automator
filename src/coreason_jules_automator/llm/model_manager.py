@@ -23,7 +23,7 @@ class ModelManager:
                 filename=filename,
                 cache_dir=str(cache_dir),
                 local_dir=str(cache_dir),  # Force download to specific dir for simplicity
-                local_dir_use_symlinks=False,  # type: ignore[call-overload]
+                local_dir_use_symlinks=False,
             )
             # Explicitly cast to str for mypy, as hf_hub_download returns str | None in some versions or Any
             return str(model_path)
