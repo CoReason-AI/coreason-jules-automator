@@ -232,6 +232,21 @@ def test_wait_for_completion_disappeared(mock_run: MagicMock, agent: JulesAgent)
 
 
 @patch("subprocess.run")
+def test_wait_for_completion_exception(mock_run: MagicMock, agent: JulesAgent) -> None:
+    """Test wait for completion handling generic exception."""
+    # First call raises Exception, second call succeeds
+    mock_run.side_effect = [
+        Exception("Network Error"),
+        MagicMock(stdout="123 completed"),
+    ]
+
+    with patch("time.sleep", return_value=None):
+        result = agent.wait_for_completion("123")
+
+    assert result is True
+
+
+@patch("subprocess.run")
 @patch("shutil.copytree")
 @patch("shutil.copy2")
 @patch("pathlib.Path.mkdir")
@@ -307,3 +322,61 @@ def test_launch_session_exception(
 
     sid = agent.launch_session("Task")
     assert sid is None
+
+
+@patch("coreason_jules_automator.agent.jules.pexpect.spawn")
+@patch("coreason_jules_automator.agent.jules.JulesAgent._get_active_sids")
+@patch("coreason_jules_automator.agent.jules.get_settings")
+def test_launch_session_timeout_loop_final_failure(
+    mock_settings: MagicMock, mock_get_sids: MagicMock, mock_spawn: MagicMock, agent: JulesAgent
+) -> None:
+    """Test session launch timeout where final SID check also fails (lines 143-145)."""
+    mock_settings.return_value.repo_name = "test/repo"
+    mock_get_sids.return_value = {"100"} # No new SID
+
+    mock_child = MagicMock()
+    mock_spawn.return_value = mock_child
+    mock_child.isalive.return_value = True
+
+    # 1000 -> Start
+    # 1001 -> First iteration (TIMEOUT)
+    # 2900 -> Loop condition check (End)
+    with patch("time.time", side_effect=[1000, 1001, 2900]):
+        mock_child.expect.return_value = 4 # TIMEOUT
+
+        # Capture logs to verify error message
+        with patch("coreason_jules_automator.agent.jules.logger.error") as mock_error:
+            sid = agent.launch_session("Test Task")
+
+            assert sid is None
+            mock_child.close.assert_called()
+            mock_error.assert_called_with("❌ Jules failed to register a session within timeout.")
+
+@patch("coreason_jules_automator.agent.jules.pexpect.spawn")
+@patch("coreason_jules_automator.agent.jules.JulesAgent._get_active_sids")
+@patch("coreason_jules_automator.agent.jules.get_settings")
+def test_launch_session_timeout_loop_race_condition(
+    mock_settings: MagicMock, mock_get_sids: MagicMock, mock_spawn: MagicMock, agent: JulesAgent
+) -> None:
+    """Test session launch timeout where SID is found at the very end (line 143)."""
+    mock_settings.return_value.repo_name = "test/repo"
+
+    # 1. Start: {"100"}
+    # 2. Inside Loop (TIMEOUT): {"100"} (Not found)
+    # 3. Final Check: {"100", "101"} (Found!)
+    mock_get_sids.side_effect = [{"100"}, {"100"}, {"100", "101"}]
+
+    mock_child = MagicMock()
+    mock_spawn.return_value = mock_child
+    mock_child.isalive.return_value = True
+
+    # 1000 -> Start
+    # 1001 -> First iteration (TIMEOUT)
+    # 2900 -> Loop condition check (End)
+    with patch("time.time", side_effect=[1000, 1001, 2900]):
+        mock_child.expect.return_value = 4 # TIMEOUT
+
+        sid = agent.launch_session("Test Task")
+
+        assert sid == "101"
+        mock_child.close.assert_called()
