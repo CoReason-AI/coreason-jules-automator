@@ -63,10 +63,12 @@ async def test_async_orchestrator_run_cycle_retry() -> None:
 
     mock_strategy = MagicMock(spec=AsyncDefenseStrategy)
     # Fail first time, succeed second time
-    mock_strategy.execute = AsyncMock(side_effect=[
-        DefenseResult(success=False, message="Lint error"),
-        DefenseResult(success=True, message="All good")
-    ])
+    mock_strategy.execute = AsyncMock(
+        side_effect=[
+            DefenseResult(success=False, message="Lint error"),
+            DefenseResult(success=True, message="All good"),
+        ]
+    )
 
     orchestrator = AsyncOrchestrator(
         agent=mock_agent,

@@ -4,7 +4,12 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 from coreason_jules_automator.config import get_settings
-from coreason_jules_automator.protocols.jules import JulesProtocol, SendStdin, SignalSessionId
+from coreason_jules_automator.protocols.jules import (
+    JulesProtocol,
+    SendStdin,
+    SignalComplete,
+    SignalSessionId,
+)
 from coreason_jules_automator.utils.logger import logger
 
 from .shell import AsyncShellExecutor
@@ -14,8 +19,10 @@ class AsyncJulesAgent:
     def __init__(self, executable: str = "jules", shell: Optional[AsyncShellExecutor] = None):
         self.executable = executable
         self.shell = shell or AsyncShellExecutor()
+        self.mission_complete = False
 
     async def launch_session(self, task: str) -> Optional[str]:
+        self.mission_complete = False
         settings = get_settings()
         logger.info(f"Launching Jules session for repo: {settings.repo_name}...")
 
@@ -87,6 +94,9 @@ class AsyncJulesAgent:
                         detected_sid = action.sid
                         logger.info(f"✨ Captured SID: {detected_sid}")
                         break
+                    elif isinstance(action, SignalComplete):
+                        self.mission_complete = True
+                        logger.info("✅ Mission Complete signal received.")
 
                 if detected_sid:
                     break
