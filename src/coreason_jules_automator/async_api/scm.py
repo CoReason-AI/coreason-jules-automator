@@ -65,14 +65,15 @@ class AsyncGitInterface:
             logger.error(f"Git push failed: {e}")
             raise RuntimeError(f"Git push failed: {e}") from e
 
-    async def checkout_new_branch(self, branch_name: str, base_branch: str) -> None:
+    async def checkout_new_branch(self, branch_name: str, base_branch: str, pull_base: bool = True) -> None:
         """
         Creates and checks out a new branch from a base branch.
         """
         try:
             # Check out base first to ensure we are clean/up-to-date
             await self.shell.run(["git", "checkout", base_branch], check=True)
-            await self.shell.run(["git", "pull", "origin", base_branch], check=True)
+            if pull_base:
+                await self.shell.run(["git", "pull", "origin", base_branch], check=True)
             # Create new branch
             await self.shell.run(["git", "checkout", "-b", branch_name], check=True)
         except ShellError as e:

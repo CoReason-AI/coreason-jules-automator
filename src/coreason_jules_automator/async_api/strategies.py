@@ -2,7 +2,7 @@ import asyncio
 from typing import Any, Dict, List, Optional, Protocol
 
 from coreason_jules_automator.async_api.llm import AsyncLLMClient
-from coreason_jules_automator.async_api.scm import AsyncGeminiInterface, AsyncGitInterface, AsyncGitHubInterface
+from coreason_jules_automator.async_api.scm import AsyncGeminiInterface, AsyncGitHubInterface, AsyncGitInterface
 from coreason_jules_automator.config import get_settings
 from coreason_jules_automator.events import AutomationEvent, EventEmitter, EventType, LoguruEmitter
 from coreason_jules_automator.llm.janitor import JanitorService

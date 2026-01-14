@@ -1,4 +1,3 @@
-import asyncio
 import random
 import string
 from pathlib import Path
@@ -189,7 +188,7 @@ class AsyncOrchestrator:
 
             try:
                 # Checkout iteration branch from AGGREGATION branch
-                await self.git.checkout_new_branch(iter_branch, agg_branch)
+                await self.git.checkout_new_branch(iter_branch, agg_branch, pull_base=False)
                 success, feedback = await self.run_cycle(task, iter_branch)
 
                 if success:
