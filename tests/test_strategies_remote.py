@@ -25,15 +25,27 @@ def mock_git() -> MagicMock:
 def mock_emitter() -> MagicMock:
     return MagicMock()
 
+
 @pytest.fixture
 def mock_client() -> MagicMock:
     return MagicMock()
 
+
 @pytest.fixture
 def strategy(
-    mock_github: MagicMock, mock_janitor: MagicMock, mock_git: MagicMock, mock_emitter: MagicMock, mock_client: MagicMock
+    mock_github: MagicMock,
+    mock_janitor: MagicMock,
+    mock_git: MagicMock,
+    mock_emitter: MagicMock,
+    mock_client: MagicMock,
 ) -> RemoteDefenseStrategy:
-    return RemoteDefenseStrategy(github=mock_github, janitor=mock_janitor, git=mock_git, event_emitter=mock_emitter, llm_client=mock_client)
+    return RemoteDefenseStrategy(
+        github=mock_github,
+        janitor=mock_janitor,
+        git=mock_git,
+        event_emitter=mock_emitter,
+        llm_client=mock_client,
+    )
 
 
 def test_execute_missing_branch(strategy: RemoteDefenseStrategy) -> None:
@@ -112,7 +124,11 @@ def test_execute_success(
 
 
 def test_execute_check_failure(
-    strategy: RemoteDefenseStrategy, mock_github: MagicMock, mock_janitor: MagicMock, mock_git: MagicMock, mock_client: MagicMock
+    strategy: RemoteDefenseStrategy,
+    mock_github: MagicMock,
+    mock_janitor: MagicMock,
+    mock_git: MagicMock,
+    mock_client: MagicMock,
 ) -> None:
     """Test execution when a check fails."""
     mock_git.push_to_branch.return_value = True
@@ -173,6 +189,7 @@ def test_handle_ci_failure_fallback(strategy: RemoteDefenseStrategy) -> None:
     summary = strategy._handle_ci_failure(checks)
     assert summary == "CI checks failed but could not identify specific check failure."
 
+
 def test_handle_ci_failure_exception(
     strategy: RemoteDefenseStrategy, mock_client: MagicMock, mock_janitor: MagicMock
 ) -> None:
@@ -186,17 +203,14 @@ def test_handle_ci_failure_exception(
     summary = strategy._handle_ci_failure(checks)
     assert summary == "Log summarization failed. Please check the logs directly."
 
+
 def test_handle_ci_failure_no_client(
     mock_github: MagicMock, mock_janitor: MagicMock, mock_git: MagicMock, mock_emitter: MagicMock
 ) -> None:
     """Test fallback message when no LLM client is available."""
     # Initialize strategy without LLM client
     strategy_no_client = RemoteDefenseStrategy(
-        github=mock_github,
-        janitor=mock_janitor,
-        git=mock_git,
-        event_emitter=mock_emitter,
-        llm_client=None
+        github=mock_github, janitor=mock_janitor, git=mock_git, event_emitter=mock_emitter, llm_client=None
     )
 
     checks = [{"name": "test", "status": "completed", "conclusion": "failure", "url": "http://logs"}]
