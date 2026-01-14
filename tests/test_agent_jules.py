@@ -332,7 +332,7 @@ def test_launch_session_timeout_loop_final_failure(
 ) -> None:
     """Test session launch timeout where final SID check also fails (lines 143-145)."""
     mock_settings.return_value.repo_name = "test/repo"
-    mock_get_sids.return_value = {"100"} # No new SID
+    mock_get_sids.return_value = {"100"}  # No new SID
 
     mock_child = MagicMock()
     mock_spawn.return_value = mock_child
@@ -342,7 +342,7 @@ def test_launch_session_timeout_loop_final_failure(
     # 1001 -> First iteration (TIMEOUT)
     # 2900 -> Loop condition check (End)
     with patch("time.time", side_effect=[1000, 1001, 2900]):
-        mock_child.expect.return_value = 4 # TIMEOUT
+        mock_child.expect.return_value = 4  # TIMEOUT
 
         # Capture logs to verify error message
         with patch("coreason_jules_automator.agent.jules.logger.error") as mock_error:
@@ -351,6 +351,7 @@ def test_launch_session_timeout_loop_final_failure(
             assert sid is None
             mock_child.close.assert_called()
             mock_error.assert_called_with("❌ Jules failed to register a session within timeout.")
+
 
 @patch("coreason_jules_automator.agent.jules.pexpect.spawn")
 @patch("coreason_jules_automator.agent.jules.JulesAgent._get_active_sids")
@@ -374,7 +375,7 @@ def test_launch_session_timeout_loop_race_condition(
     # 1001 -> First iteration (TIMEOUT)
     # 2900 -> Loop condition check (End)
     with patch("time.time", side_effect=[1000, 1001, 2900]):
-        mock_child.expect.return_value = 4 # TIMEOUT
+        mock_child.expect.return_value = 4  # TIMEOUT
 
         sid = agent.launch_session("Test Task")
 
