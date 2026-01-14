@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, Optional, cast
+from typing import Any, Optional
 
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound, select_autoescape
 
@@ -36,7 +36,8 @@ class PromptManager:
         """
         try:
             template = self.env.get_template(template_name)
-            return cast(str, template.render(**kwargs))
+            # jinja2 render returns str in recent versions, but mypy might see Any depending on stubs
+            return str(template.render(**kwargs))
         except TemplateNotFound:
             logger.error(f"Template not found: {template_name} in {self.template_dir}")
             raise FileNotFoundError(f"Template not found: {template_name}") from None

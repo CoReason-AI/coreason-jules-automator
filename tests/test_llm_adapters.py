@@ -8,7 +8,7 @@ def test_openai_adapter_complete() -> None:
     mock_client = MagicMock()
     mock_client.chat.completions.create.return_value.choices[0].message.content = "OpenAI response"
 
-    adapter = OpenAIAdapter(mock_client)
+    adapter = OpenAIAdapter(mock_client, model_name="gpt-3.5-turbo")
     messages = [{"role": "user", "content": "Hello"}]
     result = adapter.complete(messages, max_tokens=100)
 

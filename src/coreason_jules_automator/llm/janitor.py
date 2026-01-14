@@ -50,15 +50,18 @@ class JanitorService:
         """
         Rewrites the commit message to be professional using LLM.
         """
+        # 1. Strip bot signatures
+        cleaned_text = self.sanitize_commit(raw_text)
+
         try:
-            prompt = self.prompt_manager.render("janitor_professionalize.j2", commit_text=raw_text)
+            prompt = self.prompt_manager.render("janitor_professionalize.j2", commit_text=cleaned_text)
         except Exception as e:
             logger.error(f"Failed to render prompt: {e}")
-            return raw_text
+            return cleaned_text
 
         if not self.client:
             logger.warning("No LLM client available for professionalize_commit.")
-            return raw_text
+            return cleaned_text
 
         for attempt in range(3):
             try:
@@ -82,4 +85,4 @@ class JanitorService:
                 logger.error(f"LLM generation failed: {e}")
                 break
 
-        return raw_text
+        return cleaned_text

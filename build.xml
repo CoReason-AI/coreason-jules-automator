@@ -1,10 +1,10 @@
-<project name="CoReasonJulesAutomator" default="run" basedir=".">
+<project name="CoReasonJulesAutomator" default="campaign" basedir=".">
     <description>
         Build file to run the Coreason Jules Automator CLI in background.
     </description>
-    <target name="run">
+    <target name="campaign">
         <exec executable="nohup">
-            <arg line="poetry run coreason-jules-automator run 'Default Task' --branch 'main'"/>
+            <arg line="poetry run coreason-jules-automator campaign 'Default Campaign Task' --base 'develop' --count 10"/>
         </exec>
     </target>
 </project>

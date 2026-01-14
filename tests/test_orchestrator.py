@@ -257,3 +257,44 @@ def test_run_campaign_failure_continue() -> None:
         # Verify called twice
         assert mock_run_cycle.call_count == 2
         # Verify warning was logged (implicit via coverage, or we could patch logger)
+
+
+def test_orchestrator_retry_feedback() -> None:
+    """Test that feedback is appended to the task description on retry."""
+    mock_agent = MagicMock(spec=JulesAgent)
+    mock_agent.launch_session.return_value = "123"
+    mock_agent.wait_for_completion.return_value = True
+    mock_agent.teleport_and_sync.return_value = True
+
+    mock_strategy = MagicMock(spec=DefenseStrategy)
+    # First call returns failure, second returns success
+    mock_strategy.execute.side_effect = [
+        DefenseResult(success=False, message="First failure"),
+        DefenseResult(success=True, message="Second success"),
+    ]
+
+    mock_emitter = MagicMock()
+
+    orchestrator = Orchestrator(agent=mock_agent, strategies=[mock_strategy], event_emitter=mock_emitter)
+
+    with patch("coreason_jules_automator.orchestrator.get_settings") as mock_settings:
+        mock_settings.return_value.max_retries = 2
+
+        result, msg = orchestrator.run_cycle("original task", "branch")
+
+        assert result is True
+        assert msg == "Success"
+
+        # Check that launch_session was called twice
+        assert mock_agent.launch_session.call_count == 2
+
+        # Check first call args
+        first_call_args = mock_agent.launch_session.call_args_list[0]
+        assert first_call_args[0][0] == "original task"
+
+        # Check second call args
+        second_call_args = mock_agent.launch_session.call_args_list[1]
+        task_arg = second_call_args[0][0]
+        assert "original task" in task_arg
+        assert "IMPORTANT: The previous attempt failed" in task_arg
+        assert "First failure" in task_arg
