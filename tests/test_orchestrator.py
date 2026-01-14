@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any, Dict, Tuple
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -161,6 +161,7 @@ def test_orchestrator_agent_failure_teleport() -> None:
 def test_run_campaign_success() -> None:
     """Test successful campaign execution."""
     mock_agent = MagicMock(spec=JulesAgent)
+    mock_agent.mission_complete = False
     mock_strategy = MockStrategy(success=True)
     mock_emitter = MagicMock()
     mock_git = MagicMock(spec=GitInterface)
@@ -205,6 +206,7 @@ def test_run_campaign_missing_deps() -> None:
 
 def test_run_campaign_iteration_error() -> None:
     mock_agent = MagicMock(spec=JulesAgent)
+    mock_agent.mission_complete = False
     mock_strategy = MockStrategy(success=True)
     mock_emitter = MagicMock()
     mock_git = MagicMock(spec=GitInterface)
@@ -233,6 +235,7 @@ def test_run_campaign_iteration_error() -> None:
 def test_run_campaign_failure_continue() -> None:
     """Test campaign continuation on cycle failure (False return)."""
     mock_agent = MagicMock(spec=JulesAgent)
+    mock_agent.mission_complete = False
     mock_strategy = MockStrategy(success=True)
     mock_emitter = MagicMock()
     mock_git = MagicMock(spec=GitInterface)
@@ -257,3 +260,87 @@ def test_run_campaign_failure_continue() -> None:
         # Verify called twice
         assert mock_run_cycle.call_count == 2
         # Verify warning was logged (implicit via coverage, or we could patch logger)
+
+
+def test_run_campaign_infinite_success() -> None:
+    """Test infinite campaign breaking on mission completion."""
+    mock_agent = MagicMock(spec=JulesAgent)
+    mock_agent.mission_complete = False  # Initially false
+
+    mock_strategy = MockStrategy(success=True)
+    mock_emitter = MagicMock()
+    mock_git = MagicMock(spec=GitInterface)
+    mock_janitor = MagicMock(spec=JanitorService)
+
+    orchestrator = Orchestrator(
+        agent=mock_agent,
+        strategies=[mock_strategy],
+        event_emitter=mock_emitter,
+        git_interface=mock_git,
+        janitor_service=mock_janitor,
+    )
+
+    with patch.object(orchestrator, "run_cycle") as mock_run_cycle:
+        mock_run_cycle.return_value = (True, "Success")
+        mock_git.get_commit_log.return_value = "log"
+        mock_janitor.professionalize_commit.return_value = "msg"
+
+        # Side effect to set mission_complete after 2nd call
+        def side_effect(*args: Any, **kwargs: Any) -> Tuple[bool, str]:
+            if mock_run_cycle.call_count >= 2:
+                mock_agent.mission_complete = True
+            return (True, "Success")
+
+        mock_run_cycle.side_effect = side_effect
+
+        # Run with iterations=0 (infinite)
+        orchestrator.run_campaign("task", iterations=0)
+
+        assert mock_run_cycle.call_count == 2
+        # Check that it stopped
+
+
+def test_run_campaign_safety_limit() -> None:
+    """Test infinite campaign hitting safety limit."""
+    mock_agent = MagicMock(spec=JulesAgent)
+    mock_agent.mission_complete = False
+
+    mock_strategy = MockStrategy(success=True)
+    mock_emitter = MagicMock()
+    mock_git = MagicMock(spec=GitInterface)
+    mock_janitor = MagicMock(spec=JanitorService)
+
+    orchestrator = Orchestrator(
+        agent=mock_agent,
+        strategies=[mock_strategy],
+        event_emitter=mock_emitter,
+        git_interface=mock_git,
+        janitor_service=mock_janitor,
+    )
+
+    # Set safety limit low for test
+    orchestrator.SAFETY_LIMIT = 2
+
+    with patch.object(orchestrator, "run_cycle") as mock_run_cycle:
+        mock_run_cycle.return_value = (True, "Success")
+        mock_git.get_commit_log.return_value = "log"
+        mock_janitor.professionalize_commit.return_value = "msg"
+
+        # Run with iterations=0 (infinite)
+        orchestrator.run_campaign("task", iterations=0)
+
+        # It should run 1, 2, then check limit > 2, break?
+        # i=1 (run), i=2 (run), i=3 (check safety limit? No.
+        # Loop:
+        # i=1
+        # check safety: 0 and 1 > 2? False.
+        # run cycle
+        # i++ (i=2)
+        # i=2
+        # check safety: 2 > 2? False.
+        # run cycle
+        # i++ (i=3)
+        # i=3
+        # check safety: 3 > 2? True. Break.
+
+        assert mock_run_cycle.call_count == 2

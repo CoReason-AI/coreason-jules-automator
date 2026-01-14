@@ -113,7 +113,7 @@ def run(
 def campaign(
     task: str = typer.Argument(..., help="The task description for the campaign."),
     base: str = typer.Option("develop", "--base", help="Base branch for the campaign."),
-    count: int = typer.Option(10, "--count", help="Number of iterations."),
+    count: int = typer.Option(0, "--count", help="Number of iterations. 0 for infinite."),
 ) -> None:
     """
     Runs a multi-iteration campaign.

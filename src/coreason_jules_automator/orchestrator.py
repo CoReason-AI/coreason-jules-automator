@@ -29,6 +29,8 @@ class Orchestrator:
     Refactored to support Remote Session + Teleport workflow.
     """
 
+    SAFETY_LIMIT = 1000
+
     def __init__(
         self,
         agent: JulesAgent,
@@ -160,9 +162,10 @@ class Orchestrator:
         )
         return False, last_error
 
-    def run_campaign(self, task: str, base_branch: str = "develop", iterations: int = 10) -> None:
+    def run_campaign(self, task: str, base_branch: str = "develop", iterations: Optional[int] = None) -> None:
         """
         Runs a campaign of multiple iterations to solve a task.
+        If iterations is None or 0, it runs in infinite mode (with a safety limit).
         """
         if not self.git or not self.janitor:
             raise RuntimeError("GitInterface and JanitorService are required for Campaign mode.")
@@ -174,9 +177,22 @@ class Orchestrator:
         logger.info(f"Starting Campaign ID: {run_id}. Aggregation Branch: {agg_branch}")
         self.git.checkout_new_branch(agg_branch, base_branch)
 
-        for i in range(1, iterations + 1):
+        i = 1
+        while True:
+            # Check for limit
+            if iterations and iterations > 0:
+                if i > iterations:
+                    logger.info(f"Iteration limit ({iterations}) reached.")
+                    break
+
+            # Check safety limit for infinite mode (to prevent runaway costs)
+            if (not iterations or iterations == 0) and i > self.SAFETY_LIMIT:
+                logger.warning(f"Safety limit of {self.SAFETY_LIMIT} iterations reached. Stopping campaign.")
+                break
+
             iter_branch = f"vibe_run_{run_id}_{i:03d}"
-            logger.info(f"--- Campaign Iteration {i}/{iterations}: {iter_branch} ---")
+            display_iter = f"{i}/{iterations}" if iterations and iterations > 0 else f"{i}/Inf"
+            logger.info(f"--- Campaign Iteration {display_iter}: {iter_branch} ---")
 
             try:
                 self.git.checkout_new_branch(iter_branch, base_branch)
@@ -193,3 +209,10 @@ class Orchestrator:
             except Exception as e:
                 logger.error(f"Iteration {i} encountered an error: {e}")
                 # Continue to next iteration
+
+            # Check for mission complete signal from agent
+            if self.agent.mission_complete:
+                logger.info("✅ Mission Complete signal received from Agent. Stopping campaign.")
+                break
+
+            i += 1

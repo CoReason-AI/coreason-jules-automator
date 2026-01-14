@@ -14,6 +14,8 @@ import time
 from pathlib import Path
 from typing import Optional, Set
 
+import pexpect
+
 from coreason_jules_automator.config import get_settings
 from coreason_jules_automator.utils.logger import logger
 
@@ -25,6 +27,7 @@ class JulesAgent:
 
     def __init__(self, executable: str = "jules") -> None:
         self.executable = executable
+        self.mission_complete = False
 
     def _get_active_sids(self) -> Set[str]:
         """
@@ -50,7 +53,9 @@ class JulesAgent:
     def launch_session(self, task: str) -> Optional[str]:
         """
         Launches a new Jules session in bootstrap mode and captures the new SID.
+        Uses pexpect to handle interactive prompts and auto-replies.
         """
+        self.mission_complete = False
         settings = get_settings()
 
         # 1. Snapshot existing sessions
@@ -65,46 +70,79 @@ class JulesAgent:
 
         full_prompt = context + task
 
-        # 3. Durable Launch
+        # 3. Durable Launch with pexpect
         try:
-            process = subprocess.Popen(
-                [self.executable, "new", "--repo", settings.repo_name],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE,
-                text=True,
-            )
-            # Send prompt to stdin
-            if process.stdin:
-                process.stdin.write(full_prompt)
-                process.stdin.close()
+            cmd = f"{self.executable} new --repo {settings.repo_name}"
+            # encoding='utf-8' is crucial for string matching
+            child = pexpect.spawn(cmd, encoding="utf-8", timeout=1800)
 
-            logger.info("Jules process launched. Polling for SID...")
+            # Send prompt immediately
+            child.sendline(full_prompt)
 
-            # 4. Polling for SID registry
-            for attempt in range(1, 21):
-                # Check if process died prematurely
-                if process.poll() is not None:
-                    _, stderr = process.communicate()
-                    logger.error(f"❌ Jules process exited early (code {process.returncode}). Stderr: {stderr}")
-                    return None
+            logger.info("Jules process launched. Entering interaction loop...")
 
-                post_sids = self._get_active_sids()
-                new_sids = post_sids - pre_sids
+            # Regex patterns
+            patterns = [
+                r"\?|\[y/n\]",  # 0: Question
+                r"100% of the requirements is met",  # 1: Success
+                r"SID:\s*(\d+)",  # 2: SID detection (if printed)
+                pexpect.EOF,  # 3: End of process
+                pexpect.TIMEOUT,  # 4: Timeout (internal poll interval)
+            ]
 
-                if new_sids:
-                    sid = list(new_sids)[0]
-                    logger.info(f"✨ Captured SID: {sid}")
-                    return sid
+            detected_sid: Optional[str] = None
+            start_time = time.time()
 
-                logger.debug(f"Discovery Attempt {attempt}/20: Waiting for cloud sync...")
-                time.sleep(4)
+            # Loop for up to 30 minutes
+            while (time.time() - start_time) < 1800:
+                # Use a short timeout for expect to allow periodic polling of SIDs
+                index = child.expect(patterns, timeout=5)
+
+                if index == 0:  # Question
+                    logger.info("Detected prompt. Auto-replying...")
+                    child.sendline("Use your best judgment and make autonomous decisions.")
+
+                elif index == 1:  # Success
+                    logger.info("✅ Mission Complete Signal Detected.")
+                    self.mission_complete = True
+                    # If we found SID, we might continue until EOF or return?
+                    # We should probably continue to handle any final output or cleanup
+                    # but if we have SID, we can technically return.
+                    # However, sticking to the loop allows the process to finish cleanly if it wants to exit.
+
+                elif index == 2:  # SID Pattern
+                    if child.match:
+                        sid_str = child.match.group(1)
+                        logger.info(f"✨ Captured SID from output: {sid_str}")
+                        detected_sid = sid_str
+
+                elif index == 3:  # EOF
+                    logger.info("Jules process finished (EOF).")
+                    break
+
+                elif index == 4:  # TIMEOUT (5s)
+                    # Poll SIDs via external command as a fallback
+                    if not detected_sid:
+                        post_sids = self._get_active_sids()
+                        new_sids = post_sids - pre_sids
+                        if new_sids:
+                            detected_sid = list(new_sids)[0]
+                            logger.info(f"✨ Captured SID from polling: {detected_sid}")
+
+            # Close child if still running
+            if child.isalive():
+                child.close()
+
+            if detected_sid:
+                return detected_sid
+
+            # Final check if we missed it
+            post_sids = self._get_active_sids()
+            new_sids = post_sids - pre_sids
+            if new_sids:
+                return list(new_sids)[0]
 
             logger.error("❌ Jules failed to register a session within timeout.")
-            process.kill()
-            _, stderr = process.communicate()
-            if stderr:
-                logger.error(f"Timeout stderr: {stderr}")
             return None
 
         except Exception as e:
@@ -116,6 +154,11 @@ class JulesAgent:
         Monitors the session status until it reaches 'Completed'.
         """
         logger.info(f"Monitoring status for SID: {sid}")
+
+        # If mission was already detected as complete during launch, return True immediately
+        if self.mission_complete:
+            logger.info("✅ Mission Complete flag set during launch.")
+            return True
 
         while True:
             try:
