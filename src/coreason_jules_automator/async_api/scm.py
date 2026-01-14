@@ -101,7 +101,9 @@ class AsyncGitInterface:
         """
         try:
             # git log base..head --pretty=format:"%B" (Raw Body)
-            result = await self.shell.run(["git", "log", f"{base_branch}..{head_branch}", "--pretty=format:%B"], check=True)
+            result = await self.shell.run(
+                ["git", "log", f"{base_branch}..{head_branch}", "--pretty=format:%B"], check=True
+            )
             return result.stdout.strip()
         except ShellError as e:
             logger.error(f"Failed to get commit log: {e}")
@@ -185,7 +187,9 @@ class AsyncGitHubInterface:
         logger.info(f"Fetching latest run logs for branch: {branch_name}")
         try:
             # 1. Get the latest run ID
-            output = await self._run_command(["run", "list", "--branch", branch_name, "--limit", "1", "--json", "databaseId"])
+            output = await self._run_command(
+                ["run", "list", "--branch", branch_name, "--limit", "1", "--json", "databaseId"]
+            )
             runs = json.loads(output)
 
             if not runs or not isinstance(runs, list):

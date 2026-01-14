@@ -175,7 +175,7 @@ class AsyncRemoteDefenseStrategy:
             return DefenseResult(success=False, message=f"Failed to push code: {e}")
 
         # 2. Poll Checks
-        max_poll_attempts = 10
+        max_poll_attempts = 30
         self.event_emitter.emit(
             AutomationEvent(
                 type=EventType.CHECK_RUNNING,
@@ -200,7 +200,7 @@ class AsyncRemoteDefenseStrategy:
                 any_failure = False
 
                 if not checks:
-                    await asyncio.sleep(2)
+                    await asyncio.sleep(10)
                     continue
 
                 for check in checks:
@@ -221,7 +221,7 @@ class AsyncRemoteDefenseStrategy:
                         return DefenseResult(success=True, message="CI checks passed")
                     else:
                         # Red - Get logs and summarize
-                        summary = await self._handle_ci_failure(checks)
+                        summary = await self._handle_ci_failure(checks, branch_name)
                         self.event_emitter.emit(
                             AutomationEvent(
                                 type=EventType.CHECK_RESULT,
@@ -231,7 +231,7 @@ class AsyncRemoteDefenseStrategy:
                         )
                         return DefenseResult(success=False, message=summary)
 
-                await asyncio.sleep(2)  # Wait before next poll
+                await asyncio.sleep(10)  # Wait before next poll
 
             except RuntimeError as e:
                 logger.warning(f"Failed to poll checks: {e}")
@@ -240,13 +240,13 @@ class AsyncRemoteDefenseStrategy:
                         type=EventType.ERROR, message=f"Poll attempt failed: {e}", payload={"error": str(e)}
                     )
                 )
-                await asyncio.sleep(2)
+                await asyncio.sleep(10)
 
         error_msg = "Line 2 timeout: Checks did not complete."
         logger.error(error_msg)
         return DefenseResult(success=False, message=error_msg)
 
-    async def _handle_ci_failure(self, checks: List[Any]) -> str:
+    async def _handle_ci_failure(self, checks: List[Any], branch_name: str) -> str:
         """
         Uses Janitor to summarize failure logs.
         """
@@ -257,6 +257,14 @@ class AsyncRemoteDefenseStrategy:
             log_snippet = (
                 f"Check {failed_check.get('name', 'unknown')} failed. URL: {failed_check.get('url', 'unknown')}"
             )
+
+            # Get full logs if possible
+            full_logs = await self.github.get_latest_run_log(branch_name)
+            if full_logs:
+                # Truncate if too long (rough check, could be improved)
+                if len(full_logs) > 10000:
+                    full_logs = full_logs[-10000:]
+                log_snippet += f"\n\n--- Logs ---\n{full_logs}"
 
             # Sans-I/O: Build Request -> Execute -> Return
             if not self.llm_client:

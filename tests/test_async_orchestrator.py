@@ -100,7 +100,7 @@ async def test_async_orchestrator_run_cycle_retry() -> None:
 async def test_async_orchestrator_run_cycle_agent_failure() -> None:
     # Mocks
     mock_agent = MagicMock(spec=AsyncJulesAgent)
-    mock_agent.launch_session = AsyncMock(return_value=None) # Fail to launch
+    mock_agent.launch_session = AsyncMock(return_value=None)  # Fail to launch
 
     mock_strategy = MagicMock(spec=AsyncDefenseStrategy)
 
