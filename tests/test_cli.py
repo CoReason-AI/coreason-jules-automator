@@ -25,7 +25,7 @@ def test_run_success() -> None:
         with patch("coreason_jules_automator.llm.factory.LLMFactory.get_client"):
             with patch("coreason_jules_automator.cli.Orchestrator") as MockOrchestrator:
                 mock_instance = MockOrchestrator.return_value
-                mock_instance.run_cycle.return_value = True
+                mock_instance.run_cycle.return_value = (True, "Success")
 
                 # Try without "run" subcommand if it fails
                 result = runner.invoke(app, ["run", "Task1", "--branch", "fix/bug"])
@@ -49,7 +49,7 @@ def test_run_failure() -> None:
         patch("coreason_jules_automator.cli.Orchestrator") as MockOrchestrator,
     ):
         mock_instance = MockOrchestrator.return_value
-        mock_instance.run_cycle.return_value = False
+        mock_instance.run_cycle.return_value = (False, "Failure")
 
         result = runner.invoke(app, ["run", "Task1", "--branch", "fix/bug"])
         if result.exit_code != 1:  # 2 is Usage Error
@@ -140,7 +140,7 @@ def test_run_report_exception() -> None:
         patch("coreason_jules_automator.cli.logger") as mock_logger,
     ):
         mock_instance = MockOrchestrator.return_value
-        mock_instance.run_cycle.return_value = True
+        mock_instance.run_cycle.return_value = (True, "Success")
 
         mock_reporter = MockReporter.return_value
         mock_reporter.generate_report.side_effect = Exception("Report Error")
@@ -155,3 +155,48 @@ def test_run_report_exception() -> None:
 
         assert result.exit_code == 0
         mock_logger.error.assert_called_with("Failed to generate report: Report Error")
+
+
+def test_campaign_command() -> None:
+    """Test campaign command."""
+    with (
+        patch("coreason_jules_automator.cli.get_settings"),
+        patch("coreason_jules_automator.llm.factory.LLMFactory.get_client"),
+        patch("coreason_jules_automator.cli.Orchestrator") as MockOrchestrator,
+        patch("coreason_jules_automator.cli.GitInterface"),
+        patch("coreason_jules_automator.cli.GitHubInterface"),
+        patch("coreason_jules_automator.cli.GeminiInterface"),
+        patch("coreason_jules_automator.cli.JanitorService"),
+        patch("coreason_jules_automator.cli.JulesAgent"),
+        patch("coreason_jules_automator.cli.ShellExecutor"),
+    ):
+        mock_instance = MockOrchestrator.return_value
+
+        result = runner.invoke(app, ["campaign", "Task1", "--base", "dev", "--count", "5"])
+
+        if result.exit_code != 0:
+            print(f"Output: {result.output}")
+
+        assert result.exit_code == 0
+        mock_instance.run_campaign.assert_called_with("Task1", "dev", 5)
+
+
+def test_campaign_exception() -> None:
+    """Test campaign with unexpected exception."""
+    with (
+        patch("coreason_jules_automator.cli.get_settings"),
+        patch("coreason_jules_automator.llm.factory.LLMFactory.get_client"),
+        patch("coreason_jules_automator.cli.Orchestrator") as MockOrchestrator,
+        patch("coreason_jules_automator.cli.GitInterface"),
+        patch("coreason_jules_automator.cli.GitHubInterface"),
+        patch("coreason_jules_automator.cli.GeminiInterface"),
+        patch("coreason_jules_automator.cli.JanitorService"),
+        patch("coreason_jules_automator.cli.JulesAgent"),
+        patch("coreason_jules_automator.cli.ShellExecutor"),
+    ):
+        mock_instance = MockOrchestrator.return_value
+        mock_instance.run_campaign.side_effect = Exception("Campaign Crash")
+
+        result = runner.invoke(app, ["campaign", "Task1"])
+
+        assert result.exit_code == 1

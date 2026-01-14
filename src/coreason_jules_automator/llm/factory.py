@@ -22,16 +22,16 @@ class LLMFactory:
                 logger.warning("openai package not installed. Falling back to local.")
                 return self._initialize_local(settings)
 
-            if settings.OPENAI_API_KEY:
-                logger.info("Initializing OpenAI client")
-                client = OpenAI(api_key=settings.OPENAI_API_KEY.get_secret_value())
-                return OpenAIAdapter(client)
-            elif settings.DEEPSEEK_API_KEY:
+            if settings.DEEPSEEK_API_KEY:
                 logger.info("Initializing DeepSeek client")
                 client = OpenAI(
                     api_key=settings.DEEPSEEK_API_KEY.get_secret_value(),
                     base_url="https://api.deepseek.com",
                 )
+                return OpenAIAdapter(client, model_name="deepseek-coder")
+            elif settings.OPENAI_API_KEY:
+                logger.info("Initializing OpenAI client")
+                client = OpenAI(api_key=settings.OPENAI_API_KEY.get_secret_value())
                 return OpenAIAdapter(client)
             else:
                 logger.warning("No valid API key found (OPENAI_API_KEY or DEEPSEEK_API_KEY). Falling back to local.")

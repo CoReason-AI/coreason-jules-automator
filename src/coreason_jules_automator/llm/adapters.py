@@ -11,12 +11,13 @@ class LLMClient(Protocol):
 class OpenAIAdapter:
     """Adapter for OpenAI-compatible clients."""
 
-    def __init__(self, client: Any) -> None:
+    def __init__(self, client: Any, model_name: str = "gpt-3.5-turbo") -> None:
         self.client = client
+        self.model_name = model_name
 
     def complete(self, messages: List[Dict[str, str]], max_tokens: int = 150) -> str:
         response = self.client.chat.completions.create(
-            model="gpt-3.5-turbo",  # This might need to be configurable, but for now strict implementation
+            model=self.model_name,
             messages=messages,
             max_tokens=max_tokens,
         )
