@@ -2,6 +2,7 @@ from typing import Any, Dict
 from unittest.mock import MagicMock, patch
 
 import pytest
+
 from coreason_jules_automator.agent.jules import JulesAgent
 from coreason_jules_automator.ci.git import GitInterface
 from coreason_jules_automator.events import EventType

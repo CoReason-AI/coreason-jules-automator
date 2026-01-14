@@ -1,8 +1,9 @@
 from pathlib import Path
 from typing import Any, Optional
 
-from coreason_jules_automator.utils.logger import logger
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound, select_autoescape
+
+from coreason_jules_automator.utils.logger import logger
 
 
 class PromptManager:

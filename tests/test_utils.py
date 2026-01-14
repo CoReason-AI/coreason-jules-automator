@@ -11,6 +11,7 @@
 from pathlib import Path
 
 import pytest
+
 from coreason_jules_automator.utils.logger import logger
 
 

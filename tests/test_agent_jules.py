@@ -3,6 +3,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+
 from coreason_jules_automator.agent.jules import JulesAgent
 
 
