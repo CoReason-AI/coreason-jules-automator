@@ -393,6 +393,7 @@ def test_run_campaign_infinite() -> None:
         mock_janitor.professionalize_commit.return_value = "msg"
 
         call_counter = 0
+
         def side_effect(*args: Any, **kwargs: Any) -> Tuple[bool, str]:
             nonlocal call_counter
             call_counter += 1

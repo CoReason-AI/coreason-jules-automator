@@ -8,12 +8,13 @@
 #
 # Source Code: https://github.com/CoReason-AI/coreason_jules_automator
 
-import pexpect
 import shutil
 import subprocess
 import time
 from pathlib import Path
 from typing import Optional, Set
+
+import pexpect
 
 from coreason_jules_automator.config import get_settings
 from coreason_jules_automator.utils.logger import logger

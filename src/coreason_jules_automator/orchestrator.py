@@ -167,9 +167,7 @@ class Orchestrator:
         )
         return False, last_error
 
-    def run_campaign(
-        self, task: str, base_branch: str = "develop", iterations: Optional[int] = 50
-    ) -> None:
+    def run_campaign(self, task: str, base_branch: str = "develop", iterations: Optional[int] = 50) -> None:
         """
         Runs a campaign of multiple iterations to solve a task.
         If iterations is 0 or None, it runs in Infinite Mode (up to a safety limit).

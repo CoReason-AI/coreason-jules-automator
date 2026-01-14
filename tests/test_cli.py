@@ -201,6 +201,7 @@ def test_campaign_exception() -> None:
 
         assert result.exit_code == 1
 
+
 def test_campaign_default_count() -> None:
     """Test campaign command with default count (0/infinite)."""
     with (
