@@ -217,7 +217,7 @@ def test_run_campaign_completion() -> None:
         event_emitter=mock_emitter,
         git_interface=mock_git,
         janitor_service=mock_janitor,
-        llm_client=mock_client
+        llm_client=mock_client,
     )
 
     call_counter = 0
@@ -302,7 +302,7 @@ def test_run_campaign_iteration_error() -> None:
         event_emitter=mock_emitter,
         git_interface=mock_git,
         janitor_service=mock_janitor,
-        llm_client=mock_client
+        llm_client=mock_client,
     )
 
     with patch.object(orchestrator, "run_cycle") as mock_run_cycle:
@@ -334,7 +334,7 @@ def test_run_campaign_failure_continue() -> None:
         event_emitter=mock_emitter,
         git_interface=mock_git,
         janitor_service=mock_janitor,
-        llm_client=mock_client
+        llm_client=mock_client,
     )
 
     with patch.object(orchestrator, "run_cycle") as mock_run_cycle:
@@ -409,7 +409,7 @@ def test_run_campaign_infinite() -> None:
         event_emitter=mock_emitter,
         git_interface=mock_git,
         janitor_service=mock_janitor,
-        llm_client=mock_client
+        llm_client=mock_client,
     )
 
     with patch.object(orchestrator, "run_cycle") as mock_run_cycle:
@@ -435,10 +435,11 @@ def test_run_campaign_infinite() -> None:
         # It should run 3 times and stop because mission_complete became true
         assert mock_run_cycle.call_count == 3
 
+
 def test_run_campaign_professionalize_exception() -> None:
     """Test fallback when professionalization fails."""
     mock_agent = MagicMock(spec=JulesAgent)
-    mock_agent.mission_complete = False # Default
+    mock_agent.mission_complete = False  # Default
     mock_strategy = MockStrategy(success=True)
     mock_emitter = MagicMock()
     mock_git = MagicMock(spec=GitInterface)
@@ -451,7 +452,7 @@ def test_run_campaign_professionalize_exception() -> None:
         event_emitter=mock_emitter,
         git_interface=mock_git,
         janitor_service=mock_janitor,
-        llm_client=mock_client
+        llm_client=mock_client,
     )
 
     # Patch random.choices to have predictable ID for branch naming
@@ -472,9 +473,8 @@ def test_run_campaign_professionalize_exception() -> None:
 
             orchestrator.run_campaign("task", iterations=1)
 
-            mock_git.merge_squash.assert_called_with(
-                "vibe_run_123_001", "vibe_run_123", "raw log"
-            )
+            mock_git.merge_squash.assert_called_with("vibe_run_123_001", "vibe_run_123", "raw log")
+
 
 def test_run_campaign_professionalize_no_client() -> None:
     """Test professionalization logic when no client is present."""
@@ -492,7 +492,7 @@ def test_run_campaign_professionalize_no_client() -> None:
         event_emitter=mock_emitter,
         git_interface=mock_git,
         janitor_service=mock_janitor,
-        llm_client=None
+        llm_client=None,
     )
 
     with patch("random.choices", return_value=["1", "2", "3"]):
@@ -505,9 +505,8 @@ def test_run_campaign_professionalize_no_client() -> None:
 
             # verify sanitize_commit was called and used for merge
             mock_janitor.sanitize_commit.assert_called_with("raw log")
-            mock_git.merge_squash.assert_called_with(
-                "vibe_run_123_001", "vibe_run_123", "sanitized"
-            )
+            mock_git.merge_squash.assert_called_with("vibe_run_123_001", "vibe_run_123", "sanitized")
+
 
 def test_run_campaign_retry_loop_fail() -> None:
     """Test retry loop exhaustion in professionalize commit."""
@@ -525,7 +524,7 @@ def test_run_campaign_retry_loop_fail() -> None:
         event_emitter=mock_emitter,
         git_interface=mock_git,
         janitor_service=mock_janitor,
-        llm_client=mock_client
+        llm_client=mock_client,
     )
 
     with patch("random.choices", return_value=["1", "2", "3"]):
@@ -541,8 +540,6 @@ def test_run_campaign_retry_loop_fail() -> None:
             orchestrator.run_campaign("task", iterations=1)
 
             # Should fall back to raw log (initial value of clean_msg)
-            mock_git.merge_squash.assert_called_with(
-                "vibe_run_123_001", "vibe_run_123", "raw log"
-            )
+            mock_git.merge_squash.assert_called_with("vibe_run_123_001", "vibe_run_123", "raw log")
             # Verify called 3 times (loop range 3)
             assert mock_client.complete.call_count == 3
