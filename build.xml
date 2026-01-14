@@ -5,7 +5,7 @@
     <target name="campaign">
         <echo message="Launching Campaign in background..."/>
         <exec executable="nohup" spawn="true">
-            <arg line="poetry run coreason-jules-automator campaign 'Default Campaign Task' --base 'develop' --count 10"/>
+            <arg line="poetry run coreason-jules-automator campaign 'Default Campaign Task' --base 'develop' --count 50"/>
         </exec>
         <echo message="Process spawned. You may now log off."/>
     </target>

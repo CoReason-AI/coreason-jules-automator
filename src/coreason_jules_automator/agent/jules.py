@@ -8,7 +8,6 @@
 #
 # Source Code: https://github.com/CoReason-AI/coreason_jules_automator
 
-import os
 import select
 import shutil
 import subprocess
@@ -28,6 +27,7 @@ class JulesAgent:
 
     def __init__(self, executable: str = "jules") -> None:
         self.executable = executable
+        self.mission_complete = False
 
     def _get_active_sids(self) -> Set[str]:
         """Runs `jules remote list --session` and returns active SIDs."""
@@ -54,6 +54,7 @@ class JulesAgent:
         """
         settings = get_settings()
         pre_sids = self._get_active_sids()
+        self.mission_complete = False
         logger.info(f"Launching Jules session for repo: {settings.repo_name}...")
 
         # Prepare prompt
@@ -66,14 +67,13 @@ class JulesAgent:
 
         try:
             # Launch process with pipes for interaction
-            # We use text=False (binary) to allow bufsize=0 and direct unbuffered reading/writing
             process = subprocess.Popen(
                 [self.executable, "new", "--repo", settings.repo_name],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                text=False,
-                bufsize=0,  # Unbuffered
+                text=True,
+                bufsize=1,  # Line buffered
             )
 
             if process.stdin is None or process.stdout is None:  # pragma: no cover
@@ -83,7 +83,7 @@ class JulesAgent:
 
             # Send initial prompt
             logger.debug("Sending initial task prompt...")
-            process.stdin.write(f"{full_prompt}\n".encode("utf-8"))
+            process.stdin.write(f"{full_prompt}\n")
             process.stdin.flush()
 
             # Monitoring Loop (Wait for SID or Exit)
@@ -106,18 +106,23 @@ class JulesAgent:
 
                 if ret[0]:
                     try:
-                        chunk = os.read(process.stdout.fileno(), 1024).decode("utf-8", errors="replace")
-                        if chunk:
-                            logger.debug(f"[Jules]: {chunk.strip()}")
+                        # Read line-by-line (approximated for non-blocking)
+                        # We read what's available to avoid blocking on readline if no newline
+                        line = process.stdout.readline()
+                        if line:
+                            clean_line = line.strip()
+                            logger.debug(f"[Jules]: {clean_line}")
 
-                            # 1. Auto-Reply Logic
-                            # Detect common CLI prompts like "Continue? [y/N]" or "Input required:"
-                            if "?" in chunk or "input" in chunk.lower() or "action" in chunk.lower():
-                                logger.info(f"🤖 Auto-replying to query: {chunk.strip()}")
+                            # Termination Detection
+                            if "100% of the requirements is met" in clean_line.lower():
+                                self.mission_complete = True
+                                logger.info("✅ Mission Complete Signal Detected.")
+
+                            # Auto-Reply Logic
+                            if "?" in line or "[y/n]" in line.lower():
+                                logger.info(f"🤖 Auto-replying to query: {clean_line}")
                                 if process.stdin:
-                                    process.stdin.write(
-                                        "Use your best judgment and make autonomous decisions.\n".encode("utf-8")
-                                    )
+                                    process.stdin.write("Use your best judgment and make autonomous decisions.\n")
                                     process.stdin.flush()
                     except OSError as e:
                         logger.error(f"Error reading stdout: {e}")
