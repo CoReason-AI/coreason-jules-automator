@@ -75,10 +75,11 @@ class GitHubInterface:
                 return "No workflow runs found."
 
             # runs[0] can be a dict
-            run_id = str(runs[0].get("databaseId"))
-            if not run_id:
+            run_id_val = runs[0].get("databaseId")
+            if run_id_val is None:
                 logger.warning("Run ID not found in response.")
                 return "Run ID not found."
+            run_id = str(run_id_val)
 
             # 2. Get the log
             log_output = self._run_command(["run", "view", run_id, "--log"])

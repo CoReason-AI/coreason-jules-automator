@@ -48,6 +48,20 @@ def test_janitor_summarize_logs_template_error() -> None:
     assert summary == "Log summarization failed due to template error."
 
 
+def test_janitor_summarize_logs_llm_error() -> None:
+    """Test handling of LLM errors during summarization."""
+    mock_client = MagicMock()
+    mock_client.complete.side_effect = Exception("LLM Error")
+
+    mock_prompt_manager = MagicMock()
+    mock_prompt_manager.render.return_value = "Rendered Prompt"
+
+    janitor = JanitorService(llm_client=mock_client, prompt_manager=mock_prompt_manager)
+    summary = janitor.summarize_logs("log")
+
+    assert summary == "Log summarization failed. Please check the logs directly."
+
+
 def test_professionalize_commit_success() -> None:
     """Test professionalize_commit success."""
     mock_client = MagicMock()
@@ -93,3 +107,45 @@ def test_professionalize_commit_failure() -> None:
 
     assert result == "wip feature"
     assert mock_client.complete.call_count == 3
+
+
+def test_professionalize_commit_prompt_error() -> None:
+    """Test professionalize_commit handles prompt rendering error."""
+    mock_prompt_manager = MagicMock()
+    mock_prompt_manager.render.side_effect = Exception("Prompt Error")
+
+    janitor = JanitorService(llm_client=MagicMock(), prompt_manager=mock_prompt_manager)
+    result = janitor.professionalize_commit("wip feature")
+
+    assert result == "wip feature"
+
+
+def test_professionalize_commit_no_client() -> None:
+    """Test professionalize_commit handles missing client."""
+    mock_prompt_manager = MagicMock()
+    mock_prompt_manager.render.return_value = "Prompt"
+
+    janitor = JanitorService(llm_client=None, prompt_manager=mock_prompt_manager)
+    result = janitor.professionalize_commit("wip feature")
+
+    assert result == "wip feature"
+
+
+def test_professionalize_commit_llm_exception() -> None:
+    """Test professionalize_commit handles generic LLM exception."""
+    mock_client = MagicMock()
+    mock_client.complete.side_effect = Exception("LLM Error")
+
+    mock_prompt_manager = MagicMock()
+    mock_prompt_manager.render.return_value = "Prompt"
+
+    janitor = JanitorService(llm_client=mock_client, prompt_manager=mock_prompt_manager)
+    result = janitor.professionalize_commit("wip feature")
+
+    assert result == "wip feature"
+    # Should stop after first exception, not retry loop for generic exceptions?
+    # The code breaks on generic exception:
+    # except Exception as e:
+    #    logger.error(f"LLM generation failed: {e}")
+    #    break
+    assert mock_client.complete.call_count == 1

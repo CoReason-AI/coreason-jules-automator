@@ -114,3 +114,17 @@ def test_get_latest_run_log_json_error(gh: GitHubInterface) -> None:
     with patch.object(gh, "_run_command", return_value="invalid json"):
         log = gh.get_latest_run_log("feature/test")
         assert "Failed to parse run list" in log
+
+
+def test_get_latest_run_log_missing_id(gh: GitHubInterface) -> None:
+    """Test get_latest_run_log when run ID is missing/null."""
+    with patch.object(gh, "_run_command", return_value='[{"databaseId": null}]'):
+        log = gh.get_latest_run_log("feature/test")
+        assert "Run ID not found" in log
+
+
+def test_get_latest_run_log_generic_error(gh: GitHubInterface) -> None:
+    """Test get_latest_run_log handles generic exception."""
+    with patch.object(gh, "_run_command", side_effect=Exception("Generic Error")):
+        log = gh.get_latest_run_log("feature/test")
+        assert "Failed to fetch run logs" in log
