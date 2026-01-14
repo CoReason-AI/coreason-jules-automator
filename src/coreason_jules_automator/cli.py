@@ -74,9 +74,11 @@ def run(
             agent=agent,
             strategies=[local_strategy, remote_strategy],
             event_emitter=composite_emitter,
+            git_interface=git,
+            janitor_service=janitor,
         )
 
-        success = orchestrator.run_cycle(task, branch)
+        success, _ = orchestrator.run_cycle(task, branch)
 
         # Generate Report
         try:
@@ -104,6 +106,57 @@ def run(
 
     except Exception as e:
         logger.exception(f"Unexpected error: {e}")
+        sys.exit(1)
+
+
+@app.command(name="campaign")  # type: ignore[misc]
+def campaign(
+    task: str = typer.Argument(..., help="The task description for the campaign."),
+    base: str = typer.Option("develop", "--base", help="Base branch for the campaign."),
+    count: int = typer.Option(10, "--count", help="Number of iterations."),
+) -> None:
+    """
+    Runs a multi-iteration campaign.
+    """
+    logger.info(f"Starting Campaign. Task: {task}, Base: {base}, Count: {count}")
+
+    try:
+        # Composition Root
+        shell_executor = ShellExecutor()
+
+        log_emitter = LoguruEmitter()
+        event_collector = EventCollector()
+        composite_emitter = CompositeEmitter([log_emitter, event_collector])
+
+        gemini = GeminiInterface(shell_executor=shell_executor)
+        git = GitInterface(shell_executor=shell_executor)
+        github = GitHubInterface(shell_executor=shell_executor)
+
+        settings = get_settings()
+        llm_client = LLMFactory().get_client(settings)
+        prompt_manager = PromptManager()
+        janitor = JanitorService(llm_client=llm_client, prompt_manager=prompt_manager)
+
+        local_strategy = LocalDefenseStrategy(gemini=gemini, event_emitter=composite_emitter)
+        remote_strategy = RemoteDefenseStrategy(
+            github=github, janitor=janitor, git=git, event_emitter=composite_emitter
+        )
+
+        agent = JulesAgent()
+
+        orchestrator = Orchestrator(
+            agent=agent,
+            strategies=[local_strategy, remote_strategy],
+            event_emitter=composite_emitter,
+            git_interface=git,
+            janitor_service=janitor,
+        )
+
+        orchestrator.run_campaign(task, base, count)
+        logger.info("Campaign completed.")
+
+    except Exception as e:
+        logger.exception(f"Unexpected error in campaign: {e}")
         sys.exit(1)
 
 

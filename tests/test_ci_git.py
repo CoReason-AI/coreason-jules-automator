@@ -123,7 +123,7 @@ def test_get_commit_log_success(git: GitInterface, mock_shell: MagicMock) -> Non
     mock_shell.run.return_value = CommandResult(0, "feat: a\nfix: b", "")
     log = git.get_commit_log("base", "head")
     assert log == "feat: a\nfix: b"
-    mock_shell.run.assert_called_with(["git", "log", "base..head", "--pretty=format:%s"], check=True)
+    mock_shell.run.assert_called_with(["git", "log", "base..head", "--pretty=format:%B"], check=True)
 
 
 def test_get_commit_log_failure(git: GitInterface, mock_shell: MagicMock) -> None:

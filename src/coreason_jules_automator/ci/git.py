@@ -86,6 +86,8 @@ class GitInterface:
             self.shell.run(["git", "merge", "--squash", source_branch], check=True)
             # Commit
             self.shell.run(["git", "commit", "-m", message], check=True)
+            # Push
+            self.shell.run(["git", "push", "origin", target_branch], check=True)
         except ShellError as e:
             logger.error(f"Failed to squash merge {source_branch} into {target_branch}: {e}")
             raise RuntimeError(f"Failed to squash merge: {e}") from e
@@ -95,8 +97,8 @@ class GitInterface:
         Returns the log of commits between base and head.
         """
         try:
-            # git log base..head --pretty=format:"%s"
-            result = self.shell.run(["git", "log", f"{base_branch}..{head_branch}", "--pretty=format:%s"], check=True)
+            # git log base..head --pretty=format:"%B" (Raw Body)
+            result = self.shell.run(["git", "log", f"{base_branch}..{head_branch}", "--pretty=format:%B"], check=True)
             return result.stdout.strip()
         except ShellError as e:
             logger.error(f"Failed to get commit log: {e}")

@@ -1,8 +1,12 @@
 from typing import Any, Dict
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from coreason_jules_automator.agent.jules import JulesAgent
+from coreason_jules_automator.ci.git import GitInterface
 from coreason_jules_automator.events import EventType
+from coreason_jules_automator.llm.janitor import JanitorService
 from coreason_jules_automator.orchestrator import Orchestrator
 from coreason_jules_automator.strategies.base import DefenseResult, DefenseStrategy
 
@@ -30,7 +34,7 @@ def test_orchestrator_events() -> None:
     with patch("coreason_jules_automator.orchestrator.get_settings") as mock_settings:
         mock_settings.return_value.max_retries = 1
 
-        result = orchestrator.run_cycle("task", "branch")
+        result, _ = orchestrator.run_cycle("task", "branch")
 
         assert result is True
 
@@ -68,7 +72,7 @@ def test_orchestrator_failure_events() -> None:
     with patch("coreason_jules_automator.orchestrator.get_settings") as mock_settings:
         mock_settings.return_value.max_retries = 1
 
-        result = orchestrator.run_cycle("task", "branch")
+        result, _ = orchestrator.run_cycle("task", "branch")
 
         assert result is False
 
@@ -92,7 +96,7 @@ def test_orchestrator_agent_failure_launch() -> None:
     with patch("coreason_jules_automator.orchestrator.get_settings") as mock_settings:
         mock_settings.return_value.max_retries = 1
 
-        result = orchestrator.run_cycle("task", "branch")
+        result, _ = orchestrator.run_cycle("task", "branch")
 
         assert result is False
 
@@ -117,7 +121,7 @@ def test_orchestrator_agent_failure_wait() -> None:
     with patch("coreason_jules_automator.orchestrator.get_settings") as mock_settings:
         mock_settings.return_value.max_retries = 1
 
-        result = orchestrator.run_cycle("task", "branch")
+        result, _ = orchestrator.run_cycle("task", "branch")
 
         assert result is False
 
@@ -143,7 +147,7 @@ def test_orchestrator_agent_failure_teleport() -> None:
     with patch("coreason_jules_automator.orchestrator.get_settings") as mock_settings:
         mock_settings.return_value.max_retries = 1
 
-        result = orchestrator.run_cycle("task", "branch")
+        result, _ = orchestrator.run_cycle("task", "branch")
 
         assert result is False
 
@@ -152,3 +156,75 @@ def test_orchestrator_agent_failure_teleport() -> None:
         assert last_event.type == EventType.ERROR
         assert "Agent workflow failed" in last_event.message
         assert "Failed to sync remote code" in last_event.payload["error"]
+
+
+def test_run_campaign_success() -> None:
+    """Test successful campaign execution."""
+    mock_agent = MagicMock(spec=JulesAgent)
+    mock_strategy = MockStrategy(success=True)
+    mock_emitter = MagicMock()
+    mock_git = MagicMock(spec=GitInterface)
+    mock_janitor = MagicMock(spec=JanitorService)
+
+    orchestrator = Orchestrator(
+        agent=mock_agent,
+        strategies=[mock_strategy],
+        event_emitter=mock_emitter,
+        git_interface=mock_git,
+        janitor_service=mock_janitor,
+    )
+
+    with patch.object(orchestrator, "run_cycle") as mock_run_cycle:
+        mock_run_cycle.return_value = (True, "Success")
+        mock_git.get_commit_log.return_value = "raw log"
+        mock_janitor.professionalize_commit.return_value = "clean message"
+
+        orchestrator.run_campaign("task", "base", iterations=2)
+
+        # 1 agg checkout + 2 iterations * 1 checkout = 3 checkouts
+        assert mock_git.checkout_new_branch.call_count == 3
+        assert mock_run_cycle.call_count == 2
+        assert mock_git.merge_squash.call_count == 2
+
+
+def test_run_campaign_missing_deps() -> None:
+    mock_agent = MagicMock(spec=JulesAgent)
+    mock_strategy = MockStrategy(success=True)
+    mock_emitter = MagicMock()
+
+    orchestrator = Orchestrator(
+        agent=mock_agent,
+        strategies=[mock_strategy],
+        event_emitter=mock_emitter,
+        # missing git and janitor
+    )
+
+    with pytest.raises(RuntimeError, match="GitInterface and JanitorService are required"):
+        orchestrator.run_campaign("task")
+
+
+def test_run_campaign_iteration_error() -> None:
+    mock_agent = MagicMock(spec=JulesAgent)
+    mock_strategy = MockStrategy(success=True)
+    mock_emitter = MagicMock()
+    mock_git = MagicMock(spec=GitInterface)
+    mock_janitor = MagicMock(spec=JanitorService)
+
+    orchestrator = Orchestrator(
+        agent=mock_agent,
+        strategies=[mock_strategy],
+        event_emitter=mock_emitter,
+        git_interface=mock_git,
+        janitor_service=mock_janitor,
+    )
+
+    with patch.object(orchestrator, "run_cycle") as mock_run_cycle:
+        # First iteration raises exception, Second succeeds (to check continuation)
+        mock_run_cycle.side_effect = [Exception("Loop Error"), (True, "Success")]
+        mock_git.get_commit_log.return_value = "log"
+        mock_janitor.professionalize_commit.return_value = "msg"
+
+        orchestrator.run_campaign("task", iterations=2)
+
+        # Verify called twice
+        assert mock_run_cycle.call_count == 2
