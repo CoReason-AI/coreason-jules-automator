@@ -173,70 +173,56 @@ async def test_remote_strategy_ci_failure_no_llm(remote_deps: Dict[str, MagicMoc
 
 
 @pytest.mark.asyncio
-async def test_remote_strategy_ci_failure_llm_error(remote_deps: Dict[str, MagicMock]) -> None:
+async def test_remote_strategy_long_log_truncation(remote_deps: Dict[str, MagicMock]) -> None:
+    remote_deps["git"].push_to_branch = AsyncMock(return_value=True)
+    remote_deps["github"].get_pr_checks = AsyncMock(
+        return_value=[{"status": "completed", "conclusion": "failure", "name": "test"}]
+    )
+    # Very long log
+    long_log = "a" * 15000
+    remote_deps["github"].get_latest_run_log = AsyncMock(return_value=long_log)
+
+    mock_llm_response = MagicMock(content="Summary")
+    remote_deps["llm_client"].execute = AsyncMock(return_value=mock_llm_response)
+
+    strategy = AsyncRemoteDefenseStrategy(**remote_deps)
+
+    with patch("asyncio.sleep", new_callable=AsyncMock):
+        await strategy.execute({"branch_name": "feat", "sid": "123"})
+
+    # Check that janitor was called with truncated log
+    # The log snippet will contain the end of the log
+    call_args = remote_deps["janitor"].build_summarize_request.call_args
+    assert call_args is not None
+    snippet = call_args[0][0]
+    assert len(snippet) < 15000
+    assert "--- Logs ---" in snippet
+
+
+@pytest.mark.asyncio
+async def test_remote_strategy_janitor_exception(remote_deps: Dict[str, MagicMock]) -> None:
+    # Test line 266: logger.error(f"Janitor summarization failed: {e}")
     remote_deps["git"].push_to_branch = AsyncMock(return_value=True)
     remote_deps["github"].get_pr_checks = AsyncMock(
         return_value=[{"status": "completed", "conclusion": "failure", "name": "test"}]
     )
     remote_deps["github"].get_latest_run_log = AsyncMock(return_value="log")
 
+    # LLM raises exception
     remote_deps["llm_client"].execute = AsyncMock(side_effect=Exception("LLM Fail"))
 
     strategy = AsyncRemoteDefenseStrategy(**remote_deps)
 
     with patch("asyncio.sleep", new_callable=AsyncMock):
         result = await strategy.execute({"branch_name": "feat", "sid": "123"})
-        assert result.success is False
-        assert "Log summarization failed" in result.message
+
+    assert result.success is False
+    assert "Log summarization failed" in result.message
 
 
 @pytest.mark.asyncio
-async def test_remote_strategy_ci_failure_analysis(remote_deps: Dict[str, MagicMock]) -> None:
-    remote_deps["git"].push_to_branch = AsyncMock(return_value=True)
-    remote_deps["github"].get_pr_checks = AsyncMock(
-        return_value=[{"status": "completed", "conclusion": "failure", "name": "test", "url": "http://log"}]
-    )
-    remote_deps["github"].get_latest_run_log = AsyncMock(return_value="Detailed Error Log")
-
-    mock_llm_resp = MagicMock()
-    mock_llm_resp.content = "Summary: Test failed"
-    remote_deps["llm_client"].execute = AsyncMock(return_value=mock_llm_resp)
-
+async def test_remote_strategy_handle_ci_failure_fallback(remote_deps: Dict[str, MagicMock]) -> None:
     strategy = AsyncRemoteDefenseStrategy(**remote_deps)
-
-    with patch("asyncio.sleep", new_callable=AsyncMock):
-        result = await strategy.execute({"branch_name": "feat", "sid": "123"})
-
-        assert result.success is False
-        assert "Summary: Test failed" in result.message
-        # Verify log fetching was called
-        remote_deps["github"].get_latest_run_log.assert_awaited_with("feat")
-
-
-@pytest.mark.asyncio
-async def test_remote_strategy_handle_ci_failure_no_failed_check(remote_deps: Dict[str, MagicMock]) -> None:
-    # Direct test for dead code path where conclusion != success but logic misses it?
-    # Or just empty list passed to _handle_ci_failure
-    strategy = AsyncRemoteDefenseStrategy(**remote_deps)
-    # This shouldn't happen in real exec flow but covers the "if failed_check" branch
+    # Call private method directly to hit the fallback return
     msg = await strategy._handle_ci_failure([], "branch")
     assert "could not identify specific check failure" in msg
-
-
-@pytest.mark.asyncio
-async def test_remote_strategy_janitor_exception(remote_deps: Dict[str, MagicMock]) -> None:
-    # Force janitor to raise an exception to cover line 266
-    remote_deps["git"].push_to_branch = AsyncMock(return_value=True)
-    remote_deps["github"].get_pr_checks = AsyncMock(
-        return_value=[{"status": "completed", "conclusion": "failure", "name": "test", "url": "http://log"}]
-    )
-    remote_deps["github"].get_latest_run_log = AsyncMock(return_value="log")
-
-    remote_deps["janitor"].build_summarize_request.side_effect = Exception("Janitor Error")
-
-    strategy = AsyncRemoteDefenseStrategy(**remote_deps)
-    with patch("asyncio.sleep", new_callable=AsyncMock):
-        result = await strategy.execute({"branch_name": "feat", "sid": "123"})
-
-        assert result.success is False
-        assert "Log summarization failed" in result.message

@@ -385,3 +385,38 @@ async def test_async_orchestrator_run_cycle_teleport_exception() -> None:
     success, feedback = await orchestrator.run_cycle("Task", "branch")
     assert success is False
     assert "Teleport Boom" in feedback
+
+
+@pytest.mark.asyncio
+async def test_async_orchestrator_run_campaign_missing_deps() -> None:
+    mock_agent = MagicMock(spec=AsyncJulesAgent)
+    orchestrator = AsyncOrchestrator(agent=mock_agent, strategies=[])
+
+    with pytest.raises(RuntimeError, match="GitInterface and JanitorService are required"):
+        await orchestrator.run_campaign("Task")
+
+
+@pytest.mark.asyncio
+async def test_async_orchestrator_run_campaign_iteration_failure() -> None:
+    mock_agent = MagicMock(spec=AsyncJulesAgent)
+    mock_agent.mission_complete = False
+
+    mock_git = MagicMock(spec=AsyncGitInterface)
+    mock_git.checkout_new_branch = AsyncMock()
+    mock_git.delete_branch = AsyncMock()
+
+    mock_janitor = MagicMock(spec=JanitorService)
+
+    orchestrator = AsyncOrchestrator(
+        agent=mock_agent,
+        strategies=[],
+        git_interface=mock_git,
+        janitor_service=mock_janitor,
+    )
+
+    with patch.object(orchestrator, "run_cycle", new_callable=AsyncMock) as mock_run_cycle:
+        mock_run_cycle.return_value = (False, "Failure")
+
+        await orchestrator.run_campaign("Task", iterations=1)
+
+        mock_git.delete_branch.assert_awaited()

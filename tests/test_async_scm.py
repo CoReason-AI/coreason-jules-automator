@@ -312,3 +312,11 @@ async def test_gemini_failure() -> None:
 
     with pytest.raises(RuntimeError, match="Gemini command failed"):
         await gemini.security_scan()
+
+
+@pytest.mark.asyncio
+async def test_gemini_init_no_executable() -> None:
+    with patch("shutil.which", return_value=None):
+        with patch("coreason_jules_automator.async_api.scm.logger") as mock_logger:
+            AsyncGeminiInterface()
+            mock_logger.warning.assert_called()
