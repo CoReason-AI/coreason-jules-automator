@@ -23,7 +23,7 @@ class AsyncDefenseStrategy(Protocol):
         Returns:
             DefenseResult indicating success or failure.
         """
-        ...
+        ...  # pragma: no cover
 
 
 class AsyncLocalDefenseStrategy:
