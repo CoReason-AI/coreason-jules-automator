@@ -1,12 +1,12 @@
-from unittest.mock import AsyncMock, MagicMock, patch, ANY
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 
 from coreason_jules_automator.async_api.agent import AsyncJulesAgent
-from coreason_jules_automator.async_api.orchestrator import AsyncOrchestrator
-from coreason_jules_automator.async_api.strategies import AsyncDefenseStrategy
-from coreason_jules_automator.async_api.scm import AsyncGitInterface
 from coreason_jules_automator.async_api.llm import AsyncLLMClient
+from coreason_jules_automator.async_api.orchestrator import AsyncOrchestrator
+from coreason_jules_automator.async_api.scm import AsyncGitInterface
+from coreason_jules_automator.async_api.strategies import AsyncDefenseStrategy
 from coreason_jules_automator.llm.janitor import JanitorService
 from coreason_jules_automator.strategies.base import DefenseResult
 
@@ -120,6 +120,7 @@ async def test_async_orchestrator_run_cycle_agent_failure() -> None:
     assert "Failed to obtain Session ID" in feedback
     mock_strategy.execute.assert_not_awaited()
 
+
 @pytest.mark.asyncio
 async def test_async_orchestrator_run_cycle_wait_failure() -> None:
     mock_agent = MagicMock(spec=AsyncJulesAgent)
@@ -131,6 +132,7 @@ async def test_async_orchestrator_run_cycle_wait_failure() -> None:
     success, feedback = await orchestrator.run_cycle("Task", "branch")
     assert success is False
     assert "did not complete" in feedback
+
 
 @pytest.mark.asyncio
 async def test_async_orchestrator_run_cycle_teleport_failure() -> None:
@@ -145,6 +147,7 @@ async def test_async_orchestrator_run_cycle_teleport_failure() -> None:
     assert success is False
     assert "Failed to sync" in feedback
 
+
 @pytest.mark.asyncio
 async def test_async_orchestrator_run_cycle_exception() -> None:
     mock_agent = MagicMock(spec=AsyncJulesAgent)
@@ -155,6 +158,7 @@ async def test_async_orchestrator_run_cycle_exception() -> None:
     success, feedback = await orchestrator.run_cycle("Task", "branch")
     assert success is False
     assert "Boom" in feedback
+
 
 @pytest.mark.asyncio
 async def test_async_orchestrator_run_cycle_max_retries() -> None:
@@ -182,7 +186,7 @@ async def test_async_orchestrator_run_cycle_max_retries() -> None:
 async def test_async_orchestrator_run_campaign_success() -> None:
     # Mocks
     mock_agent = MagicMock(spec=AsyncJulesAgent)
-    mock_agent.mission_complete = True # Simulate completion after first iteration
+    mock_agent.mission_complete = True  # Simulate completion after first iteration
     mock_agent.launch_session = AsyncMock(return_value="sid-123")
     mock_agent.wait_for_completion = AsyncMock(return_value=True)
     mock_agent.teleport_and_sync = AsyncMock(return_value=True)
@@ -209,7 +213,7 @@ async def test_async_orchestrator_run_campaign_success() -> None:
         strategies=[mock_strategy],
         git_interface=mock_git,
         janitor_service=mock_janitor,
-        llm_client=mock_llm
+        llm_client=mock_llm,
     )
 
     # Execute
@@ -217,7 +221,7 @@ async def test_async_orchestrator_run_campaign_success() -> None:
     await orchestrator.run_campaign("Task", "develop", iterations=1)
 
     # Verify flow
-    assert mock_git.checkout_new_branch.call_count >= 2 # 1 agg + 1 iter
+    assert mock_git.checkout_new_branch.call_count >= 2  # 1 agg + 1 iter
     mock_git.merge_squash.assert_awaited()
     mock_git.delete_branch.assert_awaited()
 
@@ -234,16 +238,14 @@ async def test_async_orchestrator_run_campaign_exception() -> None:
     mock_janitor = MagicMock(spec=JanitorService)
 
     orchestrator = AsyncOrchestrator(
-        agent=mock_agent,
-        strategies=[],
-        git_interface=mock_git,
-        janitor_service=mock_janitor
+        agent=mock_agent, strategies=[], git_interface=mock_git, janitor_service=mock_janitor
     )
 
     await orchestrator.run_campaign("Task", "develop", iterations=1)
 
     # Should catch exception and attempt cleanup
     mock_git.delete_branch.assert_awaited()
+
 
 @pytest.mark.asyncio
 async def test_async_orchestrator_run_campaign_prof_failure() -> None:
@@ -273,7 +275,7 @@ async def test_async_orchestrator_run_campaign_prof_failure() -> None:
         strategies=[mock_strategy],
         git_interface=mock_git,
         janitor_service=mock_janitor,
-        llm_client=mock_llm
+        llm_client=mock_llm,
     )
 
     await orchestrator.run_campaign("Task", "develop", iterations=1)
@@ -287,9 +289,8 @@ async def test_async_orchestrator_run_campaign_prof_failure() -> None:
     # else: if janitor: sanitize.
     # If prof fails, it just logs error. clean_msg remains raw_log.
 
-    mock_git.merge_squash.assert_awaited_with(
-        ANY, ANY, "raw log"
-    )
+    mock_git.merge_squash.assert_awaited_with(ANY, ANY, "raw log")
+
 
 @pytest.mark.asyncio
 async def test_async_orchestrator_run_campaign_prof_retry_fail() -> None:
@@ -321,7 +322,7 @@ async def test_async_orchestrator_run_campaign_prof_retry_fail() -> None:
         strategies=[mock_strategy],
         git_interface=mock_git,
         janitor_service=mock_janitor,
-        llm_client=mock_llm
+        llm_client=mock_llm,
     )
 
     await orchestrator.run_campaign("Task", "develop", iterations=1)
@@ -330,6 +331,45 @@ async def test_async_orchestrator_run_campaign_prof_retry_fail() -> None:
     assert mock_llm.execute.call_count == 3
     # Merges with raw log
     mock_git.merge_squash.assert_awaited_with(ANY, ANY, "raw log")
+
+
+@pytest.mark.asyncio
+async def test_async_orchestrator_run_campaign_no_llm_fallback() -> None:
+    # Test fallback logic when LLM client is missing
+    mock_agent = MagicMock(spec=AsyncJulesAgent)
+    mock_agent.mission_complete = True
+    mock_agent.launch_session = AsyncMock(return_value="sid")
+    mock_agent.wait_for_completion = AsyncMock(return_value=True)
+    mock_agent.teleport_and_sync = AsyncMock(return_value=True)
+
+    mock_strategy = MagicMock(spec=AsyncDefenseStrategy)
+    mock_strategy.execute = AsyncMock(return_value=DefenseResult(success=True))
+
+    mock_git = MagicMock(spec=AsyncGitInterface)
+    mock_git.checkout_new_branch = AsyncMock()
+    mock_git.get_commit_log = AsyncMock(return_value="raw log")
+    mock_git.merge_squash = AsyncMock()
+    mock_git.delete_branch = AsyncMock()
+
+    mock_janitor = MagicMock(spec=JanitorService)
+    # Sanitize should be called as fallback
+    mock_janitor.sanitize_commit = MagicMock(return_value="sanitized log")
+
+    # NO LLM CLIENT
+    orchestrator = AsyncOrchestrator(
+        agent=mock_agent,
+        strategies=[mock_strategy],
+        git_interface=mock_git,
+        janitor_service=mock_janitor,
+        llm_client=None,
+    )
+
+    await orchestrator.run_campaign("Task", "develop", iterations=1)
+
+    # Verify fallback to sanitize_commit
+    mock_janitor.sanitize_commit.assert_called_with("raw log")
+    mock_git.merge_squash.assert_awaited_with(ANY, ANY, "sanitized log")
+
 
 @pytest.mark.asyncio
 async def test_async_orchestrator_run_cycle_teleport_exception() -> None:
