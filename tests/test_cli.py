@@ -1,8 +1,10 @@
-from unittest.mock import patch
+import sys
+from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner
 
-from coreason_jules_automator.cli import app, main
+# Import the internal helper function for testing
+from coreason_jules_automator.cli import _get_async_llm_client, app, main
 
 runner = CliRunner()
 
@@ -227,3 +229,63 @@ def test_campaign_default_count() -> None:
 
             assert result.exit_code == 0
             mock_instance.run_campaign.assert_called_with("Task1", "develop", 0)
+
+
+# --- Coverage Tests for _get_async_llm_client ---
+
+def test_get_async_llm_client_openai_import_error() -> None:
+    """Test helper when openai is not installed."""
+    mock_settings = MagicMock()
+    mock_settings.llm_strategy = "api"
+
+    with patch.dict(sys.modules, {"openai": None}):
+        result = _get_async_llm_client(mock_settings)
+        assert result is None
+
+
+def test_get_async_llm_client_deepseek() -> None:
+    """Test helper with DeepSeek key."""
+    mock_settings = MagicMock()
+    mock_settings.llm_strategy = "api"
+    mock_settings.DEEPSEEK_API_KEY.get_secret_value.return_value = "ds-key"
+    mock_settings.OPENAI_API_KEY = None
+
+    with patch("openai.AsyncOpenAI") as MockOpenAI:
+        result = _get_async_llm_client(mock_settings)
+        assert result is not None
+        MockOpenAI.assert_called_with(api_key="ds-key", base_url="https://api.deepseek.com")
+
+
+def test_get_async_llm_client_openai() -> None:
+    """Test helper with OpenAI key."""
+    mock_settings = MagicMock()
+    mock_settings.llm_strategy = "api"
+    mock_settings.DEEPSEEK_API_KEY = None
+    mock_settings.OPENAI_API_KEY.get_secret_value.return_value = "oa-key"
+
+    with patch("openai.AsyncOpenAI") as MockOpenAI:
+        result = _get_async_llm_client(mock_settings)
+        assert result is not None
+        MockOpenAI.assert_called_with(api_key="oa-key")
+
+
+def test_get_async_llm_client_no_keys() -> None:
+    """Test helper with API strategy but no keys."""
+    mock_settings = MagicMock()
+    mock_settings.llm_strategy = "api"
+    mock_settings.DEEPSEEK_API_KEY = None
+    mock_settings.OPENAI_API_KEY = None
+
+    # Ensure openai module exists
+    with patch("openai.AsyncOpenAI"):
+        result = _get_async_llm_client(mock_settings)
+        assert result is None
+
+
+def test_get_async_llm_client_local() -> None:
+    """Test helper with local strategy."""
+    mock_settings = MagicMock()
+    mock_settings.llm_strategy = "local"
+
+    result = _get_async_llm_client(mock_settings)
+    assert result is None
