@@ -1,4 +1,4 @@
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from typer.testing import CliRunner
 
@@ -50,7 +50,7 @@ def test_run_failure() -> None:
         mock_settings.llm_strategy = "api"
 
         with (
-            patch("coreason_jules_automator.cli.AsyncOrchestrator") as MockOrchestrator,
+            patch("coreason_jules_automator.cli.AsyncOrchestrator"),
             patch("coreason_jules_automator.cli.asyncio.run") as mock_asyncio_run,
             patch("coreason_jules_automator.cli.AsyncGitInterface"),
             patch("coreason_jules_automator.cli.AsyncGitHubInterface"),
@@ -68,9 +68,10 @@ def test_run_failure() -> None:
 
 def test_run_exception() -> None:
     """Test run with unexpected exception."""
-    with patch("coreason_jules_automator.cli.get_settings"), \
-         patch("coreason_jules_automator.cli.AsyncShellExecutor", side_effect=Exception("Crash")):
-
+    with (
+        patch("coreason_jules_automator.cli.get_settings"),
+        patch("coreason_jules_automator.cli.AsyncShellExecutor", side_effect=Exception("Crash")),
+    ):
         result = runner.invoke(app, ["run", "Task", "--branch", "b"])
 
         assert result.exit_code == 1
@@ -133,7 +134,7 @@ def test_run_report_exception() -> None:
         mock_settings.llm_strategy = "api"
 
         with (
-            patch("coreason_jules_automator.cli.AsyncOrchestrator") as MockOrchestrator,
+            patch("coreason_jules_automator.cli.AsyncOrchestrator"),
             patch("coreason_jules_automator.cli.asyncio.run") as mock_asyncio_run,
             patch("coreason_jules_automator.cli.MarkdownReporter") as MockReporter,
             patch("coreason_jules_automator.cli.logger") as mock_logger,
@@ -190,9 +191,10 @@ def test_campaign_command() -> None:
 
 def test_campaign_exception() -> None:
     """Test campaign with unexpected exception."""
-    with patch("coreason_jules_automator.cli.get_settings"), \
-         patch("coreason_jules_automator.cli.AsyncShellExecutor", side_effect=Exception("Campaign Crash")):
-
+    with (
+        patch("coreason_jules_automator.cli.get_settings"),
+        patch("coreason_jules_automator.cli.AsyncShellExecutor", side_effect=Exception("Campaign Crash")),
+    ):
         result = runner.invoke(app, ["campaign", "Task1"])
 
         assert result.exit_code == 1

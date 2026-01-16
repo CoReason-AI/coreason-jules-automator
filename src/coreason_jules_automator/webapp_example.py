@@ -15,8 +15,8 @@ from pydantic import BaseModel
 
 from coreason_jules_automator.async_api import (
     AsyncGeminiInterface,
-    AsyncGitInterface,
     AsyncGitHubInterface,
+    AsyncGitInterface,
     AsyncJulesAgent,
     AsyncLocalDefenseStrategy,
     AsyncOpenAIAdapter,
