@@ -22,7 +22,12 @@ class AsyncJulesAgent:
     Implements Async Context Manager for resource safety.
     """
 
-    def __init__(self, settings: Optional[Settings] = None, executable: str = "jules", shell: Optional[AsyncShellExecutor] = None):
+    def __init__(
+        self,
+        settings: Optional[Settings] = None,
+        executable: str = "jules",
+        shell: Optional[AsyncShellExecutor] = None,
+    ):
         self.settings = settings or get_settings()
         self.executable = executable
         self.shell = shell or AsyncShellExecutor()
