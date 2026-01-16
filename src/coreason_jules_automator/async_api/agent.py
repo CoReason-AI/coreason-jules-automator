@@ -2,7 +2,7 @@ import asyncio
 from pathlib import Path
 from typing import Optional
 
-from coreason_jules_automator.config import get_settings
+from coreason_jules_automator.config import get_settings, Settings
 from coreason_jules_automator.protocols.jules import (
     JulesProtocol,
     SendStdin,
@@ -10,6 +10,7 @@ from coreason_jules_automator.protocols.jules import (
     SignalSessionId,
 )
 from coreason_jules_automator.utils.logger import logger
+from coreason_jules_automator.exceptions import AgentProcessError
 
 from .shell import AsyncShellExecutor
 
@@ -18,15 +19,26 @@ class AsyncJulesAgent:
     """
     Async wrapper for the Jules CLI agent.
     Manages the subprocess, parsing output via JulesProtocol, and sending input.
+    Implements Async Context Manager for resource safety.
     """
 
-    def __init__(self, executable: str = "jules", shell: Optional[AsyncShellExecutor] = None):
+    def __init__(self, settings: Optional[Settings] = None, executable: str = "jules", shell: Optional[AsyncShellExecutor] = None):
+        self.settings = settings or get_settings()
         self.executable = executable
         self.shell = shell or AsyncShellExecutor()
         self.mission_complete = False
         self.protocol = JulesProtocol()
         # Keep track of process across method calls
         self.process: Optional[asyncio.subprocess.Process] = None
+
+    async def __aenter__(self) -> "AsyncJulesAgent":
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        if self.process:
+            logger.info("Cleaning up Jules agent process...")
+            await self._cleanup_process(self.process)
+            self.process = None
 
     async def _process_output_stream(
         self, process: asyncio.subprocess.Process, stop_on_sid: bool = False
@@ -78,17 +90,24 @@ class AsyncJulesAgent:
 
         except Exception as e:
             logger.error(f"Error processing stream: {e}")
-            raise e
+            raise AgentProcessError(f"Error processing stream: {e}") from e
 
         return detected_sid
 
-    async def launch_session(self, task: str) -> Optional[str]:
+    async def launch(self, task: str) -> str:
+        """
+        Launches the Jules session.
+        Returns:
+            The Session ID (SID).
+        Raises:
+            AgentProcessError: If launch fails or SID not found.
+        """
         self.mission_complete = False
-        settings = get_settings()
-        logger.info(f"Launching Jules session for repo: {settings.repo_name}...")
+        repo_name = self.settings.repo_name
+        logger.info(f"Launching Jules session for repo: {repo_name}...")
 
         # Construct command
-        cmd = [self.executable, "remote", settings.repo_name, "--task", task]
+        cmd = [self.executable, "remote", repo_name, "--task", task]
 
         try:
             process = await asyncio.create_subprocess_exec(
@@ -99,18 +118,29 @@ class AsyncJulesAgent:
                 env=None,  # Inherit env
             )
         except Exception as e:
-            logger.error(f"Failed to launch process: {e}")
-            return None
+            raise AgentProcessError(f"Failed to launch process: {e}") from e
 
         self.process = process
 
         try:
             detected_sid = await self._process_output_stream(process, stop_on_sid=True)
+            if not detected_sid:
+                raise AgentProcessError("Failed to obtain Session ID (SID). Process might have exited early.")
             return detected_sid
 
         except Exception as e:
             logger.error(f"Error during launch: {e}")
-            await self._cleanup_process(process)
+            # If we are in context manager, __aexit__ will handle cleanup, but if we fail here,
+            # we might want to ensure cleanup immediately if the exception bubbles up?
+            # Actually, standard practice is that if __aenter__ succeeds, __aexit__ is called.
+            # But launch is called inside the with block. So exception here will trigger __aexit__.
+            raise e
+
+    # Keep legacy name for compatibility if needed, or just redirect
+    async def launch_session(self, task: str) -> Optional[str]:
+        try:
+            return await self.launch(task)
+        except AgentProcessError:
             return None
 
     async def wait_for_completion(self, sid: str) -> bool:

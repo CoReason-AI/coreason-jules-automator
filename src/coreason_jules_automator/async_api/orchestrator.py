@@ -11,6 +11,8 @@ from coreason_jules_automator.config import get_settings
 from coreason_jules_automator.events import AutomationEvent, EventEmitter, EventType, LoguruEmitter
 from coreason_jules_automator.llm.janitor import JanitorService
 from coreason_jules_automator.utils.logger import logger
+from coreason_jules_automator.domain.context import OrchestrationContext
+from coreason_jules_automator.exceptions import JulesAutomatorError, AgentProcessError
 
 
 class AsyncOrchestrator:
@@ -66,7 +68,16 @@ class AsyncOrchestrator:
                 return False, error_msg
 
             # --- PHASE 2: DEFENSE STRATEGIES ---
-            success, feedback = await self._execute_defense_strategies(branch_name, sid)
+            # Create immutable context
+            # We assume task_id is same as branch_name or generated. Using branch_name as simple proxy or random ID.
+            task_id = f"task_{branch_name}_{attempt}"
+            context = OrchestrationContext(
+                task_id=task_id,
+                branch_name=branch_name,
+                session_id=sid
+            )
+
+            success, feedback = await self._execute_defense_strategies(context)
 
             if success:
                 self._emit_success("All strategies passed.")
@@ -89,45 +100,45 @@ class AsyncOrchestrator:
 
     async def _execute_agent_workflow(self, task: str) -> Tuple[Optional[str], str]:
         """Encapsulates Launch -> Wait -> Teleport sequence. Returns (sid, error_msg)."""
+        # Context Manager Usage
         try:
-            # 1. Launch Session
-            self.event_emitter.emit(
-                AutomationEvent(type=EventType.CHECK_RUNNING, message="Launching Remote Jules Session...")
-            )
-            sid = await self.agent.launch_session(task)
-
-            if not sid:
-                raise RuntimeError("Failed to obtain Session ID (SID).")
-
-            self.event_emitter.emit(
-                AutomationEvent(type=EventType.CHECK_RESULT, message=f"Session Started: {sid}", payload={"sid": sid})
-            )
-
-            # 2. Monitor for Completion
-            self.event_emitter.emit(
-                AutomationEvent(type=EventType.CHECK_RUNNING, message=f"Waiting for SID {sid} to complete...")
-            )
-            success_wait = await self.agent.wait_for_completion(sid)
-
-            if not success_wait:
-                raise RuntimeError(f"Session {sid} did not complete successfully.")
-
-            # 3. Teleport & Sync
-            self.event_emitter.emit(
-                AutomationEvent(type=EventType.CHECK_RUNNING, message="Teleporting code to local workspace...")
-            )
-            success_sync = await self.agent.teleport_and_sync(sid, Path.cwd())
-
-            if not success_sync:
-                raise RuntimeError("Failed to sync remote code to local repository.")
-
-            self.event_emitter.emit(
-                AutomationEvent(
-                    type=EventType.CHECK_RESULT, message="Code synced successfully.", payload={"status": "pass"}
+            async with self.agent as agent:
+                # 1. Launch Session
+                self.event_emitter.emit(
+                    AutomationEvent(type=EventType.CHECK_RUNNING, message="Launching Remote Jules Session...")
                 )
-            )
-            return sid, ""
-        except Exception as e:
+                sid = await agent.launch(task)
+
+                self.event_emitter.emit(
+                    AutomationEvent(type=EventType.CHECK_RESULT, message=f"Session Started: {sid}", payload={"sid": sid})
+                )
+
+                # 2. Monitor for Completion
+                self.event_emitter.emit(
+                    AutomationEvent(type=EventType.CHECK_RUNNING, message=f"Waiting for SID {sid} to complete...")
+                )
+                success_wait = await agent.wait_for_completion(sid)
+
+                if not success_wait:
+                    raise AgentProcessError(f"Session {sid} did not complete successfully.")
+
+                # 3. Teleport & Sync
+                self.event_emitter.emit(
+                    AutomationEvent(type=EventType.CHECK_RUNNING, message="Teleporting code to local workspace...")
+                )
+                success_sync = await agent.teleport_and_sync(sid, Path.cwd())
+
+                if not success_sync:
+                    raise JulesAutomatorError("Failed to sync remote code to local repository.")
+
+                self.event_emitter.emit(
+                    AutomationEvent(
+                        type=EventType.CHECK_RESULT, message="Code synced successfully.", payload={"status": "pass"}
+                    )
+                )
+                return sid, ""
+
+        except JulesAutomatorError as e:
             error_msg = f"Agent workflow failed: {e}"
             self.event_emitter.emit(
                 AutomationEvent(
@@ -137,14 +148,29 @@ class AsyncOrchestrator:
                 )
             )
             return None, error_msg
+        except Exception as e:
+            logger.exception("Unexpected error in agent workflow")
+            error_msg = f"Unexpected agent workflow failure: {e}"
+            self.event_emitter.emit(
+                AutomationEvent(
+                    type=EventType.ERROR,
+                    message=error_msg,
+                    payload={"error": str(e)},
+                )
+            )
+            return None, error_msg
 
-    async def _execute_defense_strategies(self, branch_name: str, sid: str) -> Tuple[bool, str]:
+    async def _execute_defense_strategies(self, context: OrchestrationContext) -> Tuple[bool, str]:
         """Executes all defense strategies in order."""
         for strategy in self.strategies:
-            result = await strategy.execute(context={"branch_name": branch_name, "sid": sid})
-            if not result.success:
-                logger.warning(f"Strategy {strategy.__class__.__name__} failed: {result.message}")
-                return False, result.message
+            try:
+                result = await strategy.execute(context=context)
+                if not result.success:
+                    logger.warning(f"Strategy {strategy.__class__.__name__} failed: {result.message}")
+                    return False, result.message
+            except Exception as e:
+                logger.error(f"Strategy {strategy.__class__.__name__} raised exception: {e}")
+                return False, f"Strategy error: {e}"
         return True, "Success"
 
     def _emit_phase_start(self, attempt: int, max_retries: int) -> None:
