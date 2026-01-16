@@ -226,3 +226,26 @@ async def test_remote_strategy_handle_ci_failure_fallback(remote_deps: Dict[str,
     # Call private method directly to hit the fallback return
     msg = await strategy._handle_ci_failure([], "branch")
     assert "could not identify specific check failure" in msg
+
+
+@pytest.mark.asyncio
+async def test_remote_strategy_poll_exception(remote_deps: Dict[str, MagicMock]) -> None:
+    remote_deps["git"].push_to_branch = AsyncMock(return_value=True)
+    # Raise RuntimeError during polling to trigger the exception handler
+    # We ensure get_pr_checks raises ONLY when awaited
+    remote_deps["github"].get_pr_checks = AsyncMock(side_effect=RuntimeError("Polling Error"))
+
+    strategy = AsyncRemoteDefenseStrategy(**remote_deps)
+
+    with patch("asyncio.sleep", new_callable=AsyncMock):
+        with patch("coreason_jules_automator.async_api.strategies.logger.warning") as mock_log:
+            # It will retry until max attempts, so we just check if it fails gracefully
+            result = await strategy.execute({"branch_name": "feat", "sid": "123"})
+
+            assert result.success is False
+            assert "timeout" in result.message
+            # Verify the exception was logged, ensuring coverage of line 216
+            mock_log.assert_called()
+            # Check that at least one call contains our expected error
+            found_error = any("Poll attempt failed: Polling Error" in str(call) for call in mock_log.call_args_list)
+            assert found_error, "Expected log message not found"
