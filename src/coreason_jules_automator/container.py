@@ -1,5 +1,5 @@
 import shutil
-from typing import Optional
+from typing import List, Optional
 
 from coreason_jules_automator.async_api import (
     AsyncGeminiInterface,
@@ -14,7 +14,7 @@ from coreason_jules_automator.async_api import (
     AsyncShellExecutor,
 )
 from coreason_jules_automator.config import Settings, get_settings
-from coreason_jules_automator.events import CompositeEmitter, EventCollector, LoguruEmitter
+from coreason_jules_automator.events import CompositeEmitter, EventCollector, EventEmitter, LoguruEmitter
 from coreason_jules_automator.llm.janitor import JanitorService
 from coreason_jules_automator.llm.prompts import PromptManager
 from coreason_jules_automator.utils.logger import logger
@@ -35,7 +35,7 @@ class OrchestratorContainer:
         self.log_emitter = LoguruEmitter()
         self.event_collector = EventCollector()
 
-        emitters = [self.log_emitter]
+        emitters: List[EventEmitter] = [self.log_emitter]
         if capture_events:
             emitters.append(self.event_collector)
 

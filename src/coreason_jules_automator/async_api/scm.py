@@ -1,6 +1,6 @@
 import json
 import shutil
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, NoReturn, Optional
 
 from coreason_jules_automator.async_api.shell import AsyncShellExecutor
 from coreason_jules_automator.exceptions import AuthError, NetworkError, ScmError
@@ -8,7 +8,7 @@ from coreason_jules_automator.utils.logger import logger
 from coreason_jules_automator.utils.shell import ShellError
 
 
-def _handle_shell_error(e: ShellError, context: str) -> None:
+def _handle_shell_error(e: ShellError, context: str) -> NoReturn:
     """Helper to map ShellError to specific domain exceptions."""
     msg = (str(e) + " " + e.result.stderr).lower()
     if any(x in msg for x in ["timed out", "could not resolve host", "failed to connect", "connection refused"]):
