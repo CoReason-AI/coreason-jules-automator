@@ -184,6 +184,21 @@ class AsyncRemoteDefenseStrategy:
         # 2. Poll Checks
         return await self._run_ci_polling(branch_name)
 
+    async def _fetch_checks_safely(self) -> Optional[List[GithubCheck]]:
+        """Fetches PR checks safely, handling RuntimeErrors."""
+        try:
+            # We cast to List[GithubCheck] as we expect the interface to return dicts matching this shape
+            checks = await self.github.get_pr_checks()
+            return cast(List[GithubCheck], checks)
+        except RuntimeError as e:
+            logger.warning(f"Poll attempt failed: {e}")
+            self.event_emitter.emit(
+                AutomationEvent(
+                    type=EventType.ERROR, message=f"Poll attempt failed: {e}", payload={"error": str(e)}
+                )
+            )
+            return None
+
     async def _poll_ci_checks(
         self, max_attempts: int = 30, interval: int = 10
     ) -> AsyncGenerator[List[GithubCheck], None]:
@@ -196,17 +211,10 @@ class AsyncRemoteDefenseStrategy:
                     payload={"attempt": i + 1, "max_attempts": max_attempts},
                 )
             )
-            try:
-                # We cast to List[GithubCheck] as we expect the interface to return dicts matching this shape
-                checks = await self.github.get_pr_checks()
-                yield cast(List[GithubCheck], checks)
-            except RuntimeError as e:
-                logger.warning(f"Poll attempt failed: {e}")
-                self.event_emitter.emit(
-                    AutomationEvent(
-                        type=EventType.ERROR, message=f"Poll attempt failed: {e}", payload={"error": str(e)}
-                    )
-                )
+
+            checks = await self._fetch_checks_safely()
+            if checks is not None:
+                yield checks
 
             await asyncio.sleep(interval)
 
