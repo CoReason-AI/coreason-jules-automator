@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Any, Dict, Optional
 from pydantic import BaseModel, Field
 
 class OrchestrationContext(BaseModel):
@@ -21,4 +21,4 @@ class StrategyResult(BaseModel):
     """
     success: bool = Field(..., description="Whether the strategy passed or failed.")
     message: str = Field(..., description="A descriptive message or feedback.")
-    details: Optional[dict] = Field(default=None, description="Optional structured details about the result.")
+    details: Optional[Dict[str, Any]] = Field(default=None, description="Optional structured details about the result.")

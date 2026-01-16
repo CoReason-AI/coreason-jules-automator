@@ -1,6 +1,7 @@
 import asyncio
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Type
+from types import TracebackType
 
 from coreason_jules_automator.config import get_settings, Settings
 from coreason_jules_automator.protocols.jules import (
@@ -39,7 +40,12 @@ class AsyncJulesAgent:
     async def __aenter__(self) -> "AsyncJulesAgent":
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+    async def __aexit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> None:
         if self.process:
             logger.info("Cleaning up Jules agent process...")
             await self._cleanup_process(self.process)
