@@ -227,6 +227,7 @@ async def test_remote_strategy_handle_ci_failure_fallback(remote_deps: Dict[str,
     msg = await strategy._handle_ci_failure([], "branch")
     assert "could not identify specific check failure" in msg
 
+
 @pytest.mark.asyncio
 async def test_remote_strategy_poll_exception(remote_deps: Dict[str, MagicMock]) -> None:
     remote_deps["git"].push_to_branch = AsyncMock(return_value=True)
@@ -236,7 +237,7 @@ async def test_remote_strategy_poll_exception(remote_deps: Dict[str, MagicMock])
     strategy = AsyncRemoteDefenseStrategy(**remote_deps)
 
     with patch("asyncio.sleep", new_callable=AsyncMock):
-         # It will retry until max attempts, so we just check if it fails gracefully
+        # It will retry until max attempts, so we just check if it fails gracefully
         result = await strategy.execute({"branch_name": "feat", "sid": "123"})
 
         assert result.success is False
