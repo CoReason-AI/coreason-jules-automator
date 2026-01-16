@@ -3,8 +3,19 @@ import shutil
 from typing import Any, Dict, List, Optional
 
 from coreason_jules_automator.async_api.shell import AsyncShellExecutor
+from coreason_jules_automator.exceptions import AuthError, NetworkError, ScmError
 from coreason_jules_automator.utils.logger import logger
 from coreason_jules_automator.utils.shell import ShellError
+
+
+def _handle_shell_error(e: ShellError, context: str) -> None:
+    """Helper to map ShellError to specific domain exceptions."""
+    msg = (str(e) + " " + e.result.stderr).lower()
+    if any(x in msg for x in ["timed out", "could not resolve host", "failed to connect", "connection refused"]):
+        raise NetworkError(f"{context}: {e}") from e
+    if any(x in msg for x in ["permission denied", "403", "authentication failed"]):
+        raise AuthError(f"{context}: {e}") from e
+    raise ScmError(f"{context}: {e}") from e
 
 
 class AsyncGitInterface:
@@ -63,7 +74,7 @@ class AsyncGitInterface:
 
         except ShellError as e:
             logger.error(f"Git push failed: {e}")
-            raise RuntimeError(f"Git push failed: {e}") from e
+            _handle_shell_error(e, "Git push failed")
 
     async def checkout_new_branch(self, branch_name: str, base_branch: str, pull_base: bool = True) -> None:
         """
@@ -78,7 +89,7 @@ class AsyncGitInterface:
             await self.shell.run(["git", "checkout", "-b", branch_name], check=True)
         except ShellError as e:
             logger.error(f"Failed to checkout new branch {branch_name} from {base_branch}: {e}")
-            raise RuntimeError(f"Failed to checkout new branch: {e}") from e
+            _handle_shell_error(e, "Failed to checkout new branch")
 
     async def merge_squash(self, source_branch: str, target_branch: str, message: str) -> None:
         """
@@ -94,7 +105,7 @@ class AsyncGitInterface:
             await self.shell.run(["git", "push", "origin", target_branch], check=True)
         except ShellError as e:
             logger.error(f"Failed to squash merge {source_branch} into {target_branch}: {e}")
-            raise RuntimeError(f"Failed to squash merge: {e}") from e
+            _handle_shell_error(e, "Failed to squash merge")
 
     async def get_commit_log(self, base_branch: str, head_branch: str) -> str:
         """
@@ -108,7 +119,7 @@ class AsyncGitInterface:
             return result.stdout.strip()
         except ShellError as e:
             logger.error(f"Failed to get commit log: {e}")
-            raise RuntimeError(f"Failed to get commit log: {e}") from e
+            _handle_shell_error(e, "Failed to get commit log")
 
     async def delete_branch(self, branch_name: str) -> None:
         """
@@ -158,7 +169,7 @@ class AsyncGitHubInterface:
             return result.stdout.strip()
         except ShellError as e:
             logger.error(str(e))
-            raise RuntimeError(f"gh command failed: {e}") from e
+            _handle_shell_error(e, "gh command failed")
 
     async def get_pr_checks(self) -> List[Dict[str, Any]]:
         """
@@ -175,11 +186,11 @@ class AsyncGitHubInterface:
             # We explicitly type the result of json.loads
             parsed: Any = json.loads(output)
             if not isinstance(parsed, list):
-                raise RuntimeError(f"Unexpected format from gh: expected list, got {type(parsed)}")
+                raise ScmError(f"Unexpected format from gh: expected list, got {type(parsed)}")
             # We assume it's a list of dicts based on gh documentation
             return parsed
         except json.JSONDecodeError as e:
-            raise RuntimeError(f"Failed to parse gh output: {output}") from e
+            raise ScmError(f"Failed to parse gh output: {output}") from e
 
     async def get_latest_run_log(self, branch_name: str) -> str:
         """
@@ -248,7 +259,7 @@ class AsyncGeminiInterface:
             return result.stdout.strip()
         except ShellError as e:
             logger.error(str(e))
-            raise RuntimeError(f"Gemini command failed: {e}") from e
+            _handle_shell_error(e, "Gemini command failed")
 
     async def security_scan(self, path: str = ".") -> str:
         """

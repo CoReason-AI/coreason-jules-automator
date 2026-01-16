@@ -42,41 +42,42 @@ class AsyncOrchestrator:
         Agent Launch -> Wait -> Teleport -> Strategies -> Success/Retry.
         Returns (success, feedback_log).
         """
-        settings = get_settings()
-        self.event_emitter.emit(
-            AutomationEvent(
-                type=EventType.CYCLE_START,
-                message=f"Starting orchestration cycle for branch: {branch_name}",
-                payload={"task": task_description, "branch": branch_name},
+        with logger.contextualize(branch=branch_name, task=task_description[:15]):
+            settings = get_settings()
+            self.event_emitter.emit(
+                AutomationEvent(
+                    type=EventType.CYCLE_START,
+                    message=f"Starting orchestration cycle for branch: {branch_name}",
+                    payload={"task": task_description, "branch": branch_name},
+                )
             )
-        )
 
-        attempt = 0
-        last_error = ""
-        while attempt < settings.max_retries:
-            attempt += 1
-            self._emit_phase_start(attempt, settings.max_retries)
+            attempt = 0
+            last_error = ""
+            while attempt < settings.max_retries:
+                attempt += 1
+                self._emit_phase_start(attempt, settings.max_retries)
 
-            # Prepare prompt with feedback if retry
-            current_task = self._build_task_prompt(task_description, last_error, attempt)
+                # Prepare prompt with feedback if retry
+                current_task = self._build_task_prompt(task_description, last_error, attempt)
 
-            # --- PHASE 1: REMOTE GENERATION & TELEPORT ---
-            sid, error_msg = await self._execute_agent_workflow(current_task)
-            if not sid:
-                return False, error_msg
+                # --- PHASE 1: REMOTE GENERATION & TELEPORT ---
+                sid, error_msg = await self._execute_agent_workflow(current_task)
+                if not sid:
+                    return False, error_msg
 
-            # --- PHASE 2: DEFENSE STRATEGIES ---
-            success, feedback = await self._execute_defense_strategies(branch_name, sid)
+                # --- PHASE 2: DEFENSE STRATEGIES ---
+                success, feedback = await self._execute_defense_strategies(branch_name, sid)
 
-            if success:
-                self._emit_success("All strategies passed.")
-                return True, "Success"
+                if success:
+                    self._emit_success("All strategies passed.")
+                    return True, "Success"
 
-            last_error = feedback
-            self._emit_retry(feedback)
+                last_error = feedback
+                self._emit_retry(feedback)
 
-        self._emit_failure("Max retries reached.")
-        return False, last_error
+            self._emit_failure("Max retries reached.")
+            return False, last_error
 
     def _build_task_prompt(self, task: str, last_error: str, attempt: int) -> str:
         """Constructs the prompt, appending feedback if this is a retry."""

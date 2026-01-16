@@ -4,6 +4,7 @@ import pytest
 
 from coreason_jules_automator.async_api.scm import AsyncGeminiInterface, AsyncGitHubInterface, AsyncGitInterface
 from coreason_jules_automator.async_api.shell import AsyncShellExecutor
+from coreason_jules_automator.exceptions import AuthError, NetworkError, ScmError
 from coreason_jules_automator.utils.shell import CommandResult, ShellError
 
 # --- AsyncGitInterface Tests ---
@@ -76,7 +77,25 @@ async def test_git_push_to_branch_failure() -> None:
     mock_shell = MagicMock(spec=AsyncShellExecutor)
     mock_shell.run = AsyncMock(side_effect=ShellError("Fail", CommandResult(1, "", "")))
     git = AsyncGitInterface(shell_executor=mock_shell)
-    with pytest.raises(RuntimeError, match="Git push failed"):
+    with pytest.raises(ScmError, match="Git push failed"):
+        await git.push_to_branch("feat-1", "msg")
+
+
+@pytest.mark.asyncio
+async def test_git_push_network_error() -> None:
+    mock_shell = MagicMock(spec=AsyncShellExecutor)
+    mock_shell.run = AsyncMock(side_effect=ShellError("Fail", CommandResult(1, "", "Connection timed out")))
+    git = AsyncGitInterface(shell_executor=mock_shell)
+    with pytest.raises(NetworkError, match="Git push failed"):
+        await git.push_to_branch("feat-1", "msg")
+
+
+@pytest.mark.asyncio
+async def test_git_push_auth_error() -> None:
+    mock_shell = MagicMock(spec=AsyncShellExecutor)
+    mock_shell.run = AsyncMock(side_effect=ShellError("Fail", CommandResult(1, "", "Permission denied (publickey)")))
+    git = AsyncGitInterface(shell_executor=mock_shell)
+    with pytest.raises(AuthError, match="Git push failed"):
         await git.push_to_branch("feat-1", "msg")
 
 
@@ -114,7 +133,7 @@ async def test_git_checkout_new_branch_failure() -> None:
     mock_shell = MagicMock(spec=AsyncShellExecutor)
     mock_shell.run = AsyncMock(side_effect=ShellError("Fail", CommandResult(1, "", "")))
     git = AsyncGitInterface(shell_executor=mock_shell)
-    with pytest.raises(RuntimeError, match="Failed to checkout new branch"):
+    with pytest.raises(ScmError, match="Failed to checkout new branch"):
         await git.checkout_new_branch("new", "base")
 
 
@@ -133,7 +152,7 @@ async def test_git_merge_squash_failure() -> None:
     mock_shell = MagicMock(spec=AsyncShellExecutor)
     mock_shell.run = AsyncMock(side_effect=ShellError("Fail", CommandResult(1, "", "")))
     git = AsyncGitInterface(shell_executor=mock_shell)
-    with pytest.raises(RuntimeError, match="Failed to squash merge"):
+    with pytest.raises(ScmError, match="Failed to squash merge"):
         await git.merge_squash("src", "tgt", "msg")
 
 
@@ -152,7 +171,7 @@ async def test_git_get_commit_log_failure() -> None:
     mock_shell = MagicMock(spec=AsyncShellExecutor)
     mock_shell.run = AsyncMock(side_effect=ShellError("Fail", CommandResult(1, "", "")))
     git = AsyncGitInterface(shell_executor=mock_shell)
-    with pytest.raises(RuntimeError, match="Failed to get commit log"):
+    with pytest.raises(ScmError, match="Failed to get commit log"):
         await git.get_commit_log("base", "head")
 
 
@@ -212,7 +231,7 @@ async def test_github_get_pr_checks_not_list() -> None:
     mock_shell.run = AsyncMock(return_value=CommandResult(0, '{"name": "check1"}', ""))
     gh = AsyncGitHubInterface(shell_executor=mock_shell)
 
-    with pytest.raises(RuntimeError, match="expected list"):
+    with pytest.raises(ScmError, match="expected list"):
         await gh.get_pr_checks()
 
 
@@ -222,7 +241,7 @@ async def test_github_get_pr_checks_json_error() -> None:
     mock_shell.run = AsyncMock(return_value=CommandResult(0, "invalid json", ""))
     gh = AsyncGitHubInterface(shell_executor=mock_shell)
 
-    with pytest.raises(RuntimeError, match="Failed to parse gh output"):
+    with pytest.raises(ScmError, match="Failed to parse gh output"):
         await gh.get_pr_checks()
 
 
@@ -232,7 +251,7 @@ async def test_github_get_pr_checks_command_error() -> None:
     mock_shell.run = AsyncMock(side_effect=ShellError("Fail", CommandResult(1, "", "")))
     gh = AsyncGitHubInterface(shell_executor=mock_shell)
 
-    with pytest.raises(RuntimeError, match="gh command failed"):
+    with pytest.raises(ScmError, match="gh command failed"):
         await gh.get_pr_checks()
 
 
@@ -310,7 +329,7 @@ async def test_gemini_failure() -> None:
     mock_shell.run = AsyncMock(side_effect=ShellError("Fail", CommandResult(1, "", "")))
     gemini = AsyncGeminiInterface(shell_executor=mock_shell)
 
-    with pytest.raises(RuntimeError, match="Gemini command failed"):
+    with pytest.raises(ScmError, match="Gemini command failed"):
         await gemini.security_scan()
 
 

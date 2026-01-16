@@ -5,7 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 # Mock optional dependencies if needed, though patching in tests handles most cases
-from coreason_jules_automator.webapp_example import _get_async_llm_client, app, run_orchestration_background
+from coreason_jules_automator.webapp_example import app, run_orchestration_background
 
 client = TestClient(app)
 
@@ -36,21 +36,9 @@ def test_start_campaign_endpoint() -> None:
 @pytest.mark.asyncio
 async def test_run_orchestration_background() -> None:
     """Test the background orchestration logic."""
-    with (
-        patch("coreason_jules_automator.webapp_example.AsyncShellExecutor"),
-        patch("coreason_jules_automator.webapp_example.AsyncGeminiInterface"),
-        patch("coreason_jules_automator.webapp_example.AsyncGitInterface"),
-        patch("coreason_jules_automator.webapp_example.AsyncGitHubInterface"),
-        patch("coreason_jules_automator.webapp_example.get_settings"),
-        patch("coreason_jules_automator.webapp_example._get_async_llm_client"),
-        patch("coreason_jules_automator.webapp_example.PromptManager"),
-        patch("coreason_jules_automator.webapp_example.JanitorService"),
-        patch("coreason_jules_automator.webapp_example.AsyncLocalDefenseStrategy"),
-        patch("coreason_jules_automator.webapp_example.AsyncRemoteDefenseStrategy"),
-        patch("coreason_jules_automator.webapp_example.AsyncJulesAgent"),
-        patch("coreason_jules_automator.webapp_example.AsyncOrchestrator") as MockOrchestrator,
-    ):
-        mock_orch_instance = MockOrchestrator.return_value
+    with patch("coreason_jules_automator.webapp_example.OrchestratorContainer") as MockContainer:
+        mock_container = MockContainer.return_value
+        mock_orch_instance = mock_container.get_orchestrator.return_value
         # Use AsyncMock for the async run_cycle method
         mock_orch_instance.run_cycle = AsyncMock(return_value=(True, "Success"))
 
@@ -63,67 +51,8 @@ async def test_run_orchestration_background() -> None:
 async def test_run_orchestration_background_exception() -> None:
     """Test exception handling in background orchestration."""
     with (
-        patch("coreason_jules_automator.webapp_example.AsyncShellExecutor"),
+        patch("coreason_jules_automator.webapp_example.OrchestratorContainer", side_effect=Exception("Setup Fail")),
         patch("coreason_jules_automator.webapp_example.logger") as mock_logger,
-        patch("coreason_jules_automator.webapp_example.AsyncGeminiInterface", side_effect=Exception("Setup Fail")),
     ):
         await run_orchestration_background("Task", "Branch")
         mock_logger.exception.assert_called_once()
-
-
-def test_get_async_llm_client_openai_import_error() -> None:
-    """Test helper when openai is not installed."""
-    mock_settings = MagicMock()
-    mock_settings.llm_strategy = "api"
-
-    with patch.dict(sys.modules, {"openai": None}):
-        result = _get_async_llm_client(mock_settings)
-        assert result is None
-
-
-def test_get_async_llm_client_deepseek() -> None:
-    """Test helper with DeepSeek key."""
-    mock_settings = MagicMock()
-    mock_settings.llm_strategy = "api"
-    mock_settings.DEEPSEEK_API_KEY.get_secret_value.return_value = "ds-key"
-    mock_settings.OPENAI_API_KEY = None
-
-    with patch("openai.AsyncOpenAI") as MockOpenAI:
-        result = _get_async_llm_client(mock_settings)
-        assert result is not None
-        MockOpenAI.assert_called_with(api_key="ds-key", base_url="https://api.deepseek.com")
-
-
-def test_get_async_llm_client_openai() -> None:
-    """Test helper with OpenAI key."""
-    mock_settings = MagicMock()
-    mock_settings.llm_strategy = "api"
-    mock_settings.DEEPSEEK_API_KEY = None
-    mock_settings.OPENAI_API_KEY.get_secret_value.return_value = "oa-key"
-
-    with patch("openai.AsyncOpenAI") as MockOpenAI:
-        result = _get_async_llm_client(mock_settings)
-        assert result is not None
-        MockOpenAI.assert_called_with(api_key="oa-key")
-
-
-def test_get_async_llm_client_no_keys() -> None:
-    """Test helper with API strategy but no keys."""
-    mock_settings = MagicMock()
-    mock_settings.llm_strategy = "api"
-    mock_settings.DEEPSEEK_API_KEY = None
-    mock_settings.OPENAI_API_KEY = None
-
-    # Ensure openai module exists
-    with patch("openai.AsyncOpenAI"):
-        result = _get_async_llm_client(mock_settings)
-        assert result is None
-
-
-def test_get_async_llm_client_local() -> None:
-    """Test helper with local strategy."""
-    mock_settings = MagicMock()
-    mock_settings.llm_strategy = "local"
-
-    result = _get_async_llm_client(mock_settings)
-    assert result is None
