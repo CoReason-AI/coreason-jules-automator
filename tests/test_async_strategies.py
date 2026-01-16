@@ -237,8 +237,12 @@ async def test_remote_strategy_poll_exception(remote_deps: Dict[str, MagicMock])
     strategy = AsyncRemoteDefenseStrategy(**remote_deps)
 
     with patch("asyncio.sleep", new_callable=AsyncMock):
-        # It will retry until max attempts, so we just check if it fails gracefully
-        result = await strategy.execute({"branch_name": "feat", "sid": "123"})
+        with patch("coreason_jules_automator.async_api.strategies.logger.warning") as mock_log:
+            # It will retry until max attempts, so we just check if it fails gracefully
+            result = await strategy.execute({"branch_name": "feat", "sid": "123"})
 
-        assert result.success is False
-        assert "timeout" in result.message
+            assert result.success is False
+            assert "timeout" in result.message
+            # Verify the exception was logged, ensuring coverage of line 216
+            mock_log.assert_called()
+            assert "Poll attempt failed: Polling Error" in str(mock_log.call_args_list[0])
