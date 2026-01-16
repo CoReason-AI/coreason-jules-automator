@@ -1,4 +1,3 @@
-import shutil
 from typing import List, Optional
 
 from coreason_jules_automator.async_api import (
@@ -52,9 +51,7 @@ class OrchestratorContainer:
         self.janitor = JanitorService(prompt_manager=self.prompt_manager)
 
         # Strategies
-        self.local_strategy = AsyncLocalDefenseStrategy(
-            gemini=self.gemini, event_emitter=self.composite_emitter
-        )
+        self.local_strategy = AsyncLocalDefenseStrategy(gemini=self.gemini, event_emitter=self.composite_emitter)
         self.remote_strategy = AsyncRemoteDefenseStrategy(
             github=self.github,
             janitor=self.janitor,
