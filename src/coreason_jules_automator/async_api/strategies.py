@@ -193,9 +193,7 @@ class AsyncRemoteDefenseStrategy:
         except RuntimeError as e:
             logger.warning(f"Poll attempt failed: {e}")
             self.event_emitter.emit(
-                AutomationEvent(
-                    type=EventType.ERROR, message=f"Poll attempt failed: {e}", payload={"error": str(e)}
-                )
+                AutomationEvent(type=EventType.ERROR, message=f"Poll attempt failed: {e}", payload={"error": str(e)})
             )
             return None
 
