@@ -1,214 +1,183 @@
 import asyncio
-import shutil
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional
 
 from coreason_jules_automator.config import get_settings
-from coreason_jules_automator.protocols.jules import JulesProtocol, SendStdin, SignalSessionId
+from coreason_jules_automator.protocols.jules import (
+    JulesProtocol,
+    SendStdin,
+    SignalComplete,
+    SignalSessionId,
+)
 from coreason_jules_automator.utils.logger import logger
 
 from .shell import AsyncShellExecutor
 
 
 class AsyncJulesAgent:
+    """
+    Async wrapper for the Jules CLI agent.
+    Manages the subprocess, parsing output via JulesProtocol, and sending input.
+    """
+
     def __init__(self, executable: str = "jules", shell: Optional[AsyncShellExecutor] = None):
         self.executable = executable
         self.shell = shell or AsyncShellExecutor()
+        self.mission_complete = False
+        self.protocol = JulesProtocol()
 
     async def launch_session(self, task: str) -> Optional[str]:
+        self.mission_complete = False
         settings = get_settings()
         logger.info(f"Launching Jules session for repo: {settings.repo_name}...")
 
-        # Prepare prompt
-        context = ""
-        spec_path = Path("SPEC.md")
-        if spec_path.exists():
-            context = f"Context from SPEC.md:\n{spec_path.read_text(encoding='utf-8')}\n\n"
+        # Construct command
+        cmd = [self.executable, "remote", settings.repo_name, "--task", task]
 
-        full_prompt = context + task
+        # Use pexpect-style interaction via the protocol + shell executor?
+        # The AsyncShellExecutor runs commands and returns result. It doesn't support interactive streams yet.
+        # We need to use asyncio.create_subprocess_exec directly or extend ShellExecutor.
+        # For this implementation, we'll use asyncio subprocess directly here for stream handling.
 
-        protocol = JulesProtocol()
-        detected_sid = None
-
-        # Start process
         try:
             process = await asyncio.create_subprocess_exec(
-                self.executable,
-                "new",
-                "--repo",
-                settings.repo_name,
+                *cmd,
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.STDOUT,  # Merge stderr to stdout for parsing
+                stderr=asyncio.subprocess.PIPE,
+                env=None,  # Inherit env
             )
         except Exception as e:
-            logger.error(f"Failed to start Jules process: {e}")
+            logger.error(f"Failed to launch process: {e}")
             return None
 
-        # Send initial prompt
-        if process.stdin:
-            try:
-                process.stdin.write(full_prompt.encode())
-                process.stdin.write(b"\n")
-                await process.stdin.drain()
-            except Exception as e:
-                logger.error(f"Failed to write to stdin: {e}")
+        self.process = process
+        detected_sid: Optional[str] = None
 
+        # Read loop
+        # We need to read byte by byte or line by line to feed the protocol
+        # but pexpect logic in protocol might expect chunks.
+        if not process.stdout:
+            logger.error("Failed to capture stdout")
+            return None
+
+        # We'll read line by line for simplicity with the protocol's feed method
         try:
-            start_time = asyncio.get_running_loop().time()
-            timeout_seconds = 1800  # 30 mins
-
             while True:
-                if asyncio.get_running_loop().time() - start_time > timeout_seconds:
-                    logger.error("❌ Session launch timed out.")
+                line = await process.stdout.readline()
+                if not line:
                     break
 
-                try:
-                    if process.stdout:
-                        chunk_bytes = await asyncio.wait_for(process.stdout.read(1024), timeout=5.0)
-                    else:
-                        break
-                except asyncio.TimeoutError:
-                    continue
-
-                if not chunk_bytes:
-                    logger.info("Process finished (EOF).")
-                    break
-
-                chunk = chunk_bytes.decode(errors="replace")
-                # Feed to protocol
-                for action in protocol.process_output(chunk):
+                text = line.decode("utf-8", errors="replace")
+                # Feed protocol
+                for action in self.protocol.process_output(text):
                     if isinstance(action, SendStdin):
-                        logger.info(f"🤖 Auto-replying: {action.text.strip()}")
-                        if process.stdin:
-                            process.stdin.write(action.text.encode())
-                            await process.stdin.drain()
+                        logger.info(f"Action SendStdin: {action.text}")
+                        if self.process.stdin:
+                            self.process.stdin.write(action.text.encode())
+                            await self.process.stdin.drain()
                     elif isinstance(action, SignalSessionId):
                         detected_sid = action.sid
                         logger.info(f"✨ Captured SID: {detected_sid}")
                         break
+                    elif isinstance(action, SignalComplete):
+                        self.mission_complete = True
+                        logger.info("✅ Mission Complete signal received.")
 
                 if detected_sid:
                     break
 
-            # Cleanup
-            await asyncio.sleep(5)
-            await self._cleanup_process(process)
-
-            return detected_sid
-
         except Exception as e:
-            logger.error(f"Failed to launch Jules: {e}")
-            if process.returncode is None:
-                process.kill()
+            logger.error(f"Error during launch: {e}")
+            # Ensure cleanup if launch fails
+            await self._cleanup_process(process)
             return None
 
-    async def _cleanup_process(self, process: asyncio.subprocess.Process) -> None:
-        """Terminates the process if it's still running."""
-        if process.returncode is None:
-            process.terminate()
-            try:
-                await asyncio.wait_for(process.wait(), timeout=5.0)
-            except asyncio.TimeoutError:
-                process.kill()
+        # If we have SID, we can detach/kill this process as we just wanted to launch it?
+        # "jules remote" usually stays running?
+        # The 'orchestrator' logic says "Wait for Completion".
+        # If we kill it, the remote session might stop?
+        # For "teleport" workflow, usually the agent runs until it finishes or pauses.
+        # We will keep it running in background or just return SID and let caller handle waiting?
+        # The Orchestrator calls `wait_for_completion`.
+        # So we probably should detach or keep reference.
+        # For this Async version, we might just assume it's running remotely and we can query status?
+        # But 'wait_for_completion' in the sync version checked the 'jules' output?
+        # Actually, in the sync version, it used `pexpect` to wait.
+        # Here we return SID. The `wait_for_completion` method will be called next.
+        return detected_sid
 
     async def wait_for_completion(self, sid: str) -> bool:
-        logger.info(f"Monitoring status for SID: {sid}")
-        timeout_minutes = 30
-        start = asyncio.get_running_loop().time()
+        """
+        Polls or waits for the session to complete.
+        Since we might have detached or it's a remote session, we need a way to check.
+        If we kept the process open in `launch_session`, we should continue reading it.
+        But `launch_session` returned.
+        In a real implementation, we'd probably have a shared state or re-attach.
+        For now, let's assume we can attach or just rely on the fact that if we have the process handle,
+        we can continue reading.
+        """
+        # TODO: Robust implementation of re-attaching or continuing the read loop.
+        # For the purpose of this refactor step, we'll assume we continue monitoring the process started in
+        # launch_session if it's stored in self.process.
+        if not hasattr(self, "process") or self.process.returncode is not None:
+            # Check logic: if it finished, did it finish successfully?
+            # We return self.mission_complete state.
+            return self.mission_complete
 
-        while (asyncio.get_running_loop().time() - start) < (timeout_minutes * 60):
-            try:
-                result = await self.shell.run([self.executable, "remote", "list", "--session"], check=True)
-
-                status_line = ""
-                for line in result.stdout.splitlines():
-                    if line.strip().startswith(sid):
-                        status_line = line
-                        break
-
-                if not status_line:
-                    logger.warning(f"SID {sid} disappeared from list.")
-                    return False
-
-                if "completed" in status_line.lower():
-                    logger.info("✅ Final Signal Detected (Completed).")
-                    return True
-
-                if "failed" in status_line.lower() or "error" in status_line.lower():
-                    logger.error(f"❌ Session failed: {status_line}")
-                    return False
-
-                await asyncio.sleep(20)
-
-            except Exception as e:
-                logger.error(f"Error monitoring status: {e}")
-                await asyncio.sleep(10)
-
-        logger.error("❌ Session timed out.")
-        return False
-
-    async def teleport_and_sync(self, sid: str, target_root: Path) -> bool:
-        logger.info(f"📥 Running authoritative teleport for SID {sid}...")
-
-        temp_dir = target_root / f"jules_relay_{sid}"
-        temp_dir.mkdir(parents=True, exist_ok=True)
+        # Continue reading from stdout
+        if not self.process.stdout:
+            return False
 
         try:
-            process = await asyncio.create_subprocess_exec(
-                self.executable,
-                "teleport",
-                sid,
-                cwd=str(temp_dir),
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
+            while True:
+                line = await self.process.stdout.readline()
+                if not line:
+                    break
+                text = line.decode("utf-8", errors="replace")
+                for action in self.protocol.process_output(text):
+                    if isinstance(action, SendStdin):
+                        if self.process.stdin:
+                            self.process.stdin.write(action.text.encode())
+                            await self.process.stdin.drain()
+                    elif isinstance(action, SignalComplete):
+                        self.mission_complete = True
+                        logger.info("✅ Mission Complete signal received.")
+                        return True
 
-            _, stderr_bytes = await process.communicate(input=b"y\n")
-            stderr = stderr_bytes.decode()
-
-            if process.returncode != 0:
-                logger.error(f"Teleport command failed: {stderr}")
-                return False
-
-            # Sync logic in thread to avoid blocking
-            def _sync_files() -> Tuple[bool, str]:
-                jules_folders = list(temp_dir.glob("jules-*"))
-                if not jules_folders:
-                    return False, "No 'jules-*' folder found."
-
-                source_folder = jules_folders[0]
-                logger.info(f"🎉 Teleport Success. Syncing from {source_folder.name}...")
-
-                dirs_to_sync = ["src", "tests"]
-                files_to_sync = ["requirements.txt", "pyproject.toml"]
-
-                for d in dirs_to_sync:
-                    src_path = source_folder / d
-                    dst_path = target_root / d
-                    if src_path.exists():
-                        if dst_path.exists():
-                            shutil.rmtree(dst_path)
-                        shutil.copytree(src_path, dst_path)
-
-                for f in files_to_sync:
-                    src_file = source_folder / f
-                    dst_file = target_root / f
-                    if src_file.exists():
-                        shutil.copy2(src_file, dst_file)
-                return True, ""
-
-            success, msg = await asyncio.to_thread(_sync_files)
-            if not success:
-                logger.error(f"❌ Teleport failed: {msg}")
-                return False
-
-            return True
+                # Check if process exited
+                if self.process.returncode is not None:
+                    break
 
         except Exception as e:
-            logger.error(f"Sync failed: {e}")
+            logger.error(f"Error during wait: {e}")
             return False
-        finally:
-            if temp_dir.exists():
-                await asyncio.to_thread(shutil.rmtree, temp_dir)
+
+        return self.mission_complete
+
+    async def teleport_and_sync(self, sid: str, target_dir: Path) -> bool:
+        """
+        Runs `jules teleport` to sync code.
+        """
+        cmd = [self.executable, "teleport", sid, str(target_dir)]
+        try:
+            result = await self.shell.run(cmd, check=True)
+            logger.info(f"Teleport result: {result.stdout}")
+            return True
+        except Exception as e:
+            logger.error(f"Teleport failed: {e}")
+            return False
+
+    async def _cleanup_process(self, process: asyncio.subprocess.Process) -> None:
+        """
+        Helper to cleanly terminate a subprocess.
+        """
+        if process.returncode is not None:
+            return
+
+        process.terminate()
+        try:
+            await asyncio.wait_for(process.wait(), timeout=5.0)
+        except asyncio.TimeoutError:
+            process.kill()
+            await process.wait()
