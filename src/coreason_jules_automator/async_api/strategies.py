@@ -246,9 +246,6 @@ class AsyncRemoteDefenseStrategy:
         )
 
         async for checks in self._poll_ci_checks(max_attempts=max_poll_attempts):
-            if not checks:
-                continue
-
             all_completed, any_failure = self._analyze_checks(checks)
 
             if all_completed:
