@@ -27,7 +27,7 @@ from coreason_jules_automator.async_api import (
     AsyncRemoteDefenseStrategy,
     AsyncShellExecutor,
 )
-from coreason_jules_automator.config import get_settings, Settings
+from coreason_jules_automator.config import Settings, get_settings
 from coreason_jules_automator.events import CompositeEmitter, EventCollector, LoguruEmitter
 from coreason_jules_automator.llm.janitor import JanitorService
 from coreason_jules_automator.llm.prompts import PromptManager
