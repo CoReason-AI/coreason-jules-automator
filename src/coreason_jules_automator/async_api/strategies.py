@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any, AsyncGenerator, Dict, List, Optional, Protocol, Tuple, TypedDict
+from typing import Any, AsyncGenerator, Dict, List, Optional, Protocol, Tuple, TypedDict, cast
 
 from coreason_jules_automator.async_api.llm import AsyncLLMClient
 from coreason_jules_automator.async_api.scm import AsyncGeminiInterface, AsyncGitHubInterface, AsyncGitInterface
@@ -198,8 +198,8 @@ class AsyncRemoteDefenseStrategy:
             )
             try:
                 # We cast to List[GithubCheck] as we expect the interface to return dicts matching this shape
-                checks = await self.github.get_pr_checks()  # type: ignore
-                yield checks
+                checks = await self.github.get_pr_checks()
+                yield cast(List[GithubCheck], checks)
             except RuntimeError as e:
                 logger.warning(f"Poll attempt failed: {e}")
                 self.event_emitter.emit(

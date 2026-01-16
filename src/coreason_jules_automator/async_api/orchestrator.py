@@ -100,9 +100,7 @@ class AsyncOrchestrator:
                 raise RuntimeError("Failed to obtain Session ID (SID).")
 
             self.event_emitter.emit(
-                AutomationEvent(
-                    type=EventType.CHECK_RESULT, message=f"Session Started: {sid}", payload={"sid": sid}
-                )
+                AutomationEvent(type=EventType.CHECK_RESULT, message=f"Session Started: {sid}", payload={"sid": sid})
             )
 
             # 2. Monitor for Completion
