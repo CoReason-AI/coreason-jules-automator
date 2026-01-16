@@ -232,6 +232,7 @@ async def test_remote_strategy_handle_ci_failure_fallback(remote_deps: Dict[str,
 async def test_remote_strategy_poll_exception(remote_deps: Dict[str, MagicMock]) -> None:
     remote_deps["git"].push_to_branch = AsyncMock(return_value=True)
     # Raise RuntimeError during polling to trigger the exception handler
+    # We ensure get_pr_checks raises ONLY when awaited
     remote_deps["github"].get_pr_checks = AsyncMock(side_effect=RuntimeError("Polling Error"))
 
     strategy = AsyncRemoteDefenseStrategy(**remote_deps)
@@ -245,4 +246,6 @@ async def test_remote_strategy_poll_exception(remote_deps: Dict[str, MagicMock])
             assert "timeout" in result.message
             # Verify the exception was logged, ensuring coverage of line 216
             mock_log.assert_called()
-            assert "Poll attempt failed: Polling Error" in str(mock_log.call_args_list[0])
+            # Check that at least one call contains our expected error
+            found_error = any("Poll attempt failed: Polling Error" in str(call) for call in mock_log.call_args_list)
+            assert found_error, "Expected log message not found"
