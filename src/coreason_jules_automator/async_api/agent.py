@@ -28,7 +28,9 @@ class AsyncJulesAgent:
         # Keep track of process across method calls
         self.process: Optional[asyncio.subprocess.Process] = None
 
-    async def _process_output_stream(self, process: asyncio.subprocess.Process, stop_on_sid: bool = False) -> Optional[str]:
+    async def _process_output_stream(
+        self, process: asyncio.subprocess.Process, stop_on_sid: bool = False
+    ) -> Optional[str]:
         """
         Reads stdout line by line, feeds protocol, handles auto-replies.
 

@@ -184,7 +184,9 @@ class AsyncRemoteDefenseStrategy:
         # 2. Poll Checks
         return await self._run_ci_polling(branch_name)
 
-    async def _poll_ci_checks(self, max_attempts: int = 30, interval: int = 10) -> AsyncGenerator[List[GithubCheck], None]:
+    async def _poll_ci_checks(
+        self, max_attempts: int = 30, interval: int = 10
+    ) -> AsyncGenerator[List[GithubCheck], None]:
         """Generator that yields check status, handling the sleep and retry logic."""
         for i in range(max_attempts):
             self.event_emitter.emit(
@@ -196,7 +198,7 @@ class AsyncRemoteDefenseStrategy:
             )
             try:
                 # We cast to List[GithubCheck] as we expect the interface to return dicts matching this shape
-                checks = await self.github.get_pr_checks() # type: ignore
+                checks = await self.github.get_pr_checks()  # type: ignore
                 yield checks
             except RuntimeError as e:
                 logger.warning(f"Poll attempt failed: {e}")
