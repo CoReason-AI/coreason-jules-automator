@@ -44,8 +44,13 @@ async def test_async_shell_executor_timeout() -> None:
         mock_process.wait = AsyncMock()
         mock_exec.return_value = mock_process
 
+        async def raise_timeout(coro: object, timeout: object) -> None:
+            if coro and hasattr(coro, "close"):
+                coro.close()
+            raise asyncio.TimeoutError
+
         # We simulate timeout in wait_for
-        with patch("asyncio.wait_for", side_effect=asyncio.TimeoutError):
+        with patch("asyncio.wait_for", side_effect=raise_timeout):
             # Check=False to verify result content
             result = await executor.run(["sleep", "10"], timeout=1, check=False)
 
@@ -65,7 +70,12 @@ async def test_async_shell_executor_timeout_check_true() -> None:
         mock_process.wait = AsyncMock()
         mock_exec.return_value = mock_process
 
-        with patch("asyncio.wait_for", side_effect=asyncio.TimeoutError):
+        async def raise_timeout(coro: object, timeout: object) -> None:
+            if coro and hasattr(coro, "close"):
+                coro.close()
+            raise asyncio.TimeoutError
+
+        with patch("asyncio.wait_for", side_effect=raise_timeout):
             with pytest.raises(ShellError) as exc:
                 await executor.run(["sleep", "10"], timeout=1, check=True)
             assert "Command timed out" in str(exc.value)
@@ -216,8 +226,14 @@ async def test_async_jules_agent_cleanup_process() -> None:
     # Mock wait() to be awaitable
     mock_process.wait = AsyncMock()
 
+    async def raise_timeout(coro: object, timeout: object) -> None:
+        # Prevent "coroutine never awaited" warning by closing it
+        if coro and hasattr(coro, "close"):
+            coro.close()
+        raise asyncio.TimeoutError
+
     # We patch wait_for to raise TimeoutError
-    with patch("asyncio.wait_for", side_effect=asyncio.TimeoutError):
+    with patch("asyncio.wait_for", side_effect=raise_timeout):
         await agent._cleanup_process(mock_process)
 
     mock_process.terminate.assert_called_once()
@@ -357,3 +373,125 @@ async def test_async_openai_adapter() -> None:
     mock_client.chat.completions.create.assert_awaited_once_with(
         model="gpt-4", messages=request.messages, max_tokens=request.max_tokens
     )
+
+
+@pytest.mark.asyncio
+async def test_launch_session_signal_complete() -> None:
+    """Test receiving SignalComplete during launch_session (lines 83-85)."""
+    agent = AsyncJulesAgent()
+    with patch("coreason_jules_automator.async_api.agent.get_settings"):
+        with patch("asyncio.create_subprocess_exec", new_callable=AsyncMock) as mock_exec:
+            mock_process = MagicMock()
+            mock_process.stdout = MagicMock()
+            # Simulate SignalComplete FIRST, then Session ID
+            mock_process.stdout.readline = AsyncMock(
+                side_effect=[
+                    b"100% of the requirements is met\n",  # Triggers SignalComplete
+                    b"Session ID: test_sid\n",
+                    b"",
+                ]
+            )
+            mock_process.stdin = MagicMock()
+            mock_process.returncode = None
+            mock_exec.return_value = mock_process
+
+            sid = await agent.launch_session("task")
+
+            assert agent.mission_complete is True
+            assert sid == "test_sid"
+
+
+@pytest.mark.asyncio
+async def test_launch_session_eof() -> None:
+    """Test EOF during launch_session before SID is found (line 69)."""
+    agent = AsyncJulesAgent()
+    with patch("coreason_jules_automator.async_api.agent.get_settings"):
+        with patch("asyncio.create_subprocess_exec", new_callable=AsyncMock) as mock_exec:
+            mock_process = MagicMock()
+            mock_process.stdout = MagicMock()
+            # Return some line then EOF
+            mock_process.stdout.readline = AsyncMock(
+                side_effect=[
+                    b"Starting...\n",
+                    b"",  # EOF -> break
+                ]
+            )
+            mock_process.stdin = MagicMock()
+            mock_process.returncode = None
+            mock_exec.return_value = mock_process
+
+            # Should return None because SID was never found
+            sid = await agent.launch_session("task")
+            assert sid is None
+
+            # Verify cleanup was called
+            # Note: The code does NOT call cleanup on EOF break, it just returns None.
+            # So we do not expect terminate to be called if it exited naturally (EOF).
+            mock_process.terminate.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_wait_for_completion_no_stdout() -> None:
+    """Test wait_for_completion when process.stdout is None (line 130)."""
+    agent = AsyncJulesAgent()
+    mock_process = MagicMock()
+    mock_process.stdout = None
+    mock_process.returncode = None
+    agent.process = mock_process
+
+    result = await agent.wait_for_completion("sid")
+    assert result is False
+
+
+@pytest.mark.asyncio
+async def test_wait_for_completion_send_stdin() -> None:
+    """Test SendStdin action during wait_for_completion (lines 136, 140-142)."""
+    agent = AsyncJulesAgent()
+    mock_process = MagicMock()
+    mock_process.stdout = MagicMock()
+    mock_process.stdin = MagicMock()
+    mock_process.stdin.write = MagicMock()
+    mock_process.stdin.drain = AsyncMock()
+    mock_process.returncode = None
+
+    # "Do you want to continue? [y/n]" triggers prompt match
+    mock_process.stdout.readline = AsyncMock(
+        side_effect=[
+            b"Do you want to continue? [y/n]\n",  # Triggers SendStdin
+            b"",  # EOF
+        ]
+    )
+
+    agent.process = mock_process
+
+    result = await agent.wait_for_completion("sid")
+
+    # Check if stdin.write was called with auto-reply
+    mock_process.stdin.write.assert_called()
+    assert b"Use your best judgment" in mock_process.stdin.write.call_args[0][0]
+
+    assert result is False
+
+
+@pytest.mark.asyncio
+async def test_wait_for_completion_process_exit() -> None:
+    """Test loop break when process.returncode is set (line 150)."""
+    agent = AsyncJulesAgent()
+    mock_process = MagicMock()
+    mock_process.stdout = MagicMock()
+    mock_process.stdin = MagicMock()
+    mock_process.returncode = None  # Initially None so we enter the loop
+
+    # Define a side effect that sets returncode when readline is called
+    async def set_returncode_side_effect() -> bytes:
+        mock_process.returncode = 0
+        return b"Some output\n"
+
+    mock_process.stdout.readline = AsyncMock(side_effect=set_returncode_side_effect)
+
+    agent.process = mock_process
+
+    result = await agent.wait_for_completion("sid")
+
+    assert result is False
+    mock_process.stdout.readline.assert_called_once()
