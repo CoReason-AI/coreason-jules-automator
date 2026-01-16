@@ -73,9 +73,10 @@ class Orchestrator:
             # --- PHASE 1: REMOTE GENERATION & TELEPORT ---
             try:
                 # 1. Launch Session
-                self.event_emitter.emit(
-                    AutomationEvent(type=EventType.CHECK_RUNNING, message="Launching Remote Jules Session...")
+                launch_event = AutomationEvent(
+                    type=EventType.CHECK_RUNNING, message="Launching Remote Jules Session..."
                 )
+                self.event_emitter.emit(launch_event)
                 sid = self.agent.launch_session(task_description)
 
                 if not sid:
