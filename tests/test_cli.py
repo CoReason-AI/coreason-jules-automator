@@ -233,6 +233,7 @@ def test_campaign_default_count() -> None:
 
 # --- Coverage Tests for _get_async_llm_client ---
 
+
 def test_get_async_llm_client_openai_import_error() -> None:
     """Test helper when openai is not installed."""
     mock_settings = MagicMock()

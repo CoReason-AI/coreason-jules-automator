@@ -12,7 +12,7 @@ client = TestClient(app)
 
 def test_start_campaign_endpoint() -> None:
     """Test the /start-campaign endpoint."""
-    with patch("coreason_jules_automator.webapp_example.run_orchestration_background") as mock_bg:
+    with patch("coreason_jules_automator.webapp_example.run_orchestration_background"):
         response = client.post(
             "/start-campaign",
             json={"task": "Test Task", "branch": "feature/test"},
