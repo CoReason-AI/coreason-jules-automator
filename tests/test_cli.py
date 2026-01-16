@@ -1,5 +1,4 @@
-import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from typer.testing import CliRunner
 
@@ -16,11 +15,7 @@ def test_run_help() -> None:
 
 def test_run_success() -> None:
     """Test successful run."""
-    with patch("coreason_jules_automator.cli.Container") as MockContainer:
-        # Setup mocks
-        mock_container = MockContainer.return_value
-        mock_orchestrator = mock_container.orchestrator
-
+    with patch("coreason_jules_automator.cli.Container"):
         # Mock asyncio.run to return success
         # Since we can't easily mock asyncio.run inside the function if we don't import it in test,
         # but cli.py imports asyncio. We can patch it in cli.py.
@@ -45,7 +40,7 @@ def test_run_success() -> None:
 
 def test_run_failure() -> None:
     """Test failed run."""
-    with patch("coreason_jules_automator.cli.Container") as MockContainer:
+    with patch("coreason_jules_automator.cli.Container"):
         with patch("coreason_jules_automator.cli.asyncio.run") as mock_asyncio_run:
             mock_asyncio_run.return_value = (False, "Failure")
 
@@ -136,10 +131,7 @@ def test_run_report_exception() -> None:
 
 def test_campaign_command() -> None:
     """Test campaign command."""
-    with patch("coreason_jules_automator.cli.Container") as MockContainer:
-        mock_container = MockContainer.return_value
-        mock_orchestrator = mock_container.orchestrator
-
+    with patch("coreason_jules_automator.cli.Container"):
         with patch("coreason_jules_automator.cli.asyncio.run") as mock_asyncio_run:
             # asyncio.run returns None for campaign
             mock_asyncio_run.return_value = None
