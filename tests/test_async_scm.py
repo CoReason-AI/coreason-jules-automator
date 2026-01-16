@@ -296,8 +296,8 @@ async def test_github_get_latest_run_log_json_error() -> None:
     mock_shell.run = AsyncMock(return_value=CommandResult(0, "invalid json", ""))
     gh = AsyncGitHubInterface(shell_executor=mock_shell)
 
-    log = await gh.get_latest_run_log("feat")
-    assert "Failed to parse run list" in log
+    with pytest.raises(ScmError, match="Failed to parse run list"):
+        await gh.get_latest_run_log("feat")
 
 
 @pytest.mark.asyncio
@@ -306,8 +306,8 @@ async def test_github_get_latest_run_log_error() -> None:
     mock_shell.run = AsyncMock(side_effect=ShellError("Fail", CommandResult(1, "", "")))
     gh = AsyncGitHubInterface(shell_executor=mock_shell)
 
-    log = await gh.get_latest_run_log("feat")
-    assert "Failed to fetch run logs" in log
+    with pytest.raises(ScmError, match="Failed to fetch run logs"):
+        await gh.get_latest_run_log("feat")
 
 
 # --- AsyncGeminiInterface Tests ---

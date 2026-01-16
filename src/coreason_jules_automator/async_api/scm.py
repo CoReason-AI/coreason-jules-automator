@@ -220,11 +220,10 @@ class AsyncGitHubInterface:
             return log_output
 
         except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse gh output: {e}")
-            return f"Failed to parse run list: {e}"
+            raise ScmError(f"Failed to parse run list: {e}") from e
         except Exception as e:
-            logger.error(f"Failed to fetch run logs: {e}")
-            return f"Failed to fetch run logs: {e}"
+            # _run_command already handles ShellError, but other exceptions might occur
+            raise ScmError(f"Failed to fetch run logs: {e}") from e
 
 
 class AsyncGeminiInterface:
