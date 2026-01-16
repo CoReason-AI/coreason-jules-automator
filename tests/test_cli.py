@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 from typer.testing import CliRunner
 
@@ -10,72 +10,68 @@ runner = CliRunner()
 def test_run_help() -> None:
     """Test help command to verify app wiring."""
     result = runner.invoke(app, ["--help"])
-    # print(f"\nHelp Output:\n{result.output}")
     assert result.exit_code == 0
 
 
 def test_run_success() -> None:
     """Test successful run."""
-    # Mock get_settings to avoid missing env var errors
-    # Patch where it is imported in cli.py or where it is defined
     with patch("coreason_jules_automator.cli.get_settings") as mock_settings_func:
         mock_settings = mock_settings_func.return_value
         mock_settings.llm_strategy = "api"
-        # Also patch LLMFactory.get_client to avoid actual initialization
-        with patch("coreason_jules_automator.llm.factory.LLMFactory.get_client"):
-            with patch("coreason_jules_automator.cli.Orchestrator") as MockOrchestrator:
-                mock_instance = MockOrchestrator.return_value
-                mock_instance.run_cycle.return_value = (True, "Success")
 
-                # Try without "run" subcommand if it fails
-                result = runner.invoke(app, ["run", "Task1", "--branch", "fix/bug"])
-                if result.exit_code != 0:
-                    # Typer configuration issue? Try invoking without subcommand.
-                    result = runner.invoke(app, ["Task1", "--branch", "fix/bug"])
+        with (
+            patch("coreason_jules_automator.cli.AsyncOrchestrator") as MockOrchestrator,
+            patch("coreason_jules_automator.cli.asyncio.run") as mock_asyncio_run,
+            patch("coreason_jules_automator.cli.AsyncGitInterface"),
+            patch("coreason_jules_automator.cli.AsyncGitHubInterface"),
+            patch("coreason_jules_automator.cli.AsyncGeminiInterface"),
+            patch("coreason_jules_automator.cli.AsyncJulesAgent"),
+            patch("coreason_jules_automator.cli.AsyncShellExecutor"),
+            patch("coreason_jules_automator.cli._get_async_llm_client"),
+        ):
+            mock_instance = MockOrchestrator.return_value
+            # Mock asyncio.run to return success tuple
+            mock_asyncio_run.return_value = (True, "Success")
 
-                if result.exit_code != 0:
-                    print(f"\nExit code: {result.exit_code}")
-                    print(f"Output: {result.output}")
+            result = runner.invoke(app, ["run", "Task1", "--branch", "fix/bug"])
 
-                assert result.exit_code == 0
-                mock_instance.run_cycle.assert_called_with("Task1", "fix/bug")
+            if result.exit_code != 0:
+                print(f"Output: {result.output}")
+
+            assert result.exit_code == 0
+            mock_instance.run_cycle.assert_called_with("Task1", "fix/bug")
+            mock_asyncio_run.assert_called()
 
 
 def test_run_failure() -> None:
     """Test failed run."""
-    with (
-        patch("coreason_jules_automator.cli.get_settings"),
-        patch("coreason_jules_automator.llm.factory.LLMFactory.get_client"),
-        patch("coreason_jules_automator.cli.Orchestrator") as MockOrchestrator,
-    ):
-        mock_instance = MockOrchestrator.return_value
-        mock_instance.run_cycle.return_value = (False, "Failure")
+    with patch("coreason_jules_automator.cli.get_settings") as mock_settings_func:
+        mock_settings = mock_settings_func.return_value
+        mock_settings.llm_strategy = "api"
 
-        result = runner.invoke(app, ["run", "Task1", "--branch", "fix/bug"])
-        if result.exit_code != 1:  # 2 is Usage Error
-            result = runner.invoke(app, ["Task1", "--branch", "fix/bug"])
+        with (
+            patch("coreason_jules_automator.cli.AsyncOrchestrator") as MockOrchestrator,
+            patch("coreason_jules_automator.cli.asyncio.run") as mock_asyncio_run,
+            patch("coreason_jules_automator.cli.AsyncGitInterface"),
+            patch("coreason_jules_automator.cli.AsyncGitHubInterface"),
+            patch("coreason_jules_automator.cli.AsyncGeminiInterface"),
+            patch("coreason_jules_automator.cli.AsyncJulesAgent"),
+            patch("coreason_jules_automator.cli.AsyncShellExecutor"),
+            patch("coreason_jules_automator.cli._get_async_llm_client"),
+        ):
+            mock_asyncio_run.return_value = (False, "Failure")
 
-        if result.exit_code != 1:
-            print(f"\nExit code: {result.exit_code}")
-            print(f"Output: {result.output}")
+            result = runner.invoke(app, ["run", "Task1", "--branch", "fix/bug"])
 
-        assert result.exit_code == 1
+            assert result.exit_code == 1
 
 
 def test_run_exception() -> None:
     """Test run with unexpected exception."""
-    with (
-        patch("coreason_jules_automator.cli.get_settings"),
-        patch("coreason_jules_automator.llm.factory.LLMFactory.get_client"),
-        patch("coreason_jules_automator.cli.Orchestrator", side_effect=Exception("Crash")),
-    ):
-        result = runner.invoke(app, ["run", "Task", "--branch", "b"])
-        if result.exit_code != 1:
-            result = runner.invoke(app, ["Task", "--branch", "b"])
+    with patch("coreason_jules_automator.cli.get_settings"), \
+         patch("coreason_jules_automator.cli.AsyncShellExecutor", side_effect=Exception("Crash")):
 
-        if result.exit_code != 1:
-            print(f"\nExit code: {result.exit_code}")
-            print(f"Output: {result.output}")
+        result = runner.invoke(app, ["run", "Task", "--branch", "b"])
 
         assert result.exit_code == 1
 
@@ -132,70 +128,70 @@ def test_cli_file_execution() -> None:
 
 def test_run_report_exception() -> None:
     """Test run with exception during report generation."""
-    with (
-        patch("coreason_jules_automator.cli.get_settings"),
-        patch("coreason_jules_automator.llm.factory.LLMFactory.get_client"),
-        patch("coreason_jules_automator.cli.Orchestrator") as MockOrchestrator,
-        patch("coreason_jules_automator.cli.MarkdownReporter") as MockReporter,
-        patch("coreason_jules_automator.cli.logger") as mock_logger,
-    ):
-        mock_instance = MockOrchestrator.return_value
-        mock_instance.run_cycle.return_value = (True, "Success")
+    with patch("coreason_jules_automator.cli.get_settings") as mock_settings_func:
+        mock_settings = mock_settings_func.return_value
+        mock_settings.llm_strategy = "api"
 
-        mock_reporter = MockReporter.return_value
-        mock_reporter.generate_report.side_effect = Exception("Report Error")
+        with (
+            patch("coreason_jules_automator.cli.AsyncOrchestrator") as MockOrchestrator,
+            patch("coreason_jules_automator.cli.asyncio.run") as mock_asyncio_run,
+            patch("coreason_jules_automator.cli.MarkdownReporter") as MockReporter,
+            patch("coreason_jules_automator.cli.logger") as mock_logger,
+            patch("coreason_jules_automator.cli.AsyncGitInterface"),
+            patch("coreason_jules_automator.cli.AsyncGitHubInterface"),
+            patch("coreason_jules_automator.cli.AsyncGeminiInterface"),
+            patch("coreason_jules_automator.cli.AsyncJulesAgent"),
+            patch("coreason_jules_automator.cli.AsyncShellExecutor"),
+            patch("coreason_jules_automator.cli._get_async_llm_client"),
+        ):
+            mock_asyncio_run.return_value = (True, "Success")
 
-        result = runner.invoke(app, ["run", "Task1", "--branch", "fix/bug"])
+            mock_reporter = MockReporter.return_value
+            mock_reporter.generate_report.side_effect = Exception("Report Error")
 
-        if result.exit_code != 0:
-            result = runner.invoke(app, ["Task1", "--branch", "fix/bug"])
+            result = runner.invoke(app, ["run", "Task1", "--branch", "fix/bug"])
 
-        if result.exit_code != 0:
-            print(f"Output: {result.output}")
+            if result.exit_code != 0:
+                print(f"Output: {result.output}")
 
-        assert result.exit_code == 0
-        mock_logger.error.assert_called_with("Failed to generate report: Report Error")
+            assert result.exit_code == 0
+            mock_logger.error.assert_called_with("Failed to generate report: Report Error")
 
 
 def test_campaign_command() -> None:
     """Test campaign command."""
-    with (
-        patch("coreason_jules_automator.cli.get_settings"),
-        patch("coreason_jules_automator.llm.factory.LLMFactory.get_client"),
-        patch("coreason_jules_automator.cli.Orchestrator") as MockOrchestrator,
-        patch("coreason_jules_automator.cli.GitInterface"),
-        patch("coreason_jules_automator.cli.GitHubInterface"),
-        patch("coreason_jules_automator.cli.GeminiInterface"),
-        patch("coreason_jules_automator.cli.JanitorService"),
-        patch("coreason_jules_automator.cli.JulesAgent"),
-        patch("coreason_jules_automator.cli.ShellExecutor"),
-    ):
-        mock_instance = MockOrchestrator.return_value
+    with patch("coreason_jules_automator.cli.get_settings") as mock_settings_func:
+        mock_settings = mock_settings_func.return_value
+        mock_settings.llm_strategy = "api"
 
-        result = runner.invoke(app, ["campaign", "Task1", "--base", "dev", "--count", "5"])
+        with (
+            patch("coreason_jules_automator.cli.AsyncOrchestrator") as MockOrchestrator,
+            patch("coreason_jules_automator.cli.asyncio.run") as mock_asyncio_run,
+            patch("coreason_jules_automator.cli.AsyncGitInterface"),
+            patch("coreason_jules_automator.cli.AsyncGitHubInterface"),
+            patch("coreason_jules_automator.cli.AsyncGeminiInterface"),
+            patch("coreason_jules_automator.cli.JanitorService"),
+            patch("coreason_jules_automator.cli.AsyncJulesAgent"),
+            patch("coreason_jules_automator.cli.AsyncShellExecutor"),
+            patch("coreason_jules_automator.cli._get_async_llm_client"),
+        ):
+            mock_instance = MockOrchestrator.return_value
+            # asyncio.run returns None for campaign
+            mock_asyncio_run.return_value = None
 
-        if result.exit_code != 0:
-            print(f"Output: {result.output}")
+            result = runner.invoke(app, ["campaign", "Task1", "--base", "dev", "--count", "5"])
 
-        assert result.exit_code == 0
-        mock_instance.run_campaign.assert_called_with("Task1", "dev", 5)
+            if result.exit_code != 0:
+                print(f"Output: {result.output}")
+
+            assert result.exit_code == 0
+            mock_instance.run_campaign.assert_called_with("Task1", "dev", 5)
 
 
 def test_campaign_exception() -> None:
     """Test campaign with unexpected exception."""
-    with (
-        patch("coreason_jules_automator.cli.get_settings"),
-        patch("coreason_jules_automator.llm.factory.LLMFactory.get_client"),
-        patch("coreason_jules_automator.cli.Orchestrator") as MockOrchestrator,
-        patch("coreason_jules_automator.cli.GitInterface"),
-        patch("coreason_jules_automator.cli.GitHubInterface"),
-        patch("coreason_jules_automator.cli.GeminiInterface"),
-        patch("coreason_jules_automator.cli.JanitorService"),
-        patch("coreason_jules_automator.cli.JulesAgent"),
-        patch("coreason_jules_automator.cli.ShellExecutor"),
-    ):
-        mock_instance = MockOrchestrator.return_value
-        mock_instance.run_campaign.side_effect = Exception("Campaign Crash")
+    with patch("coreason_jules_automator.cli.get_settings"), \
+         patch("coreason_jules_automator.cli.AsyncShellExecutor", side_effect=Exception("Campaign Crash")):
 
         result = runner.invoke(app, ["campaign", "Task1"])
 
@@ -204,23 +200,28 @@ def test_campaign_exception() -> None:
 
 def test_campaign_default_count() -> None:
     """Test campaign command with default count (0/infinite)."""
-    with (
-        patch("coreason_jules_automator.cli.get_settings"),
-        patch("coreason_jules_automator.llm.factory.LLMFactory.get_client"),
-        patch("coreason_jules_automator.cli.Orchestrator") as MockOrchestrator,
-        patch("coreason_jules_automator.cli.GitInterface"),
-        patch("coreason_jules_automator.cli.GitHubInterface"),
-        patch("coreason_jules_automator.cli.GeminiInterface"),
-        patch("coreason_jules_automator.cli.JanitorService"),
-        patch("coreason_jules_automator.cli.JulesAgent"),
-        patch("coreason_jules_automator.cli.ShellExecutor"),
-    ):
-        mock_instance = MockOrchestrator.return_value
+    with patch("coreason_jules_automator.cli.get_settings") as mock_settings_func:
+        mock_settings = mock_settings_func.return_value
+        mock_settings.llm_strategy = "api"
 
-        result = runner.invoke(app, ["campaign", "Task1"])
+        with (
+            patch("coreason_jules_automator.cli.AsyncOrchestrator") as MockOrchestrator,
+            patch("coreason_jules_automator.cli.asyncio.run") as mock_asyncio_run,
+            patch("coreason_jules_automator.cli.AsyncGitInterface"),
+            patch("coreason_jules_automator.cli.AsyncGitHubInterface"),
+            patch("coreason_jules_automator.cli.AsyncGeminiInterface"),
+            patch("coreason_jules_automator.cli.JanitorService"),
+            patch("coreason_jules_automator.cli.AsyncJulesAgent"),
+            patch("coreason_jules_automator.cli.AsyncShellExecutor"),
+            patch("coreason_jules_automator.cli._get_async_llm_client"),
+        ):
+            mock_instance = MockOrchestrator.return_value
+            mock_asyncio_run.return_value = None
 
-        if result.exit_code != 0:
-            print(f"Output: {result.output}")
+            result = runner.invoke(app, ["campaign", "Task1"])
 
-        assert result.exit_code == 0
-        mock_instance.run_campaign.assert_called_with("Task1", "develop", 0)
+            if result.exit_code != 0:
+                print(f"Output: {result.output}")
+
+            assert result.exit_code == 0
+            mock_instance.run_campaign.assert_called_with("Task1", "develop", 0)
