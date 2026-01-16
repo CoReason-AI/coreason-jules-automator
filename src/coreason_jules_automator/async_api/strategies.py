@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any, Dict, List, Optional, Protocol
+from typing import Any, AsyncGenerator, Dict, List, Optional, Protocol, Tuple, TypedDict
 
 from coreason_jules_automator.async_api.llm import AsyncLLMClient
 from coreason_jules_automator.async_api.scm import AsyncGeminiInterface, AsyncGitHubInterface, AsyncGitInterface
@@ -110,6 +110,13 @@ class AsyncLocalDefenseStrategy:
             return DefenseResult(success=False, message="\n".join(errors))
 
 
+class GithubCheck(TypedDict):
+    name: str
+    status: str
+    conclusion: Optional[str]
+    url: str
+
+
 class AsyncRemoteDefenseStrategy:
     """
     Implements 'Line 2' of the defense strategy (Remote CI/CD Verification).
@@ -175,6 +182,52 @@ class AsyncRemoteDefenseStrategy:
             return DefenseResult(success=False, message=f"Failed to push code: {e}")
 
         # 2. Poll Checks
+        return await self._run_ci_polling(branch_name)
+
+    async def _poll_ci_checks(self, max_attempts: int = 30, interval: int = 10) -> AsyncGenerator[List[GithubCheck], None]:
+        """Generator that yields check status, handling the sleep and retry logic."""
+        for i in range(max_attempts):
+            self.event_emitter.emit(
+                AutomationEvent(
+                    type=EventType.CHECK_RUNNING,
+                    message="Waiting for checks...",
+                    payload={"attempt": i + 1, "max_attempts": max_attempts},
+                )
+            )
+            try:
+                # We cast to List[GithubCheck] as we expect the interface to return dicts matching this shape
+                checks = await self.github.get_pr_checks() # type: ignore
+                yield checks
+            except RuntimeError as e:
+                logger.warning(f"Poll attempt failed: {e}")
+                self.event_emitter.emit(
+                    AutomationEvent(
+                        type=EventType.ERROR, message=f"Poll attempt failed: {e}", payload={"error": str(e)}
+                    )
+                )
+
+            await asyncio.sleep(interval)
+
+    def _analyze_checks(self, checks: List[GithubCheck]) -> Tuple[bool, bool]:
+        """Returns (all_completed, any_failure)."""
+        if not checks:
+            return False, False
+
+        all_completed = True
+        any_failure = False
+
+        for check in checks:
+            if check.get("status") != "completed":
+                all_completed = False
+            elif check.get("conclusion") != "success":
+                any_failure = True
+
+        return all_completed, any_failure
+
+    async def _run_ci_polling(self, branch_name: str) -> DefenseResult:
+        """
+        Polls CI checks and returns the result.
+        """
         max_poll_attempts = 30
         self.event_emitter.emit(
             AutomationEvent(
@@ -184,75 +237,45 @@ class AsyncRemoteDefenseStrategy:
             )
         )
 
-        for i in range(max_poll_attempts):
-            try:
-                self.event_emitter.emit(
-                    AutomationEvent(
-                        type=EventType.CHECK_RUNNING,
-                        message="Waiting for checks...",
-                        payload={"attempt": i + 1, "max_attempts": max_poll_attempts},
-                    )
-                )
+        async for checks in self._poll_ci_checks(max_attempts=max_poll_attempts):
+            if not checks:
+                continue
 
-                checks = await self.github.get_pr_checks()
-                # Analyze checks
-                all_completed = True
-                any_failure = False
+            all_completed, any_failure = self._analyze_checks(checks)
 
-                if not checks:
-                    await asyncio.sleep(10)
-                    continue
-
-                for check in checks:
-                    if check["status"] != "completed":
-                        all_completed = False
-                    elif check["conclusion"] != "success":
-                        any_failure = True
-
-                if all_completed:
-                    if not any_failure:
-                        self.event_emitter.emit(
-                            AutomationEvent(
-                                type=EventType.CHECK_RESULT,
-                                message="Line 2 defense passed. Success!",
-                                payload={"status": "pass"},
-                            )
+            if all_completed:
+                if not any_failure:
+                    self.event_emitter.emit(
+                        AutomationEvent(
+                            type=EventType.CHECK_RESULT,
+                            message="Line 2 defense passed. Success!",
+                            payload={"status": "pass"},
                         )
-                        return DefenseResult(success=True, message="CI checks passed")
-                    else:
-                        # Red - Get logs and summarize
-                        summary = await self._handle_ci_failure(checks, branch_name)
-                        self.event_emitter.emit(
-                            AutomationEvent(
-                                type=EventType.CHECK_RESULT,
-                                message=f"CI Failure: {summary}",
-                                payload={"status": "fail", "summary": summary},
-                            )
-                        )
-                        return DefenseResult(success=False, message=summary)
-
-                await asyncio.sleep(10)  # Wait before next poll
-
-            except RuntimeError as e:
-                logger.warning(f"Failed to poll checks: {e}")
-                self.event_emitter.emit(
-                    AutomationEvent(
-                        type=EventType.ERROR, message=f"Poll attempt failed: {e}", payload={"error": str(e)}
                     )
-                )
-                await asyncio.sleep(10)
+                    return DefenseResult(success=True, message="CI checks passed")
+                else:
+                    # Red - Get logs and summarize
+                    summary = await self._handle_ci_failure(checks, branch_name)
+                    self.event_emitter.emit(
+                        AutomationEvent(
+                            type=EventType.CHECK_RESULT,
+                            message=f"CI Failure: {summary}",
+                            payload={"status": "fail", "summary": summary},
+                        )
+                    )
+                    return DefenseResult(success=False, message=summary)
 
         error_msg = "Line 2 timeout: Checks did not complete."
         logger.error(error_msg)
         return DefenseResult(success=False, message=error_msg)
 
-    async def _handle_ci_failure(self, checks: List[Any], branch_name: str) -> str:
+    async def _handle_ci_failure(self, checks: List[GithubCheck], branch_name: str) -> str:
         """
         Uses Janitor to summarize failure logs.
         """
         logger.info("Analyzing CI failure...")
         # Find failed check
-        failed_check = next((c for c in checks if c["conclusion"] != "success"), None)
+        failed_check = next((c for c in checks if c.get("conclusion") != "success"), None)
         if failed_check:
             log_snippet = (
                 f"Check {failed_check.get('name', 'unknown')} failed. URL: {failed_check.get('url', 'unknown')}"

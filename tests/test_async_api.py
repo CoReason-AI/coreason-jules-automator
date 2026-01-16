@@ -487,11 +487,11 @@ async def test_wait_for_completion_process_exit() -> None:
         mock_process.returncode = 0
         return b"Some output\n"
 
-    mock_process.stdout.readline = AsyncMock(side_effect=set_returncode_side_effect)
+    mock_process.stdout.readline = AsyncMock(side_effect=[b"Some output\n", b""])
 
     agent.process = mock_process
 
     result = await agent.wait_for_completion("sid")
 
     assert result is False
-    mock_process.stdout.readline.assert_called_once()
+    assert mock_process.stdout.readline.call_count == 2

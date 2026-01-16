@@ -25,6 +25,60 @@ class AsyncJulesAgent:
         self.shell = shell or AsyncShellExecutor()
         self.mission_complete = False
         self.protocol = JulesProtocol()
+        # Keep track of process across method calls
+        self.process: Optional[asyncio.subprocess.Process] = None
+
+    async def _process_output_stream(self, process: asyncio.subprocess.Process, stop_on_sid: bool = False) -> Optional[str]:
+        """
+        Reads stdout line by line, feeds protocol, handles auto-replies.
+
+        Args:
+            process: The subprocess to monitor.
+            stop_on_sid: If True, returns immediately when SID is detected.
+
+        Returns:
+            The detected SID if found, else None.
+        """
+        if not process.stdout:
+            logger.error("Process has no stdout")
+            return None
+
+        detected_sid = None
+        try:
+            while True:
+                line = await process.stdout.readline()
+                if not line:
+                    break
+
+                text = line.decode("utf-8", errors="replace")
+
+                for action in self.protocol.process_output(text):
+                    if isinstance(action, SendStdin):
+                        logger.info(f"Action SendStdin: {action.text}")
+                        if process.stdin:
+                            process.stdin.write(action.text.encode())
+                            await process.stdin.drain()
+
+                    elif isinstance(action, SignalSessionId):
+                        detected_sid = action.sid
+                        logger.info(f"✨ Captured SID: {detected_sid}")
+
+                    elif isinstance(action, SignalComplete):
+                        self.mission_complete = True
+                        logger.info("✅ Mission Complete signal received.")
+
+                # Stop conditions
+                if stop_on_sid and detected_sid:
+                    return detected_sid
+
+                if not stop_on_sid and self.mission_complete:
+                    return detected_sid
+
+        except Exception as e:
+            logger.error(f"Error processing stream: {e}")
+            raise e
+
+        return detected_sid
 
     async def launch_session(self, task: str) -> Optional[str]:
         self.mission_complete = False
@@ -33,11 +87,6 @@ class AsyncJulesAgent:
 
         # Construct command
         cmd = [self.executable, "remote", settings.repo_name, "--task", task]
-
-        # Use pexpect-style interaction via the protocol + shell executor?
-        # The AsyncShellExecutor runs commands and returns result. It doesn't support interactive streams yet.
-        # We need to use asyncio.create_subprocess_exec directly or extend ShellExecutor.
-        # For this implementation, we'll use asyncio subprocess directly here for stream handling.
 
         try:
             process = await asyncio.create_subprocess_exec(
@@ -52,103 +101,26 @@ class AsyncJulesAgent:
             return None
 
         self.process = process
-        detected_sid: Optional[str] = None
 
-        # Read loop
-        # We need to read byte by byte or line by line to feed the protocol
-        # but pexpect logic in protocol might expect chunks.
-        if not process.stdout:
-            logger.error("Failed to capture stdout")
-            return None
-
-        # We'll read line by line for simplicity with the protocol's feed method
         try:
-            while True:
-                line = await process.stdout.readline()
-                if not line:
-                    break
-
-                text = line.decode("utf-8", errors="replace")
-                # Feed protocol
-                for action in self.protocol.process_output(text):
-                    if isinstance(action, SendStdin):
-                        logger.info(f"Action SendStdin: {action.text}")
-                        if self.process.stdin:
-                            self.process.stdin.write(action.text.encode())
-                            await self.process.stdin.drain()
-                    elif isinstance(action, SignalSessionId):
-                        detected_sid = action.sid
-                        logger.info(f"✨ Captured SID: {detected_sid}")
-                        break
-                    elif isinstance(action, SignalComplete):
-                        self.mission_complete = True
-                        logger.info("✅ Mission Complete signal received.")
-
-                if detected_sid:
-                    break
+            detected_sid = await self._process_output_stream(process, stop_on_sid=True)
+            return detected_sid
 
         except Exception as e:
             logger.error(f"Error during launch: {e}")
-            # Ensure cleanup if launch fails
             await self._cleanup_process(process)
             return None
-
-        # If we have SID, we can detach/kill this process as we just wanted to launch it?
-        # "jules remote" usually stays running?
-        # The 'orchestrator' logic says "Wait for Completion".
-        # If we kill it, the remote session might stop?
-        # For "teleport" workflow, usually the agent runs until it finishes or pauses.
-        # We will keep it running in background or just return SID and let caller handle waiting?
-        # The Orchestrator calls `wait_for_completion`.
-        # So we probably should detach or keep reference.
-        # For this Async version, we might just assume it's running remotely and we can query status?
-        # But 'wait_for_completion' in the sync version checked the 'jules' output?
-        # Actually, in the sync version, it used `pexpect` to wait.
-        # Here we return SID. The `wait_for_completion` method will be called next.
-        return detected_sid
 
     async def wait_for_completion(self, sid: str) -> bool:
         """
         Polls or waits for the session to complete.
-        Since we might have detached or it's a remote session, we need a way to check.
-        If we kept the process open in `launch_session`, we should continue reading it.
-        But `launch_session` returned.
-        In a real implementation, we'd probably have a shared state or re-attach.
-        For now, let's assume we can attach or just rely on the fact that if we have the process handle,
-        we can continue reading.
         """
-        # TODO: Robust implementation of re-attaching or continuing the read loop.
-        # For the purpose of this refactor step, we'll assume we continue monitoring the process started in
-        # launch_session if it's stored in self.process.
-        if not hasattr(self, "process") or self.process.returncode is not None:
-            # Check logic: if it finished, did it finish successfully?
-            # We return self.mission_complete state.
+        # If process is not running or we don't have handle, check flag
+        if not self.process or self.process.returncode is not None:
             return self.mission_complete
 
-        # Continue reading from stdout
-        if not self.process.stdout:
-            return False
-
         try:
-            while True:
-                line = await self.process.stdout.readline()
-                if not line:
-                    break
-                text = line.decode("utf-8", errors="replace")
-                for action in self.protocol.process_output(text):
-                    if isinstance(action, SendStdin):
-                        if self.process.stdin:
-                            self.process.stdin.write(action.text.encode())
-                            await self.process.stdin.drain()
-                    elif isinstance(action, SignalComplete):
-                        self.mission_complete = True
-                        logger.info("✅ Mission Complete signal received.")
-                        return True
-
-                # Check if process exited
-                if self.process.returncode is not None:
-                    break
-
+            await self._process_output_stream(self.process, stop_on_sid=False)
         except Exception as e:
             logger.error(f"Error during wait: {e}")
             return False

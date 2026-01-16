@@ -55,110 +55,135 @@ class AsyncOrchestrator:
         last_error = ""
         while attempt < settings.max_retries:
             attempt += 1
-            self.event_emitter.emit(
-                AutomationEvent(
-                    type=EventType.PHASE_START,
-                    message=f"Iteration {attempt}/{settings.max_retries}",
-                    payload={"attempt": attempt, "max_retries": settings.max_retries},
-                )
-            )
+            self._emit_phase_start(attempt, settings.max_retries)
 
             # Prepare prompt with feedback if retry
-            current_task = task_description
-            if attempt > 1 and last_error:
-                prefix = "\n\nIMPORTANT: The previous attempt failed with the following error:\n"
-                current_task = f"{task_description}{prefix}{last_error}"
-                logger.info("Appending feedback to task description for retry.")
+            current_task = self._build_task_prompt(task_description, last_error, attempt)
 
             # --- PHASE 1: REMOTE GENERATION & TELEPORT ---
-            try:
-                # 1. Launch Session
-                self.event_emitter.emit(
-                    AutomationEvent(type=EventType.CHECK_RUNNING, message="Launching Remote Jules Session...")
-                )
-                sid = await self.agent.launch_session(current_task)
-
-                if not sid:
-                    raise RuntimeError("Failed to obtain Session ID (SID).")
-
-                self.event_emitter.emit(
-                    AutomationEvent(
-                        type=EventType.CHECK_RESULT, message=f"Session Started: {sid}", payload={"sid": sid}
-                    )
-                )
-
-                # 2. Monitor for Completion
-                self.event_emitter.emit(
-                    AutomationEvent(type=EventType.CHECK_RUNNING, message=f"Waiting for SID {sid} to complete...")
-                )
-                success_wait = await self.agent.wait_for_completion(sid)
-
-                if not success_wait:
-                    raise RuntimeError(f"Session {sid} did not complete successfully.")
-
-                # 3. Teleport & Sync
-                self.event_emitter.emit(
-                    AutomationEvent(type=EventType.CHECK_RUNNING, message="Teleporting code to local workspace...")
-                )
-                success_sync = await self.agent.teleport_and_sync(sid, Path.cwd())
-
-                if not success_sync:
-                    raise RuntimeError("Failed to sync remote code to local repository.")
-
-                self.event_emitter.emit(
-                    AutomationEvent(
-                        type=EventType.CHECK_RESULT, message="Code synced successfully.", payload={"status": "pass"}
-                    )
-                )
-
-            except Exception as e:
-                error_msg = f"Agent workflow failed: {e}"
-                self.event_emitter.emit(
-                    AutomationEvent(
-                        type=EventType.ERROR,
-                        message=error_msg,
-                        payload={"error": str(e)},
-                    )
-                )
+            sid, error_msg = await self._execute_agent_workflow(current_task)
+            if not sid:
                 return False, error_msg
 
             # --- PHASE 2: DEFENSE STRATEGIES ---
-            cycle_passed = True
-            for strategy in self.strategies:
-                result = await strategy.execute(context={"branch_name": branch_name, "sid": sid})
-                if not result.success:
-                    logger.warning(f"Strategy {strategy.__class__.__name__} failed: {result.message}")
-                    last_error = result.message
-                    cycle_passed = False
-                    # The strategies (specifically Line 2 / Janitor) generate the feedback for the next loop
-                    break
+            success, feedback = await self._execute_defense_strategies(branch_name, sid)
 
-            if cycle_passed:
-                self.event_emitter.emit(
-                    AutomationEvent(
-                        type=EventType.PHASE_START,
-                        message="All defense strategies passed. Success!",
-                        payload={"status": "success"},
-                    )
-                )
+            if success:
+                self._emit_success("All strategies passed.")
                 return True, "Success"
-            else:
-                self.event_emitter.emit(
-                    AutomationEvent(
-                        type=EventType.PHASE_START,
-                        message="Defense cycle failed. Retrying...",
-                        payload={"status": "retry"},
-                    )
-                )
 
+            last_error = feedback
+            self._emit_retry(feedback)
+
+        self._emit_failure("Max retries reached.")
+        return False, last_error
+
+    def _build_task_prompt(self, task: str, last_error: str, attempt: int) -> str:
+        """Constructs the prompt, appending feedback if this is a retry."""
+        if attempt > 1 and last_error:
+            prefix = "\n\nIMPORTANT: The previous attempt failed with the following error:\n"
+            current_task = f"{task}{prefix}{last_error}"
+            logger.info("Appending feedback to task description for retry.")
+            return current_task
+        return task
+
+    async def _execute_agent_workflow(self, task: str) -> Tuple[Optional[str], str]:
+        """Encapsulates Launch -> Wait -> Teleport sequence. Returns (sid, error_msg)."""
+        try:
+            # 1. Launch Session
+            self.event_emitter.emit(
+                AutomationEvent(type=EventType.CHECK_RUNNING, message="Launching Remote Jules Session...")
+            )
+            sid = await self.agent.launch_session(task)
+
+            if not sid:
+                raise RuntimeError("Failed to obtain Session ID (SID).")
+
+            self.event_emitter.emit(
+                AutomationEvent(
+                    type=EventType.CHECK_RESULT, message=f"Session Started: {sid}", payload={"sid": sid}
+                )
+            )
+
+            # 2. Monitor for Completion
+            self.event_emitter.emit(
+                AutomationEvent(type=EventType.CHECK_RUNNING, message=f"Waiting for SID {sid} to complete...")
+            )
+            success_wait = await self.agent.wait_for_completion(sid)
+
+            if not success_wait:
+                raise RuntimeError(f"Session {sid} did not complete successfully.")
+
+            # 3. Teleport & Sync
+            self.event_emitter.emit(
+                AutomationEvent(type=EventType.CHECK_RUNNING, message="Teleporting code to local workspace...")
+            )
+            success_sync = await self.agent.teleport_and_sync(sid, Path.cwd())
+
+            if not success_sync:
+                raise RuntimeError("Failed to sync remote code to local repository.")
+
+            self.event_emitter.emit(
+                AutomationEvent(
+                    type=EventType.CHECK_RESULT, message="Code synced successfully.", payload={"status": "pass"}
+                )
+            )
+            return sid, ""
+        except Exception as e:
+            error_msg = f"Agent workflow failed: {e}"
+            self.event_emitter.emit(
+                AutomationEvent(
+                    type=EventType.ERROR,
+                    message=error_msg,
+                    payload={"error": str(e)},
+                )
+            )
+            return None, error_msg
+
+    async def _execute_defense_strategies(self, branch_name: str, sid: str) -> Tuple[bool, str]:
+        """Executes all defense strategies in order."""
+        for strategy in self.strategies:
+            result = await strategy.execute(context={"branch_name": branch_name, "sid": sid})
+            if not result.success:
+                logger.warning(f"Strategy {strategy.__class__.__name__} failed: {result.message}")
+                return False, result.message
+        return True, "Success"
+
+    def _emit_phase_start(self, attempt: int, max_retries: int) -> None:
+        self.event_emitter.emit(
+            AutomationEvent(
+                type=EventType.PHASE_START,
+                message=f"Iteration {attempt}/{max_retries}",
+                payload={"attempt": attempt, "max_retries": max_retries},
+            )
+        )
+
+    def _emit_success(self, message: str) -> None:
+        self.event_emitter.emit(
+            AutomationEvent(
+                type=EventType.PHASE_START,
+                message=f"{message} Success!",
+                payload={"status": "success"},
+            )
+        )
+
+    def _emit_retry(self, feedback: str) -> None:
+        self.event_emitter.emit(
+            AutomationEvent(
+                type=EventType.PHASE_START,
+                message="Defense cycle failed. Retrying...",
+                payload={"status": "retry", "feedback": feedback},
+            )
+        )
+
+    def _emit_failure(self, message: str) -> None:
         self.event_emitter.emit(
             AutomationEvent(
                 type=EventType.ERROR,
-                message="Max retries reached. Task failed.",
+                message=f"{message} Task failed.",
                 payload={"status": "failed"},
             )
         )
-        return False, last_error
 
     async def run_campaign(self, task: str, base_branch: str = "develop", iterations: Optional[int] = 50) -> None:
         """
