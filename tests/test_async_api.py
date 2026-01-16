@@ -8,7 +8,7 @@ from coreason_jules_automator.async_api.agent import AsyncJulesAgent
 from coreason_jules_automator.async_api.llm import AsyncOpenAIAdapter
 from coreason_jules_automator.async_api.shell import AsyncShellExecutor
 from coreason_jules_automator.llm.types import LLMRequest
-from coreason_jules_automator.utils.shell import CommandResult, ShellError
+from coreason_jules_automator.utils.shell import ShellError
 
 
 @pytest.mark.asyncio
@@ -143,12 +143,14 @@ async def test_async_jules_agent_launch() -> None:
             mock_process.stdout = MagicMock()
             # The agent uses `await process.stdout.readline()`, NOT `read()`.
             # We must mock `readline`.
-            mock_process.stdout.readline = AsyncMock(side_effect=[
-                b"Do you want to continue? [y/n]\n",
-                b"Session ID: 12345\n",
-                b"100% of the requirements is met\n",
-                b""
-            ])
+            mock_process.stdout.readline = AsyncMock(
+                side_effect=[
+                    b"Do you want to continue? [y/n]\n",
+                    b"Session ID: 12345\n",
+                    b"100% of the requirements is met\n",
+                    b"",
+                ]
+            )
             mock_process.returncode = 0
             mock_process.wait = AsyncMock()
 
@@ -262,11 +264,9 @@ async def test_async_jules_agent_wait() -> None:
     mock_process.returncode = None
     mock_process.stdout = MagicMock()
     # Read sequence: success signal then EOF
-    mock_process.stdout.readline = AsyncMock(side_effect=[
-        b"Processing...\n",
-        b"100% of the requirements is met\n",
-        b""
-    ])
+    mock_process.stdout.readline = AsyncMock(
+        side_effect=[b"Processing...\n", b"100% of the requirements is met\n", b""]
+    )
 
     agent.process = mock_process
 
@@ -281,15 +281,16 @@ async def test_async_jules_agent_wait_eof() -> None:
     agent = AsyncJulesAgent()
 
     mock_process = MagicMock()
-    mock_process.returncode = 0 # Exited
+    mock_process.returncode = 0  # Exited
     mock_process.stdout = MagicMock()
-    mock_process.stdout.readline = AsyncMock(return_value=b"") # EOF
+    mock_process.stdout.readline = AsyncMock(return_value=b"")  # EOF
 
     agent.process = mock_process
 
     result = await agent.wait_for_completion("123")
     # Should be False as mission_complete was never set
     assert result is False
+
 
 @pytest.mark.asyncio
 async def test_async_jules_agent_wait_exception() -> None:
@@ -304,6 +305,7 @@ async def test_async_jules_agent_wait_exception() -> None:
 
     result = await agent.wait_for_completion("123")
     assert result is False
+
 
 @pytest.mark.asyncio
 async def test_async_jules_agent_teleport() -> None:
