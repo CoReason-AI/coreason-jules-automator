@@ -44,8 +44,9 @@ async def test_async_shell_executor_timeout() -> None:
         mock_process.wait = AsyncMock()
         mock_exec.return_value = mock_process
 
-        async def raise_timeout(coro, timeout):
-            if coro: coro.close()
+        async def raise_timeout(coro: object, timeout: object) -> None:
+            if coro and hasattr(coro, "close"):
+                coro.close()
             raise asyncio.TimeoutError
 
         # We simulate timeout in wait_for
@@ -69,8 +70,9 @@ async def test_async_shell_executor_timeout_check_true() -> None:
         mock_process.wait = AsyncMock()
         mock_exec.return_value = mock_process
 
-        async def raise_timeout(coro, timeout):
-            if coro: coro.close()
+        async def raise_timeout(coro: object, timeout: object) -> None:
+            if coro and hasattr(coro, "close"):
+                coro.close()
             raise asyncio.TimeoutError
 
         with patch("asyncio.wait_for", side_effect=raise_timeout):
@@ -224,9 +226,9 @@ async def test_async_jules_agent_cleanup_process() -> None:
     # Mock wait() to be awaitable
     mock_process.wait = AsyncMock()
 
-    async def raise_timeout(coro, timeout):
+    async def raise_timeout(coro: object, timeout: object) -> None:
         # Prevent "coroutine never awaited" warning by closing it
-        if coro:
+        if coro and hasattr(coro, "close"):
             coro.close()
         raise asyncio.TimeoutError
 
@@ -382,11 +384,13 @@ async def test_launch_session_signal_complete() -> None:
             mock_process = MagicMock()
             mock_process.stdout = MagicMock()
             # Simulate SignalComplete FIRST, then Session ID
-            mock_process.stdout.readline = AsyncMock(side_effect=[
-                b"100% of the requirements is met\n", # Triggers SignalComplete
-                b"Session ID: test_sid\n",
-                b""
-            ])
+            mock_process.stdout.readline = AsyncMock(
+                side_effect=[
+                    b"100% of the requirements is met\n",  # Triggers SignalComplete
+                    b"Session ID: test_sid\n",
+                    b"",
+                ]
+            )
             mock_process.stdin = MagicMock()
             mock_process.returncode = None
             mock_exec.return_value = mock_process
@@ -406,10 +410,12 @@ async def test_launch_session_eof() -> None:
             mock_process = MagicMock()
             mock_process.stdout = MagicMock()
             # Return some line then EOF
-            mock_process.stdout.readline = AsyncMock(side_effect=[
-                b"Starting...\n",
-                b"" # EOF -> break
-            ])
+            mock_process.stdout.readline = AsyncMock(
+                side_effect=[
+                    b"Starting...\n",
+                    b"",  # EOF -> break
+                ]
+            )
             mock_process.stdin = MagicMock()
             mock_process.returncode = None
             mock_exec.return_value = mock_process
@@ -449,10 +455,12 @@ async def test_wait_for_completion_send_stdin() -> None:
     mock_process.returncode = None
 
     # "Do you want to continue? [y/n]" triggers prompt match
-    mock_process.stdout.readline = AsyncMock(side_effect=[
-        b"Do you want to continue? [y/n]\n", # Triggers SendStdin
-        b"" # EOF
-    ])
+    mock_process.stdout.readline = AsyncMock(
+        side_effect=[
+            b"Do you want to continue? [y/n]\n",  # Triggers SendStdin
+            b"",  # EOF
+        ]
+    )
 
     agent.process = mock_process
 
@@ -472,10 +480,10 @@ async def test_wait_for_completion_process_exit() -> None:
     mock_process = MagicMock()
     mock_process.stdout = MagicMock()
     mock_process.stdin = MagicMock()
-    mock_process.returncode = None # Initially None so we enter the loop
+    mock_process.returncode = None  # Initially None so we enter the loop
 
     # Define a side effect that sets returncode when readline is called
-    async def set_returncode_side_effect():
+    async def set_returncode_side_effect() -> bytes:
         mock_process.returncode = 0
         return b"Some output\n"
 
