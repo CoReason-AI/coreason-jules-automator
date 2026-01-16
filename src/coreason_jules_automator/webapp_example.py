@@ -106,7 +106,7 @@ async def run_orchestration_background(task: str, branch: str) -> None:
         logger.exception(f"Background orchestration failed: {e}")
 
 
-@app.post("/start-campaign")  # type: ignore[misc]
+@app.post("/start-campaign")  # type: ignore[untyped-decorator]
 async def start_campaign(request: OrchestrationRequest, background_tasks: BackgroundTasks) -> Dict[str, str]:
     background_tasks.add_task(run_orchestration_background, request.task, request.branch)
     return {"status": "Campaign started", "task": request.task, "branch": request.branch}
