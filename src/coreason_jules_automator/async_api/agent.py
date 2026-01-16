@@ -24,6 +24,7 @@ class AsyncJulesAgent:
         self.executable = executable
         self.shell = shell or AsyncShellExecutor()
         self.mission_complete = False
+        self.protocol = JulesProtocol()
 
     async def launch_session(self, task: str) -> Optional[str]:
         self.mission_complete = False
@@ -38,16 +39,19 @@ class AsyncJulesAgent:
         # We need to use asyncio.create_subprocess_exec directly or extend ShellExecutor.
         # For this implementation, we'll use asyncio subprocess directly here for stream handling.
 
-        process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            env=None,  # Inherit env
-        )
+        try:
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                env=None,  # Inherit env
+            )
+        except Exception as e:
+            logger.error(f"Failed to launch process: {e}")
+            return None
 
         self.process = process
-        self.protocol = JulesProtocol()
         detected_sid: Optional[str] = None
 
         # Read loop
@@ -66,8 +70,13 @@ class AsyncJulesAgent:
 
                 text = line.decode("utf-8", errors="replace")
                 # Feed protocol
-                for action in self.protocol.feed(text):
-                    if isinstance(action, SignalSessionId):
+                for action in self.protocol.process_output(text):
+                    if isinstance(action, SendStdin):
+                        logger.info(f"Action SendStdin: {action.text}")
+                        if self.process.stdin:
+                            self.process.stdin.write(action.text.encode())
+                            await self.process.stdin.drain()
+                    elif isinstance(action, SignalSessionId):
                         detected_sid = action.sid
                         logger.info(f"✨ Captured SID: {detected_sid}")
                         break
@@ -80,8 +89,8 @@ class AsyncJulesAgent:
 
         except Exception as e:
             logger.error(f"Error during launch: {e}")
-            if process.returncode is None:
-                process.terminate()
+            # Ensure cleanup if launch fails
+            await self._cleanup_process(process)
             return None
 
         # If we have SID, we can detach/kill this process as we just wanted to launch it?
@@ -112,8 +121,9 @@ class AsyncJulesAgent:
         # For the purpose of this refactor step, we'll assume we continue monitoring the process started in
         # launch_session if it's stored in self.process.
         if not hasattr(self, "process") or self.process.returncode is not None:
-            # Maybe it finished already?
-            return True
+            # Check logic: if it finished, did it finish successfully?
+            # We return self.mission_complete state.
+            return self.mission_complete
 
         # Continue reading from stdout
         if not self.process.stdout:
@@ -125,10 +135,10 @@ class AsyncJulesAgent:
                 if not line:
                     break
                 text = line.decode("utf-8", errors="replace")
-                for action in self.protocol.feed(text):
+                for action in self.protocol.process_output(text):
                     if isinstance(action, SendStdin):
                         if self.process.stdin:
-                            self.process.stdin.write(action.content.encode())
+                            self.process.stdin.write(action.text.encode())
                             await self.process.stdin.drain()
                     elif isinstance(action, SignalComplete):
                         self.mission_complete = True
@@ -157,3 +167,17 @@ class AsyncJulesAgent:
         except Exception as e:
             logger.error(f"Teleport failed: {e}")
             return False
+
+    async def _cleanup_process(self, process: asyncio.subprocess.Process) -> None:
+        """
+        Helper to cleanly terminate a subprocess.
+        """
+        if process.returncode is not None:
+            return
+
+        process.terminate()
+        try:
+            await asyncio.wait_for(process.wait(), timeout=5.0)
+        except asyncio.TimeoutError:
+            process.kill()
+            await process.wait()
