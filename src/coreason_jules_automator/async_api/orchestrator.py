@@ -1,43 +1,33 @@
-# Copyright (c) 2025 CoReason, Inc.
-#
-# This software is proprietary and dual-licensed.
-# Licensed under the Prosperity Public License 3.0 (the "License").
-# A copy of the license is available at https://prosperitylicense.com/versions/3.0.0
-# For details, see the LICENSE file.
-# Commercial use beyond a 30-day trial requires a separate license.
-#
-# Source Code: https://github.com/CoReason-AI/coreason_jules_automator
-
 import random
 import string
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from coreason_jules_automator.agent.jules import JulesAgent
-from coreason_jules_automator.ci.git import GitInterface
+from coreason_jules_automator.async_api.agent import AsyncJulesAgent
+from coreason_jules_automator.async_api.llm import AsyncLLMClient
+from coreason_jules_automator.async_api.scm import AsyncGitInterface
+from coreason_jules_automator.async_api.strategies import AsyncDefenseStrategy
 from coreason_jules_automator.config import get_settings
 from coreason_jules_automator.events import AutomationEvent, EventEmitter, EventType, LoguruEmitter
-from coreason_jules_automator.llm.adapters import LLMClient
 from coreason_jules_automator.llm.janitor import JanitorService
-from coreason_jules_automator.strategies.base import DefenseStrategy
 from coreason_jules_automator.utils.logger import logger
 
 
-class Orchestrator:
+class AsyncOrchestrator:
     """
-    The Brain of the Coreason Jules Automator.
+    The Async Brain of the Coreason Jules Automator.
     Manages the 'Two-Line Defense' state machine using injected strategies.
-    Refactored to support Remote Session + Teleport workflow.
+    Refactored to support Remote Session + Teleport workflow asynchronously.
     """
 
     def __init__(
         self,
-        agent: JulesAgent,
-        strategies: List[DefenseStrategy],
+        agent: AsyncJulesAgent,
+        strategies: List[AsyncDefenseStrategy],
         event_emitter: Optional[EventEmitter] = None,
-        git_interface: Optional[GitInterface] = None,
+        git_interface: Optional[AsyncGitInterface] = None,
         janitor_service: Optional[JanitorService] = None,
-        llm_client: Optional[LLMClient] = None,
+        llm_client: Optional[AsyncLLMClient] = None,
     ) -> None:
         self.agent = agent
         self.strategies = strategies
@@ -46,7 +36,7 @@ class Orchestrator:
         self.janitor = janitor_service
         self.llm_client = llm_client
 
-    def run_cycle(self, task_description: str, branch_name: str) -> Tuple[bool, str]:
+    async def run_cycle(self, task_description: str, branch_name: str) -> Tuple[bool, str]:
         """
         Executes the full development cycle:
         Agent Launch -> Wait -> Teleport -> Strategies -> Success/Retry.
@@ -86,7 +76,7 @@ class Orchestrator:
                 self.event_emitter.emit(
                     AutomationEvent(type=EventType.CHECK_RUNNING, message="Launching Remote Jules Session...")
                 )
-                sid = self.agent.launch_session(current_task)
+                sid = await self.agent.launch_session(current_task)
 
                 if not sid:
                     raise RuntimeError("Failed to obtain Session ID (SID).")
@@ -101,7 +91,7 @@ class Orchestrator:
                 self.event_emitter.emit(
                     AutomationEvent(type=EventType.CHECK_RUNNING, message=f"Waiting for SID {sid} to complete...")
                 )
-                success_wait = self.agent.wait_for_completion(sid)
+                success_wait = await self.agent.wait_for_completion(sid)
 
                 if not success_wait:
                     raise RuntimeError(f"Session {sid} did not complete successfully.")
@@ -110,7 +100,7 @@ class Orchestrator:
                 self.event_emitter.emit(
                     AutomationEvent(type=EventType.CHECK_RUNNING, message="Teleporting code to local workspace...")
                 )
-                success_sync = self.agent.teleport_and_sync(sid, Path.cwd())
+                success_sync = await self.agent.teleport_and_sync(sid, Path.cwd())
 
                 if not success_sync:
                     raise RuntimeError("Failed to sync remote code to local repository.")
@@ -135,7 +125,7 @@ class Orchestrator:
             # --- PHASE 2: DEFENSE STRATEGIES ---
             cycle_passed = True
             for strategy in self.strategies:
-                result = strategy.execute(context={"branch_name": branch_name, "sid": sid})
+                result = await strategy.execute(context={"branch_name": branch_name, "sid": sid})
                 if not result.success:
                     logger.warning(f"Strategy {strategy.__class__.__name__} failed: {result.message}")
                     last_error = result.message
@@ -170,7 +160,7 @@ class Orchestrator:
         )
         return False, last_error
 
-    def run_campaign(self, task: str, base_branch: str = "develop", iterations: Optional[int] = 50) -> None:
+    async def run_campaign(self, task: str, base_branch: str = "develop", iterations: Optional[int] = 50) -> None:
         """
         Runs a campaign of multiple iterations to solve a task.
         If iterations is 0 or None, it runs in Infinite Mode (up to a safety limit).
@@ -188,7 +178,7 @@ class Orchestrator:
         agg_branch = f"vibe_run_{run_id}"
 
         logger.info(f"Starting Campaign ID: {run_id}. Aggregation Branch: {agg_branch}")
-        self.git.checkout_new_branch(agg_branch, base_branch)
+        await self.git.checkout_new_branch(agg_branch, base_branch)
 
         i = 0
         while i < limit:
@@ -198,12 +188,12 @@ class Orchestrator:
 
             try:
                 # Checkout iteration branch from AGGREGATION branch
-                self.git.checkout_new_branch(iter_branch, agg_branch)
-                success, feedback = self.run_cycle(task, iter_branch)
+                await self.git.checkout_new_branch(iter_branch, agg_branch, pull_base=False)
+                success, feedback = await self.run_cycle(task, iter_branch)
 
                 if success:
                     logger.info(f"Iteration {i} Succeeded. Merging into {agg_branch}...")
-                    raw_log = self.git.get_commit_log(agg_branch, iter_branch)
+                    raw_log = await self.git.get_commit_log(agg_branch, iter_branch)
 
                     # Sans-I/O Refactor: Professionalize Commit
                     clean_msg = raw_log  # Default fallback
@@ -215,13 +205,9 @@ class Orchestrator:
                             # Replicating simple retry loop here:
                             for _ in range(3):
                                 try:
-                                    resp_text = self.llm_client.complete(
-                                        messages=req.messages, max_tokens=req.max_tokens
-                                    )
+                                    resp = await self.llm_client.execute(req)
+                                    resp_text = resp.content
                                     parsed = self.janitor.parse_professionalize_response(raw_log, resp_text)
-                                    # If parsed is diff from sanitized original (meaning success?),
-                                    # actually parse_professionalize_response returns sanitized original on failure.
-                                    # So we just use what it returns.
                                     clean_msg = parsed
                                     break
                                 except Exception:
@@ -232,10 +218,10 @@ class Orchestrator:
                         if self.janitor:
                             clean_msg = self.janitor.sanitize_commit(raw_log)
 
-                    self.git.merge_squash(iter_branch, agg_branch, clean_msg)
+                    await self.git.merge_squash(iter_branch, agg_branch, clean_msg)
 
                     # Cleanup
-                    self.git.delete_branch(iter_branch)
+                    await self.git.delete_branch(iter_branch)
 
                     # Termination Check
                     if self.agent.mission_complete:
@@ -243,12 +229,12 @@ class Orchestrator:
                         break
                 else:
                     logger.warning(f"Iteration {i} Failed: {feedback}. Continuing to next iteration.")
-                    self.git.delete_branch(iter_branch)
+                    await self.git.delete_branch(iter_branch)
 
             except Exception as e:
                 logger.error(f"Iteration {i} encountered an error: {e}")
                 # Try to cleanup
                 try:
-                    self.git.delete_branch(iter_branch)
+                    await self.git.delete_branch(iter_branch)
                 except Exception:
                     pass
