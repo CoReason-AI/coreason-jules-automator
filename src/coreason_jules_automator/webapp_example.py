@@ -8,7 +8,7 @@
 #
 # Source Code: https://github.com/CoReason-AI/coreason_jules_automator
 
-from typing import Optional
+from typing import Dict, Optional
 
 from fastapi import BackgroundTasks, FastAPI
 from pydantic import BaseModel
@@ -18,13 +18,14 @@ from coreason_jules_automator.async_api import (
     AsyncGitHubInterface,
     AsyncGitInterface,
     AsyncJulesAgent,
+    AsyncLLMClient,
     AsyncLocalDefenseStrategy,
     AsyncOpenAIAdapter,
     AsyncOrchestrator,
     AsyncRemoteDefenseStrategy,
     AsyncShellExecutor,
 )
-from coreason_jules_automator.config import get_settings
+from coreason_jules_automator.config import get_settings, Settings
 from coreason_jules_automator.events import CompositeEmitter, EventCollector, LoguruEmitter
 from coreason_jules_automator.llm.janitor import JanitorService
 from coreason_jules_automator.llm.prompts import PromptManager
@@ -38,7 +39,7 @@ class OrchestrationRequest(BaseModel):
     branch: str
 
 
-def _get_async_llm_client(settings):
+def _get_async_llm_client(settings: Settings) -> Optional[AsyncLLMClient]:
     """
     Helper to instantiate an AsyncLLMClient based on settings.
     """
@@ -106,6 +107,6 @@ async def run_orchestration_background(task: str, branch: str) -> None:
 
 
 @app.post("/start-campaign")
-async def start_campaign(request: OrchestrationRequest, background_tasks: BackgroundTasks) -> dict[str, str]:
+async def start_campaign(request: OrchestrationRequest, background_tasks: BackgroundTasks) -> Dict[str, str]:
     background_tasks.add_task(run_orchestration_background, request.task, request.branch)
     return {"status": "Campaign started", "task": request.task, "branch": request.branch}

@@ -11,21 +11,23 @@
 import asyncio
 import sys
 from pathlib import Path
+from typing import Optional
 
 import typer
 
 from coreason_jules_automator.async_api import (
     AsyncGeminiInterface,
-    AsyncGitInterface,
     AsyncGitHubInterface,
+    AsyncGitInterface,
     AsyncJulesAgent,
+    AsyncLLMClient,
     AsyncLocalDefenseStrategy,
     AsyncOpenAIAdapter,
     AsyncOrchestrator,
     AsyncRemoteDefenseStrategy,
     AsyncShellExecutor,
 )
-from coreason_jules_automator.config import get_settings
+from coreason_jules_automator.config import get_settings, Settings
 from coreason_jules_automator.events import CompositeEmitter, EventCollector, LoguruEmitter
 from coreason_jules_automator.llm.janitor import JanitorService
 from coreason_jules_automator.llm.prompts import PromptManager
@@ -39,7 +41,7 @@ app = typer.Typer(
 )
 
 
-def _get_async_llm_client(settings):
+def _get_async_llm_client(settings: Settings) -> Optional[AsyncLLMClient]:
     """
     Helper to instantiate an AsyncLLMClient based on settings.
     Mimics LLMFactory logic but for async.
