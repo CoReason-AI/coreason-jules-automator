@@ -1,5 +1,5 @@
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from typer.testing import CliRunner
 
@@ -37,10 +37,7 @@ def test_run_success() -> None:
 
 def test_run_failure() -> None:
     """Test failed run."""
-    with patch("coreason_jules_automator.cli.OrchestratorContainer") as MockContainer:
-        mock_container = MockContainer.return_value
-        mock_orchestrator = mock_container.get_orchestrator.return_value
-
+    with patch("coreason_jules_automator.cli.OrchestratorContainer"):
         with patch("coreason_jules_automator.cli.asyncio.run") as mock_asyncio_run:
             mock_asyncio_run.return_value = (False, "Failure")
 
@@ -68,7 +65,6 @@ def test_main_execution() -> None:
     """Test executing the module as a script."""
     import re
     import subprocess
-    import sys
 
     # Use coverage run to ensure we capture the coverage
     cmd = [sys.executable, "-m", "coverage", "run", "--append", "-m", "coreason_jules_automator.cli", "--help"]
@@ -87,7 +83,6 @@ def test_cli_file_execution() -> None:
     """Test executing the cli.py file directly."""
     import re
     import subprocess
-    import sys
     from pathlib import Path
 
     # Locate the cli.py file
@@ -109,9 +104,7 @@ def test_cli_file_execution() -> None:
 
 def test_run_report_exception() -> None:
     """Test run with exception during report generation."""
-    with patch("coreason_jules_automator.cli.OrchestratorContainer") as MockContainer:
-        mock_container = MockContainer.return_value
-
+    with patch("coreason_jules_automator.cli.OrchestratorContainer"):
         with (
             patch("coreason_jules_automator.cli.asyncio.run") as mock_asyncio_run,
             patch("coreason_jules_automator.cli.MarkdownReporter") as MockReporter,
