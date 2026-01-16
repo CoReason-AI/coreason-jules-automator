@@ -44,7 +44,10 @@ coreason-jules-automator
 
 ### Web Middleware Usage
 
+The library is now natively Asynchronous.
+
 -   Run the example webapp:
-    ```sh
+    ```bash
+    # Run the example FastAPI app
     uvicorn coreason_jules_automator.webapp_example:app --reload
     ```
