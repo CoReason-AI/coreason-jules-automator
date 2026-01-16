@@ -41,3 +41,10 @@ coreason-jules-automator
     ```sh
     poetry run pytest
     ```
+
+### Web Middleware Usage
+
+-   Run the example webapp:
+    ```sh
+    uvicorn coreason_jules_automator.webapp_example:app --reload
+    ```

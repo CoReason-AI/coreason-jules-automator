@@ -15,3 +15,19 @@ coreason-jules-automator
 __version__ = "0.1.0"
 __author__ = "Gowtham A Rao"
 __email__ = "gowtham.rao@coreason.ai"
+
+from coreason_jules_automator.async_api import (
+    AsyncGeminiInterface,
+    AsyncGitHubInterface,
+    AsyncGitInterface,
+    AsyncJulesAgent,
+    AsyncOrchestrator,
+)
+
+__all__ = [
+    "AsyncOrchestrator",
+    "AsyncJulesAgent",
+    "AsyncGitInterface",
+    "AsyncGitHubInterface",
+    "AsyncGeminiInterface",
+]
