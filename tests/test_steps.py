@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from pydantic import SecretStr
 
-from coreason_jules_automator.async_api.llm import AsyncLLMClient
 from coreason_jules_automator.async_api.scm import AsyncGeminiInterface, AsyncGitHubInterface
 from coreason_jules_automator.config import Settings
 from coreason_jules_automator.domain.context import OrchestrationContext
@@ -116,7 +115,6 @@ async def test_code_review_step_disabled(mock_settings: Settings) -> None:
 @pytest.mark.asyncio
 async def test_git_push_step_success(mock_settings: Settings) -> None:
     mock_janitor = MagicMock(spec=JanitorService)
-    mock_janitor.sanitize_commit = MagicMock(return_value="clean commit")
     mock_git = MagicMock(spec=AsyncGitHubInterface)
     mock_git.push_to_branch = AsyncMock(return_value=True)
 
@@ -131,7 +129,6 @@ async def test_git_push_step_success(mock_settings: Settings) -> None:
 @pytest.mark.asyncio
 async def test_git_push_step_no_changes(mock_settings: Settings) -> None:
     mock_janitor = MagicMock(spec=JanitorService)
-    mock_janitor.sanitize_commit = MagicMock(return_value="clean commit")
     mock_git = MagicMock(spec=AsyncGitHubInterface)
     mock_git.push_to_branch = AsyncMock(return_value=False)
 
@@ -146,7 +143,6 @@ async def test_git_push_step_no_changes(mock_settings: Settings) -> None:
 @pytest.mark.asyncio
 async def test_git_push_step_failure(mock_settings: Settings) -> None:
     mock_janitor = MagicMock(spec=JanitorService)
-    mock_janitor.sanitize_commit = MagicMock(return_value="clean commit")
     mock_git = MagicMock(spec=AsyncGitHubInterface)
     mock_git.push_to_branch = AsyncMock(side_effect=RuntimeError("Push Error"))
 
@@ -259,9 +255,9 @@ async def test_log_analysis_step_janitor_error(mock_settings: Settings) -> None:
 
     mock_janitor = MagicMock(spec=JanitorService)
     # Raise error during summarization
-    mock_janitor.build_summarize_request = MagicMock(side_effect=Exception("Janitor Error"))
+    mock_janitor.summarize_logs = AsyncMock(side_effect=Exception("Janitor Error"))
 
-    step = LogAnalysisStep(github=mock_github, janitor=mock_janitor, llm_client=MagicMock())
+    step = LogAnalysisStep(github=mock_github, janitor=mock_janitor)
 
     context = OrchestrationContext(
         task_id="t1",
@@ -273,9 +269,8 @@ async def test_log_analysis_step_janitor_error(mock_settings: Settings) -> None:
         },
     )
 
-    result = await step.execute(context)
-    assert result.success is False
-    assert "Log summarization failed" in result.message
+    with pytest.raises(Exception, match="Janitor Error"):
+        await step.execute(context)
 
 
 @pytest.mark.asyncio
@@ -290,12 +285,9 @@ async def test_log_analysis_step_runs_on_failure(mock_settings: Settings) -> Non
     mock_github.get_latest_run_log.side_effect = mock_stream
 
     mock_janitor = MagicMock(spec=JanitorService)
-    mock_janitor.build_summarize_request = MagicMock()
+    mock_janitor.summarize_logs = AsyncMock(return_value="Summary of error")
 
-    mock_llm = MagicMock(spec=AsyncLLMClient)
-    mock_llm.execute = AsyncMock(return_value=MagicMock(summary="Summary of error"))
-
-    step = LogAnalysisStep(github=mock_github, janitor=mock_janitor, llm_client=mock_llm)
+    step = LogAnalysisStep(github=mock_github, janitor=mock_janitor)
 
     context = OrchestrationContext(
         task_id="t1",
@@ -311,12 +303,12 @@ async def test_log_analysis_step_runs_on_failure(mock_settings: Settings) -> Non
 
     assert result.success is False
     assert "Summary of error" in result.message
-    mock_janitor.build_summarize_request.assert_called()
+    mock_janitor.summarize_logs.assert_called()
 
 
 @pytest.mark.asyncio
 async def test_log_analysis_step_skips_on_success(mock_settings: Settings) -> None:
-    step = LogAnalysisStep(github=MagicMock(), janitor=MagicMock(), llm_client=MagicMock())
+    step = LogAnalysisStep(github=MagicMock(), janitor=MagicMock())
     context = OrchestrationContext(task_id="t1", branch_name="b1", session_id="s1", pipeline_data={"ci_passed": True})
 
     result = await step.execute(context)
@@ -336,13 +328,9 @@ async def test_log_analysis_step_large_logs(mock_settings: Settings) -> None:
     mock_github.get_latest_run_log.side_effect = mock_stream
 
     mock_janitor = MagicMock(spec=JanitorService)
-    mock_janitor.build_summarize_request = MagicMock()
+    mock_janitor.summarize_logs = AsyncMock(return_value="Summary of error")
 
-    mock_llm = MagicMock(spec=AsyncLLMClient)
-    # Fix: Return object with summary attribute
-    mock_llm.execute = AsyncMock(return_value=MagicMock(summary="Summary of error"))
-
-    step = LogAnalysisStep(github=mock_github, janitor=mock_janitor, llm_client=mock_llm)
+    step = LogAnalysisStep(github=mock_github, janitor=mock_janitor)
 
     context = OrchestrationContext(
         task_id="t1",
@@ -356,9 +344,9 @@ async def test_log_analysis_step_large_logs(mock_settings: Settings) -> None:
 
     result = await step.execute(context)
     assert result.success is False
-    mock_janitor.build_summarize_request.assert_called()
+    mock_janitor.summarize_logs.assert_called()
     # Verify truncation happened in arguments passed to janitor
-    args = mock_janitor.build_summarize_request.call_args[0][0]
+    args = mock_janitor.summarize_logs.call_args[0][0]
     assert "log line 2499" in args
     assert "log line 0" not in args
 
@@ -373,12 +361,10 @@ async def test_log_analysis_step_stream_error(mock_settings: Settings) -> None:
 
     mock_github.get_latest_run_log.side_effect = mock_stream
 
-    mock_llm = MagicMock(spec=AsyncLLMClient)
-    # Fix: Return object with summary attribute
-    mock_llm.execute = AsyncMock(return_value=MagicMock(summary="Summary of error"))
+    mock_janitor = MagicMock(spec=JanitorService)
+    mock_janitor.summarize_logs = AsyncMock(return_value="Summary of error")
 
-    step = LogAnalysisStep(github=mock_github, janitor=MagicMock(), llm_client=mock_llm)
-    step.janitor = MagicMock()  # Ensure janitor is a mock
+    step = LogAnalysisStep(github=mock_github, janitor=mock_janitor)
 
     context = OrchestrationContext(
         task_id="t1",
@@ -393,33 +379,3 @@ async def test_log_analysis_step_stream_error(mock_settings: Settings) -> None:
     result = await step.execute(context)
     assert result.success is False
     assert "Summary of error" in result.message
-
-
-@pytest.mark.asyncio
-async def test_log_analysis_step_no_llm_warning(mock_settings: Settings) -> None:
-    mock_github = MagicMock(spec=AsyncGitHubInterface)
-
-    # Mock log stream
-    async def mock_stream(branch_name: str) -> AsyncGenerator[str, None]:
-        yield "log"
-
-    mock_github.get_latest_run_log.side_effect = mock_stream
-
-    # NO LLM CLIENT
-    step = LogAnalysisStep(github=mock_github, janitor=MagicMock(), llm_client=None)
-
-    context = OrchestrationContext(
-        task_id="t1",
-        branch_name="b1",
-        session_id="s1",
-        pipeline_data={
-            "ci_passed": False,
-            "ci_checks": [PullRequestStatus(name="check1", status="completed", conclusion="failure", url="http://url")],
-        },
-    )
-
-    with patch("coreason_jules_automator.strategies.steps.logger") as mock_logger:
-        result = await step.execute(context)
-        assert result.success is False
-        assert "CI checks failed" in result.message
-        mock_logger.warning.assert_called_with("No LLM client available for log summarization.")

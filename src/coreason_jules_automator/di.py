@@ -35,7 +35,6 @@ class PipelineBuilder:
         github: AsyncGitHubInterface,
         git: AsyncGitInterface,
         janitor: JanitorService,
-        llm_client: Optional[AsyncLLMClient],
         event_emitter: Optional[EventEmitter],
     ):
         self.settings = settings
@@ -43,7 +42,6 @@ class PipelineBuilder:
         self.github = github
         self.git = git
         self.janitor = janitor
-        self.llm_client = llm_client
         self.event_emitter = event_emitter
 
     def build(self) -> List[DefenseStep]:
@@ -68,7 +66,6 @@ class PipelineBuilder:
             LogAnalysisStep(
                 github=self.github,
                 janitor=self.janitor,
-                llm_client=self.llm_client,
                 event_emitter=self.event_emitter,
             )
         )
@@ -101,7 +98,7 @@ class Container:
         # Services
         self.llm_client = self._create_async_llm_client()
         self.prompt_manager = PromptManager()
-        self.janitor = JanitorService(prompt_manager=self.prompt_manager)
+        self.janitor = JanitorService(prompt_manager=self.prompt_manager, llm_client=self.llm_client)
 
         # Pipeline Builder
         self.pipeline_builder = PipelineBuilder(
@@ -110,7 +107,6 @@ class Container:
             github=self.github,
             git=self.git,
             janitor=self.janitor,
-            llm_client=self.llm_client,
             event_emitter=self.composite_emitter,
         )
         self.pipeline = self.pipeline_builder.build()
@@ -126,7 +122,6 @@ class Container:
             event_emitter=self.composite_emitter,
             git_interface=self.git,
             janitor_service=self.janitor,
-            llm_client=self.llm_client,
         )
 
     def _create_async_llm_client(self) -> Optional[AsyncLLMClient]:
