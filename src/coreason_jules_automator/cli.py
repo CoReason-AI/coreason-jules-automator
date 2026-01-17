@@ -16,6 +16,7 @@ import typer
 
 from coreason_jules_automator.di import Container
 from coreason_jules_automator.reporters.markdown import MarkdownReporter
+from coreason_jules_automator.ui.console import RichConsoleEmitter
 from coreason_jules_automator.utils.logger import logger
 
 app = typer.Typer(
@@ -35,9 +36,15 @@ def run(
     """
     logger.info(f"Coreason Jules Automator started. Task: {task}, Branch: {branch}")
 
+    # Dependency Injection
+    container = Container()
+
+    # Initialize Rich UI
+    rich_emitter = RichConsoleEmitter()
+    container.composite_emitter.emitters.append(rich_emitter)
+    rich_emitter.start()
+
     try:
-        # Dependency Injection
-        container = Container()
         orchestrator = container.orchestrator
         event_collector = container.event_collector
 
@@ -68,6 +75,8 @@ def run(
     except Exception as e:
         logger.exception(f"Unexpected error: {e}")
         sys.exit(1)
+    finally:
+        rich_emitter.stop()
 
 
 @app.command(name="campaign")
@@ -81,9 +90,15 @@ def campaign(
     """
     logger.info(f"Starting Campaign. Task: {task}, Base: {base}, Count: {count}")
 
+    # Dependency Injection
+    container = Container()
+
+    # Initialize Rich UI
+    rich_emitter = RichConsoleEmitter()
+    container.composite_emitter.emitters.append(rich_emitter)
+    rich_emitter.start()
+
     try:
-        # Dependency Injection
-        container = Container()
         orchestrator = container.orchestrator
 
         asyncio.run(orchestrator.run_campaign(task, base, count))
@@ -92,6 +107,8 @@ def campaign(
     except Exception as e:
         logger.exception(f"Unexpected error in campaign: {e}")
         sys.exit(1)
+    finally:
+        rich_emitter.stop()
 
 
 def main() -> None:

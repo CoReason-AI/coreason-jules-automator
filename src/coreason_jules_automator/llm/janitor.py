@@ -1,15 +1,18 @@
 import re
 from typing import Optional
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 
 from coreason_jules_automator.llm.prompts import PromptManager
 from coreason_jules_automator.llm.types import LLMRequest
-from coreason_jules_automator.utils.logger import logger
 
 
 class CommitMessageResponse(BaseModel):
     commit_text: str
+
+
+class SummaryResponse(BaseModel):
+    summary: str
 
 
 class JanitorService:
@@ -47,20 +50,3 @@ class JanitorService:
 
         prompt = self.prompt_manager.render("janitor_professionalize.j2", commit_text=cleaned_text)
         return LLMRequest(messages=[{"role": "user", "content": prompt}], max_tokens=200)
-
-    def parse_professionalize_response(self, original_text: str, llm_response_text: str) -> str:
-        """
-        Robustly parses LLM JSON response using Pydantic.
-        Falls back to sanitized original text if parsing fails.
-        """
-        # Attempt to find JSON block if wrapped in markdown code blocks or just text
-        json_match = re.search(r"\{.*\}", llm_response_text, re.DOTALL)
-        json_str = json_match.group(0) if json_match else llm_response_text
-
-        try:
-            # Let Pydantic handle the validation
-            data = CommitMessageResponse.model_validate_json(json_str)
-            return data.commit_text
-        except (ValidationError, ValueError):
-            logger.warning("Failed to parse LLM JSON response. Falling back to sanitizer.")
-            return self.sanitize_commit(original_text)

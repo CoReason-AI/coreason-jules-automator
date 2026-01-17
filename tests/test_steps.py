@@ -110,7 +110,7 @@ async def test_log_analysis_step_runs_on_failure(mock_settings: Settings) -> Non
     mock_janitor.build_summarize_request = MagicMock()
 
     mock_llm = MagicMock(spec=AsyncLLMClient)
-    mock_llm.execute = AsyncMock(return_value=MagicMock(content="Summary of error"))
+    mock_llm.execute = AsyncMock(return_value=MagicMock(summary="Summary of error"))
 
     step = LogAnalysisStep(github=mock_github, janitor=mock_janitor, llm_client=mock_llm)
 

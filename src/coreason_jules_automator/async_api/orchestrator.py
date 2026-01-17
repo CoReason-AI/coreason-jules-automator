@@ -13,7 +13,7 @@ from coreason_jules_automator.domain.context import OrchestrationContext
 from coreason_jules_automator.domain.pipeline import DefenseStep
 from coreason_jules_automator.events import AutomationEvent, EventEmitter, EventType, LoguruEmitter
 from coreason_jules_automator.exceptions import AgentProcessError, JulesAutomatorError
-from coreason_jules_automator.llm.janitor import JanitorService
+from coreason_jules_automator.llm.janitor import CommitMessageResponse, JanitorService
 from coreason_jules_automator.utils.logger import logger
 
 
@@ -277,10 +277,8 @@ class AsyncOrchestrator:
                             # Replicating simple retry loop here:
                             for _ in range(3):
                                 try:
-                                    resp = await self.llm_client.execute(req)
-                                    resp_text = resp.content
-                                    parsed = self.janitor.parse_professionalize_response(raw_log, resp_text)
-                                    clean_msg = parsed
+                                    resp = await self.llm_client.execute(req, response_model=CommitMessageResponse)
+                                    clean_msg = resp.commit_text
                                     break
                                 except Exception:
                                     continue

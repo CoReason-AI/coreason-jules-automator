@@ -1,13 +1,17 @@
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol, Type, TypeVar, runtime_checkable
 
-from coreason_jules_automator.llm.types import LLMRequest, LLMResponse
+from pydantic import BaseModel
+
+from coreason_jules_automator.llm.types import LLMRequest
+
+T = TypeVar("T", bound=BaseModel)
 
 
 @runtime_checkable
 class AsyncLLMClient(Protocol):
     """Protocol for Async LLM clients."""
 
-    async def execute(self, request: LLMRequest) -> LLMResponse: ...
+    async def execute(self, request: LLMRequest, response_model: Type[T]) -> T: ...
 
 
 class AsyncOpenAIAdapter:
@@ -17,11 +21,13 @@ class AsyncOpenAIAdapter:
         self.client = client
         self.model_name = model_name
 
-    async def execute(self, request: LLMRequest) -> LLMResponse:
-        response = await self.client.chat.completions.create(
+    async def execute(self, request: LLMRequest, response_model: Type[T]) -> T:
+        response = await self.client.beta.chat.completions.parse(
             model=self.model_name,
             messages=request.messages,
-            max_tokens=request.max_tokens,
+            response_format=response_model,
         )
-        content = str(response.choices[0].message.content).strip()
-        return LLMResponse(content=content)
+        parsed = response.choices[0].message.parsed
+        if parsed is None:
+             raise ValueError("LLM failed to return structured output.")
+        return parsed
