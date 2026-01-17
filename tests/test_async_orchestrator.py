@@ -7,6 +7,8 @@ from coreason_jules_automator.async_api.llm import AsyncLLMClient
 from coreason_jules_automator.async_api.orchestrator import AsyncOrchestrator
 from coreason_jules_automator.async_api.scm import AsyncGitInterface
 from coreason_jules_automator.async_api.strategies import AsyncDefenseStrategy
+from pydantic import SecretStr
+
 from coreason_jules_automator.config import Settings
 from coreason_jules_automator.domain.context import StrategyResult
 from coreason_jules_automator.domain.scm import GitCommit
@@ -25,9 +27,12 @@ def mock_env(monkeypatch: pytest.MonkeyPatch) -> None:
 def mock_settings() -> Settings:
     return Settings(
         repo_name="dummy/repo",
-        GITHUB_TOKEN="dummy_token",
-        GOOGLE_API_KEY="dummy_key",
+        GITHUB_TOKEN=SecretStr("dummy_token"),
+        GOOGLE_API_KEY=SecretStr("dummy_key"),
         max_retries=5,
+        OPENAI_API_KEY=SecretStr("sk-dummy"),
+        DEEPSEEK_API_KEY=SecretStr("sk-dummy"),
+        SSH_PRIVATE_KEY=SecretStr("dummy_key"),
     )
 
 

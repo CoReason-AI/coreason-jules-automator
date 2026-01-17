@@ -1,3 +1,4 @@
+from typing import AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
@@ -247,11 +248,11 @@ async def test_github_get_latest_run_log_success() -> None:
     mock_shell.run = AsyncMock(return_value=CommandResult(0, '[{"databaseId": 123}]', ""))
 
     # Mock stream for view command
-    async def mock_stream(command, timeout=300):
+    async def mock_stream(command: list[str], timeout: int = 300) -> AsyncGenerator[str, None]:
         yield "Log Line 1"
         yield "Log Line 2"
 
-    mock_shell.stream = mock_stream  # type: ignore
+    mock_shell.stream = mock_stream
 
     gh = AsyncGitHubInterface(shell_executor=mock_shell)
 

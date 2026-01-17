@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any, AsyncGenerator, Dict
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -204,7 +204,7 @@ async def test_remote_strategy_long_log_truncation(remote_deps: Dict[str, Any]) 
 
     # Very long log (streamed)
     # We yield more than 2000 lines to trigger truncation
-    async def mock_stream(branch_name):
+    async def mock_stream(branch_name: str) -> AsyncGenerator[str, None]:
         for i in range(2500):
             yield f"Line {i}"
 
@@ -240,7 +240,7 @@ async def test_remote_strategy_janitor_exception(remote_deps: Dict[str, Any]) ->
         return_value=[PullRequestStatus(name="test", status="completed", conclusion="failure", url="http://url")]
     )
 
-    async def mock_stream(branch_name):
+    async def mock_stream(branch_name: str) -> AsyncGenerator[str, None]:
         yield "log"
 
     remote_deps["github"].get_latest_run_log = mock_stream
