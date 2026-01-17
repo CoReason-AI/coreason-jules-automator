@@ -3,6 +3,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from pydantic import BaseModel
 
 from coreason_jules_automator.async_api.agent import AsyncJulesAgent
 from coreason_jules_automator.async_api.llm import AsyncOpenAIAdapter
@@ -369,18 +370,42 @@ async def test_async_jules_agent_teleport_failures() -> None:
 @pytest.mark.asyncio
 async def test_async_openai_adapter() -> None:
     mock_client = MagicMock()
-    mock_client.chat.completions.create = AsyncMock()
-    mock_client.chat.completions.create.return_value.choices = [MagicMock(message=MagicMock(content="Hello world"))]
+    # Mock beta.chat.completions.parse
+    mock_client.beta.chat.completions.parse = AsyncMock()
+
+    class DummyModel(BaseModel):
+        content: str
+
+    mock_parsed = DummyModel(content="Hello world")
+    mock_client.beta.chat.completions.parse.return_value.choices = [MagicMock(message=MagicMock(parsed=mock_parsed))]
 
     adapter = AsyncOpenAIAdapter(mock_client, "gpt-4")
     request = LLMRequest(messages=[{"role": "user", "content": "Hi"}], max_tokens=100)
 
-    response = await adapter.execute(request)
+    response = await adapter.execute(request, response_model=DummyModel)
 
     assert response.content == "Hello world"
-    mock_client.chat.completions.create.assert_awaited_once_with(
-        model="gpt-4", messages=request.messages, max_tokens=request.max_tokens
+    mock_client.beta.chat.completions.parse.assert_awaited_once_with(
+        model="gpt-4", messages=request.messages, response_format=DummyModel
     )
+
+
+@pytest.mark.asyncio
+async def test_async_openai_adapter_parse_failure() -> None:
+    mock_client = MagicMock()
+    mock_client.beta.chat.completions.parse = AsyncMock()
+
+    # Simulate parsed is None
+    mock_client.beta.chat.completions.parse.return_value.choices = [MagicMock(message=MagicMock(parsed=None))]
+
+    adapter = AsyncOpenAIAdapter(mock_client, "gpt-4")
+    request = LLMRequest(messages=[], max_tokens=10)
+
+    class DummyModel(BaseModel):
+        pass
+
+    with pytest.raises(ValueError, match="LLM failed to return structured output"):
+        await adapter.execute(request, response_model=DummyModel)
 
 
 @pytest.mark.asyncio

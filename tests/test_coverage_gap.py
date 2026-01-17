@@ -1,20 +1,15 @@
 import sys
-from typing import Any, AsyncGenerator
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from pydantic import SecretStr
 
 from coreason_jules_automator.async_api.agent import AsyncJulesAgent
-from coreason_jules_automator.async_api.llm import AsyncLLMClient
 from coreason_jules_automator.async_api.orchestrator import AsyncOrchestrator
-from coreason_jules_automator.async_api.scm import AsyncGitHubInterface, AsyncGitInterface
-from coreason_jules_automator.async_api.strategies import AsyncDefenseStrategy, AsyncRemoteDefenseStrategy
 from coreason_jules_automator.config import Settings
 from coreason_jules_automator.di import Container
-from coreason_jules_automator.domain.context import OrchestrationContext
-from coreason_jules_automator.domain.scm import PullRequestStatus
-from coreason_jules_automator.llm.janitor import JanitorService
+from coreason_jules_automator.domain.pipeline import DefenseStep
 
 # --- Agent Tests ---
 
@@ -106,7 +101,7 @@ async def test_orchestrator_strategy_exception(mock_settings: Settings) -> None:
     mock_agent.teleport_and_sync = AsyncMock(return_value=True)
 
     # Use AsyncMock for strategy but make it raise exception
-    mock_strategy = MagicMock(spec=AsyncDefenseStrategy)
+    mock_strategy = MagicMock(spec=DefenseStep)
     # The code calls await strategy.execute(context=context)
     mock_strategy.execute = AsyncMock(side_effect=Exception("Strategy Boom"))
 
@@ -142,94 +137,6 @@ async def test_orchestrator_run_cycle_loop_exit(mock_settings: Settings) -> None
         assert feedback == "Orchestration loop exited unexpectedly"
 
 
-# --- Strategies Tests ---
-
-
-@pytest.mark.asyncio
-async def test_remote_strategy_poll_loop_exit(mock_settings: Settings) -> None:
-    """Test _run_ci_polling fallback return if retry loop exits unexpectedly (line 269)."""
-    mock_git = MagicMock(spec=AsyncGitInterface)
-    mock_git.push_to_branch = AsyncMock(return_value=True)
-    mock_github = MagicMock(spec=AsyncGitHubInterface)
-    mock_janitor = MagicMock(spec=JanitorService)
-
-    strategy = AsyncRemoteDefenseStrategy(
-        settings=mock_settings, github=mock_github, janitor=mock_janitor, git=mock_git
-    )
-    context = OrchestrationContext(task_id="t1", branch_name="b1", session_id="s1")
-
-    class MockAsyncRetrying:
-        def __init__(self, *args: Any, **kwargs: Any) -> None:
-            pass
-
-        def __aiter__(self) -> "MockAsyncRetrying":
-            return self
-
-        async def __anext__(self) -> None:
-            raise StopAsyncIteration
-
-    with patch("coreason_jules_automator.async_api.strategies.AsyncRetrying", MockAsyncRetrying):
-        result = await strategy.execute(context)
-        assert result.success is False
-        assert result.message == "Polling loop exited unexpectedly"
-
-
-@pytest.mark.asyncio
-async def test_remote_strategy_handle_ci_failure_no_llm_direct(mock_settings: Settings) -> None:
-    """Test _handle_ci_failure when llm_client is None (lines 289-291)."""
-    mock_git = MagicMock(spec=AsyncGitInterface)
-    mock_github = MagicMock(spec=AsyncGitHubInterface)
-    mock_janitor = MagicMock(spec=JanitorService)
-
-    # Ensure no llm_client
-    strategy = AsyncRemoteDefenseStrategy(
-        settings=mock_settings, github=mock_github, janitor=mock_janitor, git=mock_git, llm_client=None
-    )
-
-    checks = [PullRequestStatus(name="check1", status="completed", conclusion="failure", url="http://fail")]
-
-    # We mock get_latest_run_log to prevent it from doing real work
-    mock_github.get_latest_run_log = MagicMock()
-    mock_github.get_latest_run_log.return_value.__aiter__.return_value = []
-
-    # Call private method directly
-    msg = await strategy._handle_ci_failure(checks, "branch")
-
-    assert "CI checks failed" in msg
-    assert "Check check1 failed" in msg
-    assert "Janitor Summary" not in msg
-
-
-@pytest.mark.asyncio
-async def test_remote_strategy_log_streaming_error(mock_settings: Settings) -> None:
-    """Test exception handling during log streaming (lines 289-291)."""
-    mock_git = MagicMock(spec=AsyncGitInterface)
-    mock_github = MagicMock(spec=AsyncGitHubInterface)
-    mock_janitor = MagicMock(spec=JanitorService)
-    # Mock LLM to avoid "No LLM client" block
-    mock_llm = MagicMock(spec=AsyncLLMClient)
-    mock_llm.execute = AsyncMock(return_value=MagicMock(content="Summary"))
-    mock_janitor.build_summarize_request = MagicMock()
-
-    strategy = AsyncRemoteDefenseStrategy(
-        settings=mock_settings, github=mock_github, janitor=mock_janitor, git=mock_git, llm_client=mock_llm
-    )
-
-    checks = [PullRequestStatus(name="check1", status="completed", conclusion="failure", url="http://fail")]
-
-    # Mock get_latest_run_log to raise exception during iteration
-    async def mock_stream(branch: str) -> AsyncGenerator[str, None]:
-        yield "line1"
-        raise Exception("Stream Failed")
-
-    mock_github.get_latest_run_log = mock_stream
-
-    await strategy._handle_ci_failure(checks, "branch")
-
-    # The exception is caught and appended to the log
-    assert "Error streaming logs: Stream Failed" in str(mock_janitor.build_summarize_request.call_args)
-
-
 # --- CLI Tests ---
 
 
@@ -242,11 +149,11 @@ def test_cli_campaign_exception() -> None:
     runner = CliRunner()
 
     # Patch Container to raise exception
+    # Need to also patch RichConsoleEmitter to avoid side effects or errors during init if Container fails
     with patch("coreason_jules_automator.cli.Container", side_effect=Exception("Campaign Error")):
-        result = runner.invoke(app, ["campaign", "task"])
-        assert result.exit_code == 1
-        # The exception is logged, so we check standard output/stderr usually but logger might intercept.
-        # Just exit code 1 is enough to prove the exception block was entered.
+        with patch("coreason_jules_automator.cli.RichConsoleEmitter"):
+            result = runner.invoke(app, ["campaign", "task"])
+            assert result.exit_code == 1
 
 
 # --- DI Tests ---
@@ -330,18 +237,5 @@ def test_di_container_llm_creation_import_error() -> None:
         # Since 'openai' is likely installed and maybe cached, we can try to patch sys.modules.
 
         with patch.dict(sys.modules, {"openai": None}):
-            # This causes 'import openai' to fail with ModuleNotFoundError (subclass of ImportError)
-            # if it was set to None, OR we can remove it.
-            # However, if we remove it, it tries to find it.
-            # If we set it to None, standard import mechanism raises ModuleNotFoundError.
-            # BUT the code uses `from openai import AsyncOpenAI`.
-
-            # Let's verify if setting sys.modules["openai"] = None triggers ImportError on import.
-            # In Python 3.12, setting sys.modules[name] = None causes "import name" to raise ModuleNotFoundError.
-            # This satisfies "except ImportError".
-
-            # But we must be careful if the module was already imported before.
-            # Also `patch.dict` restores it afterwards.
-
             container = Container()
             assert container.llm_client is None

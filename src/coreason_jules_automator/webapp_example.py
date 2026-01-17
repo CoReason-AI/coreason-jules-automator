@@ -8,7 +8,7 @@
 #
 # Source Code: https://github.com/CoReason-AI/coreason_jules_automator
 
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from fastapi import BackgroundTasks, FastAPI
 from pydantic import BaseModel
@@ -19,16 +19,22 @@ from coreason_jules_automator.async_api import (
     AsyncGitInterface,
     AsyncJulesAgent,
     AsyncLLMClient,
-    AsyncLocalDefenseStrategy,
     AsyncOpenAIAdapter,
     AsyncOrchestrator,
-    AsyncRemoteDefenseStrategy,
     AsyncShellExecutor,
 )
 from coreason_jules_automator.config import Settings, get_settings
+from coreason_jules_automator.domain.pipeline import DefenseStep
 from coreason_jules_automator.events import CompositeEmitter, EventCollector, LoguruEmitter
 from coreason_jules_automator.llm.janitor import JanitorService
 from coreason_jules_automator.llm.prompts import PromptManager
+from coreason_jules_automator.strategies.steps import (
+    CIPollingStep,
+    CodeReviewStep,
+    GitPushStep,
+    LogAnalysisStep,
+    SecurityScanStep,
+)
 from coreason_jules_automator.utils.logger import logger
 
 app = FastAPI()
@@ -79,14 +85,14 @@ async def run_orchestration_background(task: str, branch: str) -> None:
         prompt_manager = PromptManager()
         janitor = JanitorService(prompt_manager=prompt_manager)
 
-        local_strategy = AsyncLocalDefenseStrategy(settings=settings, gemini=gemini, event_emitter=composite_emitter)
-        remote_strategy = AsyncRemoteDefenseStrategy(
-            settings=settings,
-            github=github,
-            janitor=janitor,
-            git=git,
-            llm_client=llm_client,
-            event_emitter=composite_emitter,
+        # Build Pipeline manually
+        pipeline: List[DefenseStep] = []
+        pipeline.append(SecurityScanStep(settings=settings, gemini=gemini, event_emitter=composite_emitter))
+        pipeline.append(CodeReviewStep(settings=settings, gemini=gemini, event_emitter=composite_emitter))
+        pipeline.append(GitPushStep(janitor=janitor, git=git, event_emitter=composite_emitter))
+        pipeline.append(CIPollingStep(github=github, event_emitter=composite_emitter))
+        pipeline.append(
+            LogAnalysisStep(github=github, janitor=janitor, llm_client=llm_client, event_emitter=composite_emitter)
         )
 
         agent = AsyncJulesAgent(settings=settings)
@@ -94,7 +100,7 @@ async def run_orchestration_background(task: str, branch: str) -> None:
         orchestrator = AsyncOrchestrator(
             settings=settings,
             agent=agent,
-            strategies=[local_strategy, remote_strategy],
+            strategies=pipeline,
             event_emitter=composite_emitter,
             git_interface=git,
             janitor_service=janitor,

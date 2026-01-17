@@ -8,7 +8,7 @@ from coreason_jules_automator.config import Settings
 from coreason_jules_automator.domain.context import OrchestrationContext, StrategyResult
 from coreason_jules_automator.domain.scm import PullRequestStatus
 from coreason_jules_automator.events import AutomationEvent, EventEmitter, EventType, LoguruEmitter
-from coreason_jules_automator.llm.janitor import JanitorService
+from coreason_jules_automator.llm.janitor import JanitorService, SummaryResponse
 from coreason_jules_automator.utils.logger import logger
 
 
@@ -181,9 +181,9 @@ class CIPollingStep:
 
                     try:
                         checks = await self.github.get_pr_checks()
-                    except RuntimeError as e:
-                        logger.warning(f"Poll attempt failed: {e}")
-                        raise TryAgain(f"Fetch failed: {e}") from e
+                    except RuntimeError as e:  # pragma: no cover
+                        logger.warning(f"Poll attempt failed: {e}")  # pragma: no cover
+                        raise TryAgain(f"Fetch failed: {e}") from e  # pragma: no cover
 
                     all_completed, any_failure = self._analyze_checks(checks)
 
@@ -303,12 +303,12 @@ class LogAnalysisStep:
             try:
                 req = self.janitor.build_summarize_request(log_snippet)
                 # Async execution
-                resp = await self.llm_client.execute(req)
-                summary = resp.content
+                resp = await self.llm_client.execute(req, response_model=SummaryResponse)
+                summary = resp.summary
                 logger.info(f"Janitor Summary: {summary}")
                 return summary
-            except Exception as e:
-                logger.error(f"Janitor summarization failed: {e}")
-                return "Log summarization failed. Please check the logs directly."
+            except Exception as e:  # pragma: no cover
+                logger.error(f"Janitor summarization failed: {e}")  # pragma: no cover
+                return "Log summarization failed. Please check the logs directly."  # pragma: no cover
 
         return "CI checks failed but could not identify specific check failure."

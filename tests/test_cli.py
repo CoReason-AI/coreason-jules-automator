@@ -51,10 +51,19 @@ def test_run_failure() -> None:
 
 def test_run_exception() -> None:
     """Test run with unexpected exception."""
-    with patch("coreason_jules_automator.cli.Container", side_effect=Exception("Crash")):
+    # Use context managers for cleaner patching
+    with (
+        patch("coreason_jules_automator.cli.Container"),
+        patch("coreason_jules_automator.cli.RichConsoleEmitter"),
+        patch("coreason_jules_automator.cli.logger") as mock_logger,
+        patch("coreason_jules_automator.cli.asyncio.run", side_effect=Exception("Crash inside try block")),
+    ):
         result = runner.invoke(app, ["run", "Task", "--branch", "b"])
 
         assert result.exit_code == 1
+        # Verify that our specific exception handler was triggered
+        mock_logger.exception.assert_called()
+        assert "Crash inside try block" in str(mock_logger.exception.call_args)
 
 
 def test_main() -> None:

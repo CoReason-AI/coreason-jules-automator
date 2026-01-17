@@ -7,9 +7,9 @@ from coreason_jules_automator.async_api.agent import AsyncJulesAgent
 from coreason_jules_automator.async_api.llm import AsyncLLMClient
 from coreason_jules_automator.async_api.orchestrator import AsyncOrchestrator
 from coreason_jules_automator.async_api.scm import AsyncGitInterface
-from coreason_jules_automator.async_api.strategies import AsyncDefenseStrategy
 from coreason_jules_automator.config import Settings
 from coreason_jules_automator.domain.context import StrategyResult
+from coreason_jules_automator.domain.pipeline import DefenseStep
 from coreason_jules_automator.domain.scm import GitCommit
 from coreason_jules_automator.exceptions import AgentProcessError
 from coreason_jules_automator.llm.janitor import JanitorService
@@ -45,7 +45,7 @@ async def test_async_orchestrator_run_cycle_success(mock_settings: Settings) -> 
     mock_agent.wait_for_completion = AsyncMock(return_value=True)
     mock_agent.teleport_and_sync = AsyncMock(return_value=True)
 
-    mock_strategy = MagicMock(spec=AsyncDefenseStrategy)
+    mock_strategy = MagicMock(spec=DefenseStep)
     mock_strategy.execute = AsyncMock(return_value=StrategyResult(success=True, message="All good"))
 
     orchestrator = AsyncOrchestrator(
@@ -86,7 +86,7 @@ async def test_async_orchestrator_run_cycle_retry(mock_settings: Settings) -> No
     mock_agent.wait_for_completion = AsyncMock(return_value=True)
     mock_agent.teleport_and_sync = AsyncMock(return_value=True)
 
-    mock_strategy = MagicMock(spec=AsyncDefenseStrategy)
+    mock_strategy = MagicMock(spec=DefenseStep)
     # Fail first time, succeed second time
     mock_strategy.execute = AsyncMock(
         side_effect=[
@@ -131,7 +131,7 @@ async def test_async_orchestrator_run_cycle_agent_failure(mock_settings: Setting
     # raise AgentProcessError simulates failure inside launch
     mock_agent.launch = AsyncMock(side_effect=AgentProcessError("Failed to obtain Session ID (SID)."))
 
-    mock_strategy = MagicMock(spec=AsyncDefenseStrategy)
+    mock_strategy = MagicMock(spec=DefenseStep)
 
     orchestrator = AsyncOrchestrator(
         settings=mock_settings,
@@ -205,7 +205,7 @@ async def test_async_orchestrator_run_cycle_max_retries(mock_settings: Settings)
     mock_agent.wait_for_completion = AsyncMock(return_value=True)
     mock_agent.teleport_and_sync = AsyncMock(return_value=True)
 
-    mock_strategy = MagicMock(spec=AsyncDefenseStrategy)
+    mock_strategy = MagicMock(spec=DefenseStep)
     mock_strategy.execute = AsyncMock(return_value=StrategyResult(success=False, message="Fail"))
 
     mock_settings.max_retries = 2
@@ -229,7 +229,7 @@ async def test_async_orchestrator_run_campaign_success(mock_settings: Settings) 
     mock_agent.wait_for_completion = AsyncMock(return_value=True)
     mock_agent.teleport_and_sync = AsyncMock(return_value=True)
 
-    mock_strategy = MagicMock(spec=AsyncDefenseStrategy)
+    mock_strategy = MagicMock(spec=DefenseStep)
     mock_strategy.execute = AsyncMock(return_value=StrategyResult(success=True, message="Success"))
 
     mock_git = MagicMock(spec=AsyncGitInterface)
@@ -300,7 +300,7 @@ async def test_async_orchestrator_run_campaign_prof_failure(mock_settings: Setti
     mock_agent.wait_for_completion = AsyncMock(return_value=True)
     mock_agent.teleport_and_sync = AsyncMock(return_value=True)
 
-    mock_strategy = MagicMock(spec=AsyncDefenseStrategy)
+    mock_strategy = MagicMock(spec=DefenseStep)
     mock_strategy.execute = AsyncMock(return_value=StrategyResult(success=True, message="Success"))
 
     mock_git = MagicMock(spec=AsyncGitInterface)
@@ -340,7 +340,7 @@ async def test_async_orchestrator_run_campaign_prof_retry_fail(mock_settings: Se
     mock_agent.wait_for_completion = AsyncMock(return_value=True)
     mock_agent.teleport_and_sync = AsyncMock(return_value=True)
 
-    mock_strategy = MagicMock(spec=AsyncDefenseStrategy)
+    mock_strategy = MagicMock(spec=DefenseStep)
     mock_strategy.execute = AsyncMock(return_value=StrategyResult(success=True, message="Success"))
 
     mock_git = MagicMock(spec=AsyncGitInterface)
@@ -384,7 +384,7 @@ async def test_async_orchestrator_run_campaign_no_llm_fallback(mock_settings: Se
     mock_agent.wait_for_completion = AsyncMock(return_value=True)
     mock_agent.teleport_and_sync = AsyncMock(return_value=True)
 
-    mock_strategy = MagicMock(spec=AsyncDefenseStrategy)
+    mock_strategy = MagicMock(spec=DefenseStep)
     mock_strategy.execute = AsyncMock(return_value=StrategyResult(success=True, message="Success"))
 
     mock_git = MagicMock(spec=AsyncGitInterface)
