@@ -16,4 +16,4 @@ class DefenseStep(Protocol):
         Returns:
             StrategyResult indicating success or failure.
         """
-        ...
+        ...  # pragma: no cover
