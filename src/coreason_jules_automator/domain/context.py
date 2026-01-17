@@ -12,6 +12,7 @@ class OrchestrationContext(BaseModel):
     task_id: str = Field(..., description="Unique identifier for the task.")
     branch_name: str = Field(..., description="The git branch name for the current operation.")
     session_id: str = Field(..., description="The session ID (SID) of the remote Jules agent.")
+    pipeline_data: Dict[str, Any] = Field(default_factory=dict, description="Shared mutable state for pipeline steps.")
 
     # Allow extra fields if needed for extensibility, but warn if used excessively
     # frozen=True ensures immutability
