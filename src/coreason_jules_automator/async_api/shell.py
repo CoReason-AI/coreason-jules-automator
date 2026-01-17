@@ -83,7 +83,9 @@ class AsyncShellExecutor:
                 stderr=asyncio.subprocess.PIPE,
             )
         except Exception as e:
-            raise ShellError(f"Failed to start process: {e}", CommandResult(exit_code=-1, stdout="", stderr=str(e))) from e
+            raise ShellError(
+                f"Failed to start process: {e}", CommandResult(exit_code=-1, stdout="", stderr=str(e))
+            ) from e
 
         try:
             if process.stdout:
@@ -111,4 +113,6 @@ class AsyncShellExecutor:
                 await process.wait()
             if isinstance(e, ShellError):
                 raise
-            raise ShellError(f"Stream execution failed: {e}", CommandResult(exit_code=-1, stdout="", stderr=str(e))) from e
+            raise ShellError(
+                f"Stream execution failed: {e}", CommandResult(exit_code=-1, stdout="", stderr=str(e))
+            ) from e

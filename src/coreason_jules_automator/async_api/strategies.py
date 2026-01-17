@@ -1,6 +1,6 @@
 from typing import List, Optional, Protocol, Tuple
 
-from tenacity import AsyncRetrying, RetryError, stop_after_attempt, wait_exponential, retry_if_exception_type
+from tenacity import AsyncRetrying, RetryError, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from coreason_jules_automator.async_api.llm import AsyncLLMClient
 from coreason_jules_automator.async_api.scm import AsyncGeminiInterface, AsyncGitHubInterface, AsyncGitInterface
@@ -11,8 +11,10 @@ from coreason_jules_automator.events import AutomationEvent, EventEmitter, Event
 from coreason_jules_automator.llm.janitor import JanitorService
 from coreason_jules_automator.utils.logger import logger
 
+
 class TryAgain(Exception):
     """Internal exception to trigger retry in tenacity."""
+
     pass
 
 
@@ -229,7 +231,7 @@ class AsyncRemoteDefenseStrategy:
                         checks = await self.github.get_pr_checks()
                     except RuntimeError as e:
                         logger.warning(f"Poll attempt failed: {e}")
-                        raise TryAgain(f"Fetch failed: {e}")
+                        raise TryAgain(f"Fetch failed: {e}") from e
 
                     all_completed, any_failure = self._analyze_checks(checks)
 
@@ -270,9 +272,7 @@ class AsyncRemoteDefenseStrategy:
         # Find failed check
         failed_check = next((c for c in checks if c.conclusion != "success"), None)
         if failed_check:
-            log_snippet = (
-                f"Check {failed_check.name} failed. URL: {failed_check.url}"
-            )
+            log_snippet = f"Check {failed_check.name} failed. URL: {failed_check.url}"
 
             # Get full logs if possible (Streamed)
             full_logs_list = []

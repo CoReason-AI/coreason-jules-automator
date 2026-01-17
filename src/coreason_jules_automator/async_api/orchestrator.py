@@ -3,7 +3,7 @@ import string
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from tenacity import AsyncRetrying, RetryError, stop_after_attempt, wait_exponential, retry_if_exception_type
+from tenacity import AsyncRetrying, RetryError, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from coreason_jules_automator.async_api.agent import AsyncJulesAgent
 from coreason_jules_automator.async_api.llm import AsyncLLMClient
@@ -16,8 +16,10 @@ from coreason_jules_automator.exceptions import AgentProcessError, JulesAutomato
 from coreason_jules_automator.llm.janitor import JanitorService
 from coreason_jules_automator.utils.logger import logger
 
+
 class CycleRetry(Exception):
     """Internal exception to trigger retry in tenacity."""
+
     pass
 
 

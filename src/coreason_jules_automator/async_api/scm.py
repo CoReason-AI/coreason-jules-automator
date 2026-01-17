@@ -1,6 +1,6 @@
 import json
 import shutil
-from typing import Any, AsyncGenerator, Dict, List, Optional
+from typing import Any, AsyncGenerator, List, Optional
 
 from coreason_jules_automator.async_api.shell import AsyncShellExecutor
 from coreason_jules_automator.domain.scm import GitCommit, PullRequestStatus
