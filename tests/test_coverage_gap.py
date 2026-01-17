@@ -2,6 +2,7 @@ import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from pydantic import SecretStr
 
 from coreason_jules_automator.async_api.agent import AsyncJulesAgent
 from coreason_jules_automator.async_api.orchestrator import AsyncOrchestrator
@@ -23,9 +24,12 @@ def mock_env(monkeypatch: pytest.MonkeyPatch) -> None:
 def mock_settings() -> Settings:
     return Settings(
         repo_name="dummy/repo",
-        GITHUB_TOKEN="dummy_token",
-        GOOGLE_API_KEY="dummy_key",
+        GITHUB_TOKEN=SecretStr("dummy_token"),
+        GOOGLE_API_KEY=SecretStr("dummy_key"),
         max_retries=5,
+        OPENAI_API_KEY=SecretStr("sk-dummy"),
+        DEEPSEEK_API_KEY=SecretStr("sk-dummy"),
+        SSH_PRIVATE_KEY=SecretStr("dummy_key"),
     )
 
 

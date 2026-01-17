@@ -3,6 +3,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from pydantic import SecretStr
+
 from coreason_jules_automator.async_api.llm import AsyncLLMClient
 from coreason_jules_automator.async_api.scm import AsyncGeminiInterface, AsyncGitHubInterface, AsyncGitInterface
 from coreason_jules_automator.async_api.strategies import AsyncLocalDefenseStrategy, AsyncRemoteDefenseStrategy
@@ -18,10 +20,13 @@ from coreason_jules_automator.llm.janitor import JanitorService
 def mock_settings() -> Settings:
     return Settings(
         repo_name="dummy/repo",
-        GITHUB_TOKEN="dummy_token",
-        GOOGLE_API_KEY="dummy_key",
+        GITHUB_TOKEN=SecretStr("dummy_token"),
+        GOOGLE_API_KEY=SecretStr("dummy_key"),
         max_retries=5,
         extensions_enabled=["security", "code-review"],
+        OPENAI_API_KEY=SecretStr("sk-dummy"),
+        DEEPSEEK_API_KEY=SecretStr("sk-dummy"),
+        SSH_PRIVATE_KEY=SecretStr("dummy_key"),
     )
 
 
