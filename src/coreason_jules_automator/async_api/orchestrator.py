@@ -3,16 +3,24 @@ import string
 from pathlib import Path
 from typing import List, Optional, Tuple
 
+from tenacity import AsyncRetrying, RetryError, retry_if_exception_type, stop_after_attempt, wait_exponential
+
 from coreason_jules_automator.async_api.agent import AsyncJulesAgent
 from coreason_jules_automator.async_api.llm import AsyncLLMClient
 from coreason_jules_automator.async_api.scm import AsyncGitInterface
 from coreason_jules_automator.async_api.strategies import AsyncDefenseStrategy
-from coreason_jules_automator.config import get_settings
+from coreason_jules_automator.config import Settings
 from coreason_jules_automator.domain.context import OrchestrationContext
 from coreason_jules_automator.events import AutomationEvent, EventEmitter, EventType, LoguruEmitter
 from coreason_jules_automator.exceptions import AgentProcessError, JulesAutomatorError
 from coreason_jules_automator.llm.janitor import JanitorService
 from coreason_jules_automator.utils.logger import logger
+
+
+class CycleRetry(Exception):
+    """Internal exception to trigger retry in tenacity."""
+
+    pass
 
 
 class AsyncOrchestrator:
@@ -24,6 +32,7 @@ class AsyncOrchestrator:
 
     def __init__(
         self,
+        settings: Settings,
         agent: AsyncJulesAgent,
         strategies: List[AsyncDefenseStrategy],
         event_emitter: Optional[EventEmitter] = None,
@@ -31,6 +40,7 @@ class AsyncOrchestrator:
         janitor_service: Optional[JanitorService] = None,
         llm_client: Optional[AsyncLLMClient] = None,
     ) -> None:
+        self.settings = settings
         self.agent = agent
         self.strategies = strategies
         self.event_emitter = event_emitter or LoguruEmitter()
@@ -44,7 +54,6 @@ class AsyncOrchestrator:
         Agent Launch -> Wait -> Teleport -> Strategies -> Success/Retry.
         Returns (success, feedback_log).
         """
-        settings = get_settings()
         self.event_emitter.emit(
             AutomationEvent(
                 type=EventType.CYCLE_START,
@@ -53,37 +62,50 @@ class AsyncOrchestrator:
             )
         )
 
-        attempt = 0
         last_error = ""
-        while attempt < settings.max_retries:
-            attempt += 1
-            self._emit_phase_start(attempt, settings.max_retries)
+        try:
+            async for attempt in AsyncRetrying(
+                stop=stop_after_attempt(self.settings.max_retries),
+                wait=wait_exponential(multiplier=1, min=2, max=10),
+                retry=retry_if_exception_type(CycleRetry),
+                reraise=False,
+            ):
+                with attempt:
+                    attempt_num = attempt.retry_state.attempt_number
+                    self._emit_phase_start(attempt_num, self.settings.max_retries)
 
-            # Prepare prompt with feedback if retry
-            current_task = self._build_task_prompt(task_description, last_error, attempt)
+                    # Prepare prompt with feedback if retry
+                    current_task = self._build_task_prompt(task_description, last_error, attempt_num)
 
-            # --- PHASE 1: REMOTE GENERATION & TELEPORT ---
-            sid, error_msg = await self._execute_agent_workflow(current_task)
-            if not sid:
-                return False, error_msg
+                    # --- PHASE 1: REMOTE GENERATION & TELEPORT ---
+                    sid, error_msg = await self._execute_agent_workflow(current_task)
+                    if not sid:
+                        return False, error_msg
 
-            # --- PHASE 2: DEFENSE STRATEGIES ---
-            # Create immutable context
-            # We assume task_id is same as branch_name or generated. Using branch_name as simple proxy or random ID.
-            task_id = f"task_{branch_name}_{attempt}"
-            context = OrchestrationContext(task_id=task_id, branch_name=branch_name, session_id=sid)
+                    # --- PHASE 2: DEFENSE STRATEGIES ---
+                    # Create immutable context
+                    task_id = f"task_{branch_name}_{attempt_num}"
+                    context = OrchestrationContext(task_id=task_id, branch_name=branch_name, session_id=sid)
 
-            success, feedback = await self._execute_defense_strategies(context)
+                    success, feedback = await self._execute_defense_strategies(context)
 
-            if success:
-                self._emit_success("All strategies passed.")
-                return True, "Success"
+                    if success:
+                        self._emit_success("All strategies passed.")
+                        return True, "Success"
 
-            last_error = feedback
-            self._emit_retry(feedback)
+                    self._emit_retry(feedback)
+                    last_error = feedback
+                    raise CycleRetry(feedback)
 
-        self._emit_failure("Max retries reached.")
-        return False, last_error
+        except RetryError as e:
+            last_exc = e.last_attempt.exception()
+            last_msg = str(last_exc) if last_exc else "Max retries reached."
+            self._emit_failure("Max retries reached.")
+            return False, last_msg
+
+        # Fallback if loop finishes without returning
+        # (should not happen with infinite retries/reraise=False but good for mypy)
+        return False, "Orchestration loop exited unexpectedly"
 
     def _build_task_prompt(self, task: str, last_error: str, attempt: int) -> str:
         """Constructs the prompt, appending feedback if this is a retry."""
@@ -242,7 +264,8 @@ class AsyncOrchestrator:
 
                 if success:
                     logger.info(f"Iteration {i} Succeeded. Merging into {agg_branch}...")
-                    raw_log = await self.git.get_commit_log(agg_branch, iter_branch)
+                    raw_log_obj = await self.git.get_commit_log(agg_branch, iter_branch)
+                    raw_log = raw_log_obj.message
 
                     # Sans-I/O Refactor: Professionalize Commit
                     clean_msg = raw_log  # Default fallback

@@ -2,6 +2,7 @@ import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from pydantic import SecretStr
 
 from coreason_jules_automator.async_api.agent import AsyncJulesAgent
 from coreason_jules_automator.async_api.orchestrator import AsyncOrchestrator
@@ -17,6 +18,19 @@ def mock_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("COREASON_REPO_NAME", "dummy/repo")
     monkeypatch.setenv("COREASON_GITHUB_TOKEN", "dummy_token")
     monkeypatch.setenv("COREASON_GOOGLE_API_KEY", "dummy_key")
+
+
+@pytest.fixture
+def mock_settings() -> Settings:
+    return Settings(
+        repo_name="dummy/repo",
+        GITHUB_TOKEN=SecretStr("dummy_token"),
+        GOOGLE_API_KEY=SecretStr("dummy_key"),
+        max_retries=5,
+        OPENAI_API_KEY=SecretStr("sk-dummy"),
+        DEEPSEEK_API_KEY=SecretStr("sk-dummy"),
+        SSH_PRIVATE_KEY=SecretStr("dummy_key"),
+    )
 
 
 @pytest.mark.asyncio
@@ -49,12 +63,12 @@ async def test_agent_context_manager() -> None:
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_campaign_missing_deps() -> None:
+async def test_orchestrator_campaign_missing_deps(mock_settings: Settings) -> None:
     """Test run_campaign raises error when deps are missing (lines 171-173)."""
     mock_agent = MagicMock(spec=AsyncJulesAgent)
 
     # Test 1: Both missing
-    orchestrator = AsyncOrchestrator(agent=mock_agent, strategies=[])
+    orchestrator = AsyncOrchestrator(settings=mock_settings, agent=mock_agent, strategies=[])
     # git and janitor are None by default
 
     with pytest.raises(RuntimeError, match="GitInterface and JanitorService are required"):
@@ -62,19 +76,21 @@ async def test_orchestrator_campaign_missing_deps() -> None:
 
     # Test 2: Janitor missing
     mock_git = MagicMock()
-    orchestrator = AsyncOrchestrator(agent=mock_agent, strategies=[], git_interface=mock_git)
+    orchestrator = AsyncOrchestrator(settings=mock_settings, agent=mock_agent, strategies=[], git_interface=mock_git)
     with pytest.raises(RuntimeError, match="GitInterface and JanitorService are required"):
         await orchestrator.run_campaign("task")
 
     # Test 3: Git missing
     mock_janitor = MagicMock()
-    orchestrator = AsyncOrchestrator(agent=mock_agent, strategies=[], janitor_service=mock_janitor)
+    orchestrator = AsyncOrchestrator(
+        settings=mock_settings, agent=mock_agent, strategies=[], janitor_service=mock_janitor
+    )
     with pytest.raises(RuntimeError, match="GitInterface and JanitorService are required"):
         await orchestrator.run_campaign("task")
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_strategy_exception() -> None:
+async def test_orchestrator_strategy_exception(mock_settings: Settings) -> None:
     """Test orchestrator handles exception in strategy execution (lines 171-173)."""
     mock_agent = MagicMock(spec=AsyncJulesAgent)
     mock_agent.__aenter__ = AsyncMock(return_value=mock_agent)
@@ -88,20 +104,13 @@ async def test_orchestrator_strategy_exception() -> None:
     # The code calls await strategy.execute(context=context)
     mock_strategy.execute = AsyncMock(side_effect=Exception("Strategy Boom"))
 
-    orchestrator = AsyncOrchestrator(agent=mock_agent, strategies=[mock_strategy])
+    mock_settings.max_retries = 1
+    orchestrator = AsyncOrchestrator(settings=mock_settings, agent=mock_agent, strategies=[mock_strategy])
 
-    # We need to ensure settings don't block us or something.
-    # But run_cycle calls get_settings().
-    # We should mock get_settings in orchestrator to avoid env var issues if any (though agent mock avoids some)
-    # But orchestrator.py does: settings = get_settings()
+    success, feedback = await orchestrator.run_cycle("task", "branch")
 
-    with patch("coreason_jules_automator.async_api.orchestrator.get_settings") as mock_settings:
-        mock_settings.return_value.max_retries = 1
-
-        success, feedback = await orchestrator.run_cycle("task", "branch")
-
-        assert success is False
-        assert "Strategy error: Strategy Boom" in feedback
+    assert success is False
+    assert "Strategy error: Strategy Boom" in feedback
 
 
 # --- CLI Tests ---

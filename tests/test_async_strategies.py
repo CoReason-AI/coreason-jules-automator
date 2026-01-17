@@ -1,73 +1,87 @@
-from typing import Any, Dict
+from typing import Any, AsyncGenerator, Dict
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from pydantic import SecretStr
 
 from coreason_jules_automator.async_api.llm import AsyncLLMClient
 from coreason_jules_automator.async_api.scm import AsyncGeminiInterface, AsyncGitHubInterface, AsyncGitInterface
 from coreason_jules_automator.async_api.strategies import AsyncLocalDefenseStrategy, AsyncRemoteDefenseStrategy
+from coreason_jules_automator.config import Settings
 from coreason_jules_automator.domain.context import OrchestrationContext
+from coreason_jules_automator.domain.scm import PullRequestStatus
 from coreason_jules_automator.llm.janitor import JanitorService
 
 # --- AsyncLocalDefenseStrategy Tests ---
 
 
+@pytest.fixture
+def mock_settings() -> Settings:
+    return Settings(
+        repo_name="dummy/repo",
+        GITHUB_TOKEN=SecretStr("dummy_token"),
+        GOOGLE_API_KEY=SecretStr("dummy_key"),
+        max_retries=5,
+        extensions_enabled=["security", "code-review"],
+        OPENAI_API_KEY=SecretStr("sk-dummy"),
+        DEEPSEEK_API_KEY=SecretStr("sk-dummy"),
+        SSH_PRIVATE_KEY=SecretStr("dummy_key"),
+    )
+
+
 @pytest.mark.asyncio
-async def test_local_strategy_success() -> None:
+async def test_local_strategy_success(mock_settings: Settings) -> None:
     mock_gemini = MagicMock(spec=AsyncGeminiInterface)
     mock_gemini.security_scan = AsyncMock()
     mock_gemini.code_review = AsyncMock()
 
-    strategy = AsyncLocalDefenseStrategy(gemini=mock_gemini)
+    strategy = AsyncLocalDefenseStrategy(settings=mock_settings, gemini=mock_gemini)
     context = OrchestrationContext(task_id="t1", branch_name="b1", session_id="s1")
 
-    with patch("coreason_jules_automator.async_api.strategies.get_settings") as mock_settings:
-        mock_settings.return_value.extensions_enabled = ["security", "code-review"]
-        result = await strategy.execute(context)
+    result = await strategy.execute(context)
 
-        assert result.success is True
-        mock_gemini.security_scan.assert_awaited_once()
-        mock_gemini.code_review.assert_awaited_once()
+    assert result.success is True
+    mock_gemini.security_scan.assert_awaited_once()
+    mock_gemini.code_review.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_local_strategy_security_fail() -> None:
+async def test_local_strategy_security_fail(mock_settings: Settings) -> None:
     mock_gemini = MagicMock(spec=AsyncGeminiInterface)
     mock_gemini.security_scan = AsyncMock(side_effect=RuntimeError("Sec Fail"))
 
-    strategy = AsyncLocalDefenseStrategy(gemini=mock_gemini)
+    mock_settings.extensions_enabled = ["security"]
+    strategy = AsyncLocalDefenseStrategy(settings=mock_settings, gemini=mock_gemini)
     context = OrchestrationContext(task_id="t1", branch_name="b1", session_id="s1")
 
-    with patch("coreason_jules_automator.async_api.strategies.get_settings") as mock_settings:
-        mock_settings.return_value.extensions_enabled = ["security"]
-        result = await strategy.execute(context)
+    result = await strategy.execute(context)
 
-        assert result.success is False
-        assert "Security Scan failed" in result.message
+    assert result.success is False
+    assert "Security Scan failed" in result.message
 
 
 @pytest.mark.asyncio
-async def test_local_strategy_code_review_fail() -> None:
+async def test_local_strategy_code_review_fail(mock_settings: Settings) -> None:
     mock_gemini = MagicMock(spec=AsyncGeminiInterface)
     mock_gemini.code_review = AsyncMock(side_effect=RuntimeError("Lint Fail"))
 
-    strategy = AsyncLocalDefenseStrategy(gemini=mock_gemini)
+    mock_settings.extensions_enabled = ["code-review"]
+    strategy = AsyncLocalDefenseStrategy(settings=mock_settings, gemini=mock_gemini)
     context = OrchestrationContext(task_id="t1", branch_name="b1", session_id="s1")
 
-    with patch("coreason_jules_automator.async_api.strategies.get_settings") as mock_settings:
-        mock_settings.return_value.extensions_enabled = ["code-review"]
-        result = await strategy.execute(context)
+    result = await strategy.execute(context)
 
-        assert result.success is False
-        assert "Code Review failed" in result.message
+    assert result.success is False
+    assert "Code Review failed" in result.message
 
 
 # --- AsyncRemoteDefenseStrategy Tests ---
 
 
 @pytest.fixture
-def remote_deps() -> Dict[str, MagicMock]:
+def remote_deps(mock_settings: Settings) -> Dict[str, Any]:
     return {
+        "settings": mock_settings,
         "github": MagicMock(spec=AsyncGitHubInterface),
         "git": MagicMock(spec=AsyncGitInterface),
         "janitor": MagicMock(spec=JanitorService),
@@ -99,9 +113,11 @@ async def test_remote_strategy_no_changes(remote_deps: Dict[str, MagicMock]) -> 
 
 
 @pytest.mark.asyncio
-async def test_remote_strategy_poll_success(remote_deps: Dict[str, MagicMock]) -> None:
+async def test_remote_strategy_poll_success(remote_deps: Dict[str, Any]) -> None:
     remote_deps["git"].push_to_branch = AsyncMock(return_value=True)
-    remote_deps["github"].get_pr_checks = AsyncMock(return_value=[{"status": "completed", "conclusion": "success"}])
+    remote_deps["github"].get_pr_checks = AsyncMock(
+        return_value=[PullRequestStatus(name="check1", status="completed", conclusion="success", url="http://url")]
+    )
 
     strategy = AsyncRemoteDefenseStrategy(**remote_deps)
     context = OrchestrationContext(task_id="t1", branch_name="feat", session_id="123")
@@ -112,11 +128,11 @@ async def test_remote_strategy_poll_success(remote_deps: Dict[str, MagicMock]) -
 
 
 @pytest.mark.asyncio
-async def test_remote_strategy_poll_empty_checks(remote_deps: Dict[str, MagicMock]) -> None:
+async def test_remote_strategy_poll_empty_checks(remote_deps: Dict[str, Any]) -> None:
     remote_deps["git"].push_to_branch = AsyncMock(return_value=True)
     # First empty, then success
     remote_deps["github"].get_pr_checks = AsyncMock(
-        side_effect=[[], [{"status": "completed", "conclusion": "success"}]]
+        side_effect=[[], [PullRequestStatus(name="check1", status="completed", conclusion="success", url="http://url")]]
     )
 
     strategy = AsyncRemoteDefenseStrategy(**remote_deps)
@@ -128,11 +144,14 @@ async def test_remote_strategy_poll_empty_checks(remote_deps: Dict[str, MagicMoc
 
 
 @pytest.mark.asyncio
-async def test_remote_strategy_poll_error(remote_deps: Dict[str, MagicMock]) -> None:
+async def test_remote_strategy_poll_error(remote_deps: Dict[str, Any]) -> None:
     remote_deps["git"].push_to_branch = AsyncMock(return_value=True)
     # Error then success
     remote_deps["github"].get_pr_checks = AsyncMock(
-        side_effect=[RuntimeError("API Error"), [{"status": "completed", "conclusion": "success"}]]
+        side_effect=[
+            RuntimeError("API Error"),
+            [PullRequestStatus(name="check1", status="completed", conclusion="success", url="http://url")],
+        ]
     )
 
     strategy = AsyncRemoteDefenseStrategy(**remote_deps)
@@ -144,10 +163,12 @@ async def test_remote_strategy_poll_error(remote_deps: Dict[str, MagicMock]) -> 
 
 
 @pytest.mark.asyncio
-async def test_remote_strategy_poll_timeout(remote_deps: Dict[str, MagicMock]) -> None:
+async def test_remote_strategy_poll_timeout(remote_deps: Dict[str, Any]) -> None:
     remote_deps["git"].push_to_branch = AsyncMock(return_value=True)
     # Always pending
-    remote_deps["github"].get_pr_checks = AsyncMock(return_value=[{"status": "in_progress", "conclusion": None}])
+    remote_deps["github"].get_pr_checks = AsyncMock(
+        return_value=[PullRequestStatus(name="check1", status="in_progress", conclusion=None, url="http://url")]
+    )
 
     strategy = AsyncRemoteDefenseStrategy(**remote_deps)
     context = OrchestrationContext(task_id="t1", branch_name="feat", session_id="123")
@@ -160,10 +181,10 @@ async def test_remote_strategy_poll_timeout(remote_deps: Dict[str, MagicMock]) -
 
 
 @pytest.mark.asyncio
-async def test_remote_strategy_ci_failure_no_llm(remote_deps: Dict[str, MagicMock]) -> None:
+async def test_remote_strategy_ci_failure_no_llm(remote_deps: Dict[str, Any]) -> None:
     remote_deps["git"].push_to_branch = AsyncMock(return_value=True)
     remote_deps["github"].get_pr_checks = AsyncMock(
-        return_value=[{"status": "completed", "conclusion": "failure", "name": "test"}]
+        return_value=[PullRequestStatus(name="test", status="completed", conclusion="failure", url="http://url")]
     )
     # Explicitly set llm_client to None for this test, bypassing type check for the mock dict
     deps: Dict[str, Any] = remote_deps.copy()
@@ -179,14 +200,19 @@ async def test_remote_strategy_ci_failure_no_llm(remote_deps: Dict[str, MagicMoc
 
 
 @pytest.mark.asyncio
-async def test_remote_strategy_long_log_truncation(remote_deps: Dict[str, MagicMock]) -> None:
+async def test_remote_strategy_long_log_truncation(remote_deps: Dict[str, Any]) -> None:
     remote_deps["git"].push_to_branch = AsyncMock(return_value=True)
     remote_deps["github"].get_pr_checks = AsyncMock(
-        return_value=[{"status": "completed", "conclusion": "failure", "name": "test"}]
+        return_value=[PullRequestStatus(name="test", status="completed", conclusion="failure", url="http://url")]
     )
-    # Very long log
-    long_log = "a" * 15000
-    remote_deps["github"].get_latest_run_log = AsyncMock(return_value=long_log)
+
+    # Very long log (streamed)
+    # We yield more than 2000 lines to trigger truncation
+    async def mock_stream(branch_name: str) -> AsyncGenerator[str, None]:
+        for i in range(2500):
+            yield f"Line {i}"
+
+    remote_deps["github"].get_latest_run_log = mock_stream
 
     mock_llm_response = MagicMock(content="Summary")
     remote_deps["llm_client"].execute = AsyncMock(return_value=mock_llm_response)
@@ -202,18 +228,26 @@ async def test_remote_strategy_long_log_truncation(remote_deps: Dict[str, MagicM
     call_args = remote_deps["janitor"].build_summarize_request.call_args
     assert call_args is not None
     snippet = call_args[0][0]
-    assert len(snippet) < 15000
+
+    # Verify we have the tail
+    assert "Line 2499" in snippet
+    # Verify we lost the head
+    assert "Line 0" not in snippet
     assert "--- Logs ---" in snippet
 
 
 @pytest.mark.asyncio
-async def test_remote_strategy_janitor_exception(remote_deps: Dict[str, MagicMock]) -> None:
+async def test_remote_strategy_janitor_exception(remote_deps: Dict[str, Any]) -> None:
     # Test line 266: logger.error(f"Janitor summarization failed: {e}")
     remote_deps["git"].push_to_branch = AsyncMock(return_value=True)
     remote_deps["github"].get_pr_checks = AsyncMock(
-        return_value=[{"status": "completed", "conclusion": "failure", "name": "test"}]
+        return_value=[PullRequestStatus(name="test", status="completed", conclusion="failure", url="http://url")]
     )
-    remote_deps["github"].get_latest_run_log = AsyncMock(return_value="log")
+
+    async def mock_stream(branch_name: str) -> AsyncGenerator[str, None]:
+        yield "log"
+
+    remote_deps["github"].get_latest_run_log = mock_stream
 
     # LLM raises exception
     remote_deps["llm_client"].execute = AsyncMock(side_effect=Exception("LLM Fail"))
@@ -237,7 +271,7 @@ async def test_remote_strategy_handle_ci_failure_fallback(remote_deps: Dict[str,
 
 
 @pytest.mark.asyncio
-async def test_remote_strategy_poll_exception(remote_deps: Dict[str, MagicMock]) -> None:
+async def test_remote_strategy_poll_exception(remote_deps: Dict[str, Any]) -> None:
     remote_deps["git"].push_to_branch = AsyncMock(return_value=True)
     # Raise RuntimeError during polling to trigger the exception handler
     # We ensure get_pr_checks raises ONLY when awaited

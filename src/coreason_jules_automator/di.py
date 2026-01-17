@@ -47,8 +47,11 @@ class Container:
         self.janitor = JanitorService(prompt_manager=self.prompt_manager)
 
         # Strategies
-        self.local_strategy = AsyncLocalDefenseStrategy(gemini=self.gemini, event_emitter=self.composite_emitter)
+        self.local_strategy = AsyncLocalDefenseStrategy(
+            settings=self.settings, gemini=self.gemini, event_emitter=self.composite_emitter
+        )
         self.remote_strategy = AsyncRemoteDefenseStrategy(
+            settings=self.settings,
             github=self.github,
             janitor=self.janitor,
             git=self.git,
@@ -61,6 +64,7 @@ class Container:
 
         # Orchestrator
         self.orchestrator = AsyncOrchestrator(
+            settings=self.settings,
             agent=self.agent,
             strategies=[self.local_strategy, self.remote_strategy],
             event_emitter=self.composite_emitter,
