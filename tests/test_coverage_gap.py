@@ -1,5 +1,5 @@
 import sys
-from typing import Dict, Any
+from typing import Any, AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -125,13 +125,13 @@ async def test_orchestrator_run_cycle_loop_exit(mock_settings: Settings) -> None
     mock_agent = MagicMock(spec=AsyncJulesAgent)
 
     class MockAsyncRetrying:
-        def __init__(self, *args, **kwargs):
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
             pass
 
-        def __aiter__(self):
+        def __aiter__(self) -> "MockAsyncRetrying":
             return self
 
-        async def __anext__(self):
+        async def __anext__(self) -> None:
             raise StopAsyncIteration
 
     orchestrator = AsyncOrchestrator(settings=mock_settings, agent=mock_agent, strategies=[])
@@ -159,13 +159,13 @@ async def test_remote_strategy_poll_loop_exit(mock_settings: Settings) -> None:
     context = OrchestrationContext(task_id="t1", branch_name="b1", session_id="s1")
 
     class MockAsyncRetrying:
-        def __init__(self, *args, **kwargs):
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
             pass
 
-        def __aiter__(self):
+        def __aiter__(self) -> "MockAsyncRetrying":
             return self
 
-        async def __anext__(self):
+        async def __anext__(self) -> None:
             raise StopAsyncIteration
 
     with patch("coreason_jules_automator.async_api.strategies.AsyncRetrying", MockAsyncRetrying):
@@ -218,13 +218,13 @@ async def test_remote_strategy_log_streaming_error(mock_settings: Settings) -> N
     checks = [PullRequestStatus(name="check1", status="completed", conclusion="failure", url="http://fail")]
 
     # Mock get_latest_run_log to raise exception during iteration
-    async def mock_stream(branch):
+    async def mock_stream(branch: str) -> AsyncGenerator[str, None]:
         yield "line1"
         raise Exception("Stream Failed")
 
     mock_github.get_latest_run_log = mock_stream
 
-    msg = await strategy._handle_ci_failure(checks, "branch")
+    await strategy._handle_ci_failure(checks, "branch")
 
     # The exception is caught and appended to the log
     assert "Error streaming logs: Stream Failed" in str(mock_janitor.build_summarize_request.call_args)
