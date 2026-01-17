@@ -1,14 +1,18 @@
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
+from pydantic import SecretStr
 
 from coreason_jules_automator.async_api.agent import AsyncJulesAgent
 from coreason_jules_automator.async_api.llm import AsyncLLMClient
 from coreason_jules_automator.async_api.orchestrator import AsyncOrchestrator
 from coreason_jules_automator.async_api.scm import AsyncGitInterface
-from coreason_jules_automator.async_api.strategies import AsyncDefenseStrategy
+from coreason_jules_automator.config import Settings
+from coreason_jules_automator.domain.context import StrategyResult
+from coreason_jules_automator.domain.pipeline import DefenseStep
+from coreason_jules_automator.domain.scm import GitCommit
+from coreason_jules_automator.exceptions import AgentProcessError
 from coreason_jules_automator.llm.janitor import JanitorService
-from coreason_jules_automator.strategies.base import DefenseResult
 
 
 @pytest.fixture(autouse=True)
@@ -18,18 +22,34 @@ def mock_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("COREASON_GOOGLE_API_KEY", "dummy_key")
 
 
+@pytest.fixture
+def mock_settings() -> Settings:
+    return Settings(
+        repo_name="dummy/repo",
+        GITHUB_TOKEN=SecretStr("dummy_token"),
+        GOOGLE_API_KEY=SecretStr("dummy_key"),
+        max_retries=5,
+        OPENAI_API_KEY=SecretStr("sk-dummy"),
+        DEEPSEEK_API_KEY=SecretStr("sk-dummy"),
+        SSH_PRIVATE_KEY=SecretStr("dummy_key"),
+    )
+
+
 @pytest.mark.asyncio
-async def test_async_orchestrator_run_cycle_success() -> None:
+async def test_async_orchestrator_run_cycle_success(mock_settings: Settings) -> None:
     # Mocks
     mock_agent = MagicMock(spec=AsyncJulesAgent)
-    mock_agent.launch_session = AsyncMock(return_value="sid-123")
+    mock_agent.__aenter__ = AsyncMock(return_value=mock_agent)
+    mock_agent.__aexit__ = AsyncMock(return_value=None)
+    mock_agent.launch = AsyncMock(return_value="sid-123")
     mock_agent.wait_for_completion = AsyncMock(return_value=True)
     mock_agent.teleport_and_sync = AsyncMock(return_value=True)
 
-    mock_strategy = MagicMock(spec=AsyncDefenseStrategy)
-    mock_strategy.execute = AsyncMock(return_value=DefenseResult(success=True, message="All good"))
+    mock_strategy = MagicMock(spec=DefenseStep)
+    mock_strategy.execute = AsyncMock(return_value=StrategyResult(success=True, message="All good"))
 
     orchestrator = AsyncOrchestrator(
+        settings=mock_settings,
         agent=mock_agent,
         strategies=[mock_strategy],
     )
@@ -41,7 +61,7 @@ async def test_async_orchestrator_run_cycle_success() -> None:
     assert success is True
     assert feedback == "Success"
 
-    mock_agent.launch_session.assert_awaited_once()
+    mock_agent.launch.assert_awaited_once()
     mock_agent.wait_for_completion.assert_awaited_once_with("sid-123")
     mock_agent.teleport_and_sync.assert_awaited_once()
     mock_strategy.execute.assert_awaited_once()
@@ -52,28 +72,31 @@ async def test_async_orchestrator_run_cycle_success() -> None:
     kwargs = call_args.kwargs
     context = kwargs.get("context")
     assert context is not None
-    assert context["sid"] == "sid-123"
-    assert context["branch_name"] == "feature/bugfix"
+    assert context.session_id == "sid-123"
+    assert context.branch_name == "feature/bugfix"
 
 
 @pytest.mark.asyncio
-async def test_async_orchestrator_run_cycle_retry() -> None:
+async def test_async_orchestrator_run_cycle_retry(mock_settings: Settings) -> None:
     # Mocks
     mock_agent = MagicMock(spec=AsyncJulesAgent)
-    mock_agent.launch_session = AsyncMock(side_effect=["sid-1", "sid-2"])
+    mock_agent.__aenter__ = AsyncMock(return_value=mock_agent)
+    mock_agent.__aexit__ = AsyncMock(return_value=None)
+    mock_agent.launch = AsyncMock(side_effect=["sid-1", "sid-2"])
     mock_agent.wait_for_completion = AsyncMock(return_value=True)
     mock_agent.teleport_and_sync = AsyncMock(return_value=True)
 
-    mock_strategy = MagicMock(spec=AsyncDefenseStrategy)
+    mock_strategy = MagicMock(spec=DefenseStep)
     # Fail first time, succeed second time
     mock_strategy.execute = AsyncMock(
         side_effect=[
-            DefenseResult(success=False, message="Lint error"),
-            DefenseResult(success=True, message="All good"),
+            StrategyResult(success=False, message="Lint error"),
+            StrategyResult(success=True, message="All good"),
         ]
     )
 
     orchestrator = AsyncOrchestrator(
+        settings=mock_settings,
         agent=mock_agent,
         strategies=[mock_strategy],
     )
@@ -85,12 +108,12 @@ async def test_async_orchestrator_run_cycle_retry() -> None:
     assert success is True
     assert feedback == "Success"
 
-    assert mock_agent.launch_session.call_count == 2
+    assert mock_agent.launch.call_count == 2
     assert mock_agent.wait_for_completion.call_count == 2
     assert mock_strategy.execute.call_count == 2
 
     # Verify feedback injection in second call
-    call_args_list = mock_agent.launch_session.call_args_list
+    call_args_list = mock_agent.launch.call_args_list
     first_call_arg = call_args_list[0][0][0]
     second_call_arg = call_args_list[1][0][0]
 
@@ -100,14 +123,18 @@ async def test_async_orchestrator_run_cycle_retry() -> None:
 
 
 @pytest.mark.asyncio
-async def test_async_orchestrator_run_cycle_agent_failure() -> None:
+async def test_async_orchestrator_run_cycle_agent_failure(mock_settings: Settings) -> None:
     # Mocks
     mock_agent = MagicMock(spec=AsyncJulesAgent)
-    mock_agent.launch_session = AsyncMock(return_value=None)  # Fail to launch
+    mock_agent.__aenter__ = AsyncMock(return_value=mock_agent)
+    mock_agent.__aexit__ = AsyncMock(return_value=None)
+    # raise AgentProcessError simulates failure inside launch
+    mock_agent.launch = AsyncMock(side_effect=AgentProcessError("Failed to obtain Session ID (SID)."))
 
-    mock_strategy = MagicMock(spec=AsyncDefenseStrategy)
+    mock_strategy = MagicMock(spec=DefenseStep)
 
     orchestrator = AsyncOrchestrator(
+        settings=mock_settings,
         agent=mock_agent,
         strategies=[mock_strategy],
     )
@@ -117,65 +144,74 @@ async def test_async_orchestrator_run_cycle_agent_failure() -> None:
 
     # Assertions
     assert success is False
-    assert "Failed to obtain Session ID" in feedback
+    assert "Agent workflow failed" in feedback
     mock_strategy.execute.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_async_orchestrator_run_cycle_wait_failure() -> None:
+async def test_async_orchestrator_run_cycle_wait_failure(mock_settings: Settings) -> None:
     mock_agent = MagicMock(spec=AsyncJulesAgent)
-    mock_agent.launch_session = AsyncMock(return_value="sid")
+    mock_agent.__aenter__ = AsyncMock(return_value=mock_agent)
+    mock_agent.__aexit__ = AsyncMock(return_value=None)
+    mock_agent.launch = AsyncMock(return_value="sid")
     mock_agent.wait_for_completion = AsyncMock(return_value=False)
 
-    orchestrator = AsyncOrchestrator(agent=mock_agent, strategies=[])
+    orchestrator = AsyncOrchestrator(settings=mock_settings, agent=mock_agent, strategies=[])
 
     success, feedback = await orchestrator.run_cycle("Task", "branch")
     assert success is False
+    assert "Agent workflow failed" in feedback
     assert "did not complete" in feedback
 
 
 @pytest.mark.asyncio
-async def test_async_orchestrator_run_cycle_teleport_failure() -> None:
+async def test_async_orchestrator_run_cycle_teleport_failure(mock_settings: Settings) -> None:
     mock_agent = MagicMock(spec=AsyncJulesAgent)
-    mock_agent.launch_session = AsyncMock(return_value="sid")
+    mock_agent.__aenter__ = AsyncMock(return_value=mock_agent)
+    mock_agent.__aexit__ = AsyncMock(return_value=None)
+    mock_agent.launch = AsyncMock(return_value="sid")
     mock_agent.wait_for_completion = AsyncMock(return_value=True)
     mock_agent.teleport_and_sync = AsyncMock(return_value=False)
 
-    orchestrator = AsyncOrchestrator(agent=mock_agent, strategies=[])
+    orchestrator = AsyncOrchestrator(settings=mock_settings, agent=mock_agent, strategies=[])
 
     success, feedback = await orchestrator.run_cycle("Task", "branch")
     assert success is False
+    assert "Agent workflow failed" in feedback
     assert "Failed to sync" in feedback
 
 
 @pytest.mark.asyncio
-async def test_async_orchestrator_run_cycle_exception() -> None:
+async def test_async_orchestrator_run_cycle_exception(mock_settings: Settings) -> None:
     mock_agent = MagicMock(spec=AsyncJulesAgent)
-    mock_agent.launch_session = AsyncMock(side_effect=Exception("Boom"))
+    mock_agent.__aenter__ = AsyncMock(return_value=mock_agent)
+    mock_agent.__aexit__ = AsyncMock(return_value=None)
+    mock_agent.launch = AsyncMock(side_effect=Exception("Boom"))
 
-    orchestrator = AsyncOrchestrator(agent=mock_agent, strategies=[])
+    orchestrator = AsyncOrchestrator(settings=mock_settings, agent=mock_agent, strategies=[])
 
     success, feedback = await orchestrator.run_cycle("Task", "branch")
     assert success is False
+    assert "Unexpected agent workflow failure" in feedback
     assert "Boom" in feedback
 
 
 @pytest.mark.asyncio
-async def test_async_orchestrator_run_cycle_max_retries() -> None:
+async def test_async_orchestrator_run_cycle_max_retries(mock_settings: Settings) -> None:
     mock_agent = MagicMock(spec=AsyncJulesAgent)
-    mock_agent.launch_session = AsyncMock(return_value="sid")
+    mock_agent.__aenter__ = AsyncMock(return_value=mock_agent)
+    mock_agent.__aexit__ = AsyncMock(return_value=None)
+    mock_agent.launch = AsyncMock(return_value="sid")
     mock_agent.wait_for_completion = AsyncMock(return_value=True)
     mock_agent.teleport_and_sync = AsyncMock(return_value=True)
 
-    mock_strategy = MagicMock(spec=AsyncDefenseStrategy)
-    mock_strategy.execute = AsyncMock(return_value=DefenseResult(success=False, message="Fail"))
+    mock_strategy = MagicMock(spec=DefenseStep)
+    mock_strategy.execute = AsyncMock(return_value=StrategyResult(success=False, message="Fail"))
 
-    orchestrator = AsyncOrchestrator(agent=mock_agent, strategies=[mock_strategy])
+    mock_settings.max_retries = 2
+    orchestrator = AsyncOrchestrator(settings=mock_settings, agent=mock_agent, strategies=[mock_strategy])
 
-    # Mock settings to have low retries
-    with patch("coreason_jules_automator.async_api.orchestrator.get_settings") as mock_settings:
-        mock_settings.return_value.max_retries = 2
-        success, feedback = await orchestrator.run_cycle("Task", "branch")
+    success, feedback = await orchestrator.run_cycle("Task", "branch")
 
     assert success is False
     assert feedback == "Fail"
@@ -183,20 +219,22 @@ async def test_async_orchestrator_run_cycle_max_retries() -> None:
 
 
 @pytest.mark.asyncio
-async def test_async_orchestrator_run_campaign_success() -> None:
+async def test_async_orchestrator_run_campaign_success(mock_settings: Settings) -> None:
     # Mocks
     mock_agent = MagicMock(spec=AsyncJulesAgent)
+    mock_agent.__aenter__ = AsyncMock(return_value=mock_agent)
+    mock_agent.__aexit__ = AsyncMock(return_value=None)
     mock_agent.mission_complete = True  # Simulate completion after first iteration
-    mock_agent.launch_session = AsyncMock(return_value="sid-123")
+    mock_agent.launch = AsyncMock(return_value="sid-123")
     mock_agent.wait_for_completion = AsyncMock(return_value=True)
     mock_agent.teleport_and_sync = AsyncMock(return_value=True)
 
-    mock_strategy = MagicMock(spec=AsyncDefenseStrategy)
-    mock_strategy.execute = AsyncMock(return_value=DefenseResult(success=True))
+    mock_strategy = MagicMock(spec=DefenseStep)
+    mock_strategy.execute = AsyncMock(return_value=StrategyResult(success=True, message="Success"))
 
     mock_git = MagicMock(spec=AsyncGitInterface)
     mock_git.checkout_new_branch = AsyncMock()
-    mock_git.get_commit_log = AsyncMock(return_value="feat: cool feature")
+    mock_git.get_commit_log = AsyncMock(return_value=GitCommit(message="feat: cool feature"))
     mock_git.merge_squash = AsyncMock()
     mock_git.delete_branch = AsyncMock()
 
@@ -209,6 +247,7 @@ async def test_async_orchestrator_run_campaign_success() -> None:
     mock_llm.execute = AsyncMock(return_value=MagicMock(content="feat: pro commit"))
 
     orchestrator = AsyncOrchestrator(
+        settings=mock_settings,
         agent=mock_agent,
         strategies=[mock_strategy],
         git_interface=mock_git,
@@ -227,7 +266,7 @@ async def test_async_orchestrator_run_campaign_success() -> None:
 
 
 @pytest.mark.asyncio
-async def test_async_orchestrator_run_campaign_exception() -> None:
+async def test_async_orchestrator_run_campaign_exception(mock_settings: Settings) -> None:
     mock_agent = MagicMock(spec=AsyncJulesAgent)
     mock_git = MagicMock(spec=AsyncGitInterface)
     # First call succeeds (setup), second call fails (iteration checkout)
@@ -238,7 +277,11 @@ async def test_async_orchestrator_run_campaign_exception() -> None:
     mock_janitor = MagicMock(spec=JanitorService)
 
     orchestrator = AsyncOrchestrator(
-        agent=mock_agent, strategies=[], git_interface=mock_git, janitor_service=mock_janitor
+        settings=mock_settings,
+        agent=mock_agent,
+        strategies=[],
+        git_interface=mock_git,
+        janitor_service=mock_janitor,
     )
 
     await orchestrator.run_campaign("Task", "develop", iterations=1)
@@ -248,19 +291,21 @@ async def test_async_orchestrator_run_campaign_exception() -> None:
 
 
 @pytest.mark.asyncio
-async def test_async_orchestrator_run_campaign_prof_failure() -> None:
+async def test_async_orchestrator_run_campaign_prof_failure(mock_settings: Settings) -> None:
     mock_agent = MagicMock(spec=AsyncJulesAgent)
+    mock_agent.__aenter__ = AsyncMock(return_value=mock_agent)
+    mock_agent.__aexit__ = AsyncMock(return_value=None)
     mock_agent.mission_complete = True
-    mock_agent.launch_session = AsyncMock(return_value="sid")
+    mock_agent.launch = AsyncMock(return_value="sid")
     mock_agent.wait_for_completion = AsyncMock(return_value=True)
     mock_agent.teleport_and_sync = AsyncMock(return_value=True)
 
-    mock_strategy = MagicMock(spec=AsyncDefenseStrategy)
-    mock_strategy.execute = AsyncMock(return_value=DefenseResult(success=True))
+    mock_strategy = MagicMock(spec=DefenseStep)
+    mock_strategy.execute = AsyncMock(return_value=StrategyResult(success=True, message="Success"))
 
     mock_git = MagicMock(spec=AsyncGitInterface)
     mock_git.checkout_new_branch = AsyncMock()
-    mock_git.get_commit_log = AsyncMock(return_value="raw log")
+    mock_git.get_commit_log = AsyncMock(return_value=GitCommit(message="raw log"))
     mock_git.merge_squash = AsyncMock()
     mock_git.delete_branch = AsyncMock()
 
@@ -271,6 +316,7 @@ async def test_async_orchestrator_run_campaign_prof_failure() -> None:
     mock_llm = MagicMock(spec=AsyncLLMClient)
 
     orchestrator = AsyncOrchestrator(
+        settings=mock_settings,
         agent=mock_agent,
         strategies=[mock_strategy],
         git_interface=mock_git,
@@ -280,33 +326,26 @@ async def test_async_orchestrator_run_campaign_prof_failure() -> None:
 
     await orchestrator.run_campaign("Task", "develop", iterations=1)
 
-    # Should fallback to sanitize_commit? No, fallback logic is:
-    # if janitor and llm: try prof. if fail -> log error.
-    # else: if janitor: sanitize.
-    # Wait, the fallback is:
-    # clean_msg = raw_log (default)
-    # if janitor and llm: try prof.
-    # else: if janitor: sanitize.
-    # If prof fails, it just logs error. clean_msg remains raw_log.
-
     mock_git.merge_squash.assert_awaited_with(ANY, ANY, "raw log")
 
 
 @pytest.mark.asyncio
-async def test_async_orchestrator_run_campaign_prof_retry_fail() -> None:
+async def test_async_orchestrator_run_campaign_prof_retry_fail(mock_settings: Settings) -> None:
     # Test retry loop inside professionalize commit
     mock_agent = MagicMock(spec=AsyncJulesAgent)
+    mock_agent.__aenter__ = AsyncMock(return_value=mock_agent)
+    mock_agent.__aexit__ = AsyncMock(return_value=None)
     mock_agent.mission_complete = True
-    mock_agent.launch_session = AsyncMock(return_value="sid")
+    mock_agent.launch = AsyncMock(return_value="sid")
     mock_agent.wait_for_completion = AsyncMock(return_value=True)
     mock_agent.teleport_and_sync = AsyncMock(return_value=True)
 
-    mock_strategy = MagicMock(spec=AsyncDefenseStrategy)
-    mock_strategy.execute = AsyncMock(return_value=DefenseResult(success=True))
+    mock_strategy = MagicMock(spec=DefenseStep)
+    mock_strategy.execute = AsyncMock(return_value=StrategyResult(success=True, message="Success"))
 
     mock_git = MagicMock(spec=AsyncGitInterface)
     mock_git.checkout_new_branch = AsyncMock()
-    mock_git.get_commit_log = AsyncMock(return_value="raw log")
+    mock_git.get_commit_log = AsyncMock(return_value=GitCommit(message="raw log"))
     mock_git.merge_squash = AsyncMock()
     mock_git.delete_branch = AsyncMock()
 
@@ -318,6 +357,7 @@ async def test_async_orchestrator_run_campaign_prof_retry_fail() -> None:
     mock_llm.execute = AsyncMock(side_effect=Exception("LLM Timeout"))
 
     orchestrator = AsyncOrchestrator(
+        settings=mock_settings,
         agent=mock_agent,
         strategies=[mock_strategy],
         git_interface=mock_git,
@@ -334,20 +374,22 @@ async def test_async_orchestrator_run_campaign_prof_retry_fail() -> None:
 
 
 @pytest.mark.asyncio
-async def test_async_orchestrator_run_campaign_no_llm_fallback() -> None:
+async def test_async_orchestrator_run_campaign_no_llm_fallback(mock_settings: Settings) -> None:
     # Test fallback logic when LLM client is missing
     mock_agent = MagicMock(spec=AsyncJulesAgent)
+    mock_agent.__aenter__ = AsyncMock(return_value=mock_agent)
+    mock_agent.__aexit__ = AsyncMock(return_value=None)
     mock_agent.mission_complete = True
-    mock_agent.launch_session = AsyncMock(return_value="sid")
+    mock_agent.launch = AsyncMock(return_value="sid")
     mock_agent.wait_for_completion = AsyncMock(return_value=True)
     mock_agent.teleport_and_sync = AsyncMock(return_value=True)
 
-    mock_strategy = MagicMock(spec=AsyncDefenseStrategy)
-    mock_strategy.execute = AsyncMock(return_value=DefenseResult(success=True))
+    mock_strategy = MagicMock(spec=DefenseStep)
+    mock_strategy.execute = AsyncMock(return_value=StrategyResult(success=True, message="Success"))
 
     mock_git = MagicMock(spec=AsyncGitInterface)
     mock_git.checkout_new_branch = AsyncMock()
-    mock_git.get_commit_log = AsyncMock(return_value="raw log")
+    mock_git.get_commit_log = AsyncMock(return_value=GitCommit(message="raw log"))
     mock_git.merge_squash = AsyncMock()
     mock_git.delete_branch = AsyncMock()
 
@@ -357,6 +399,7 @@ async def test_async_orchestrator_run_campaign_no_llm_fallback() -> None:
 
     # NO LLM CLIENT
     orchestrator = AsyncOrchestrator(
+        settings=mock_settings,
         agent=mock_agent,
         strategies=[mock_strategy],
         git_interface=mock_git,
@@ -372,15 +415,17 @@ async def test_async_orchestrator_run_campaign_no_llm_fallback() -> None:
 
 
 @pytest.mark.asyncio
-async def test_async_orchestrator_run_cycle_teleport_exception() -> None:
+async def test_async_orchestrator_run_cycle_teleport_exception(mock_settings: Settings) -> None:
     # This specifically tests line 169
     mock_agent = MagicMock(spec=AsyncJulesAgent)
-    mock_agent.launch_session = AsyncMock(return_value="sid")
+    mock_agent.__aenter__ = AsyncMock(return_value=mock_agent)
+    mock_agent.__aexit__ = AsyncMock(return_value=None)
+    mock_agent.launch = AsyncMock(return_value="sid")
     mock_agent.wait_for_completion = AsyncMock(return_value=True)
     # Raise exception instead of returning False
     mock_agent.teleport_and_sync = AsyncMock(side_effect=Exception("Teleport Boom"))
 
-    orchestrator = AsyncOrchestrator(agent=mock_agent, strategies=[])
+    orchestrator = AsyncOrchestrator(settings=mock_settings, agent=mock_agent, strategies=[])
 
     success, feedback = await orchestrator.run_cycle("Task", "branch")
     assert success is False
@@ -388,16 +433,16 @@ async def test_async_orchestrator_run_cycle_teleport_exception() -> None:
 
 
 @pytest.mark.asyncio
-async def test_async_orchestrator_run_campaign_missing_deps() -> None:
+async def test_async_orchestrator_run_campaign_missing_deps(mock_settings: Settings) -> None:
     mock_agent = MagicMock(spec=AsyncJulesAgent)
-    orchestrator = AsyncOrchestrator(agent=mock_agent, strategies=[])
+    orchestrator = AsyncOrchestrator(settings=mock_settings, agent=mock_agent, strategies=[])
 
     with pytest.raises(RuntimeError, match="GitInterface and JanitorService are required"):
         await orchestrator.run_campaign("Task")
 
 
 @pytest.mark.asyncio
-async def test_async_orchestrator_run_campaign_iteration_failure() -> None:
+async def test_async_orchestrator_run_campaign_iteration_failure(mock_settings: Settings) -> None:
     mock_agent = MagicMock(spec=AsyncJulesAgent)
     mock_agent.mission_complete = False
 
@@ -408,6 +453,7 @@ async def test_async_orchestrator_run_campaign_iteration_failure() -> None:
     mock_janitor = MagicMock(spec=JanitorService)
 
     orchestrator = AsyncOrchestrator(
+        settings=mock_settings,
         agent=mock_agent,
         strategies=[],
         git_interface=mock_git,

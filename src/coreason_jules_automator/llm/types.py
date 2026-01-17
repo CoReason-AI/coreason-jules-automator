@@ -1,13 +1,12 @@
-from dataclasses import dataclass
 from typing import Dict, List
 
+from pydantic import BaseModel
 
-@dataclass
-class LLMRequest:
+
+class LLMRequest(BaseModel):
     messages: List[Dict[str, str]]
     max_tokens: int
 
 
-@dataclass
-class LLMResponse:
+class LLMResponse(BaseModel):
     content: str

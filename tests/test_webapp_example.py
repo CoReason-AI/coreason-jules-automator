@@ -45,8 +45,11 @@ async def test_run_orchestration_background() -> None:
         patch("coreason_jules_automator.webapp_example._get_async_llm_client"),
         patch("coreason_jules_automator.webapp_example.PromptManager"),
         patch("coreason_jules_automator.webapp_example.JanitorService"),
-        patch("coreason_jules_automator.webapp_example.AsyncLocalDefenseStrategy"),
-        patch("coreason_jules_automator.webapp_example.AsyncRemoteDefenseStrategy"),
+        patch("coreason_jules_automator.webapp_example.SecurityScanStep"),
+        patch("coreason_jules_automator.webapp_example.CodeReviewStep"),
+        patch("coreason_jules_automator.webapp_example.GitPushStep"),
+        patch("coreason_jules_automator.webapp_example.CIPollingStep"),
+        patch("coreason_jules_automator.webapp_example.LogAnalysisStep"),
         patch("coreason_jules_automator.webapp_example.AsyncJulesAgent"),
         patch("coreason_jules_automator.webapp_example.AsyncOrchestrator") as MockOrchestrator,
     ):

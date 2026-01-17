@@ -3,7 +3,6 @@ from .llm import AsyncLLMClient, AsyncOpenAIAdapter
 from .orchestrator import AsyncOrchestrator
 from .scm import AsyncGeminiInterface, AsyncGitHubInterface, AsyncGitInterface
 from .shell import AsyncShellExecutor
-from .strategies import AsyncDefenseStrategy, AsyncLocalDefenseStrategy, AsyncRemoteDefenseStrategy
 
 __all__ = [
     "AsyncJulesAgent",
@@ -14,7 +13,4 @@ __all__ = [
     "AsyncGitInterface",
     "AsyncGitHubInterface",
     "AsyncGeminiInterface",
-    "AsyncDefenseStrategy",
-    "AsyncLocalDefenseStrategy",
-    "AsyncRemoteDefenseStrategy",
 ]

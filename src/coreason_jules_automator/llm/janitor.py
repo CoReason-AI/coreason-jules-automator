@@ -1,10 +1,18 @@
-import json
 import re
 from typing import Optional
 
+from pydantic import BaseModel
+
 from coreason_jules_automator.llm.prompts import PromptManager
 from coreason_jules_automator.llm.types import LLMRequest
-from coreason_jules_automator.utils.logger import logger
+
+
+class CommitMessageResponse(BaseModel):
+    commit_text: str
+
+
+class SummaryResponse(BaseModel):
+    summary: str
 
 
 class JanitorService:
@@ -42,25 +50,3 @@ class JanitorService:
 
         prompt = self.prompt_manager.render("janitor_professionalize.j2", commit_text=cleaned_text)
         return LLMRequest(messages=[{"role": "user", "content": prompt}], max_tokens=200)
-
-    def parse_professionalize_response(self, original_text: str, llm_response_text: str) -> str:
-        """
-        Parses the LLM response to extract the professionalized commit message.
-        Falls back to sanitized original text if parsing fails.
-        """
-        # Extract JSON object
-        start = llm_response_text.find("{")
-        end = llm_response_text.rfind("}")
-        if start != -1 and end != -1:
-            json_str = llm_response_text[start : end + 1]
-            try:
-                data = json.loads(json_str)
-                if "commit_text" in data:
-                    return str(data["commit_text"])
-            except json.JSONDecodeError:
-                logger.warning("JSON parse failed during professionalize response parsing.")
-        else:
-            logger.warning("No JSON braces found in response.")
-
-        # Fallback
-        return self.sanitize_commit(original_text)

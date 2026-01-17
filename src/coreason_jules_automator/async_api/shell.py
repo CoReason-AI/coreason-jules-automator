@@ -1,5 +1,5 @@
 import asyncio
-from typing import List
+from typing import AsyncGenerator, List
 
 from coreason_jules_automator.utils.logger import logger
 from coreason_jules_automator.utils.shell import CommandResult, ShellError
@@ -62,3 +62,58 @@ class AsyncShellExecutor:
             raise ShellError(error_msg, result)
 
         return result
+
+    async def stream(self, command: List[str], timeout: int = 300) -> AsyncGenerator[str, None]:
+        """
+        Executes a shell command and yields output line by line.
+
+        Args:
+            command: The command to execute.
+            timeout: Timeout in seconds for the process to complete after output is consumed.
+
+        Yields:
+            Lines of stdout.
+        """
+        logger.debug(f"Streaming async: {' '.join(command)}")
+
+        try:
+            process = await asyncio.create_subprocess_exec(
+                *command,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+        except Exception as e:
+            raise ShellError(
+                f"Failed to start process: {e}", CommandResult(exit_code=-1, stdout="", stderr=str(e))
+            ) from e
+
+        try:
+            if process.stdout:
+                async for line in process.stdout:
+                    yield line.decode()
+
+            await asyncio.wait_for(process.wait(), timeout=timeout)
+
+            if process.returncode is None or process.returncode != 0:
+                stderr_output = await process.stderr.read() if process.stderr else b""
+                exit_code = process.returncode if process.returncode is not None else -1
+                raise ShellError(
+                    f"Command failed with exit code {process.returncode}",
+                    CommandResult(exit_code=exit_code, stdout="", stderr=stderr_output.decode()),
+                )
+
+        except asyncio.TimeoutError as e:
+            process.kill()
+            await process.wait()
+            raise ShellError(
+                f"Command timed out after {timeout}s", CommandResult(exit_code=-1, stdout="", stderr="Timeout")
+            ) from e
+        except Exception as e:
+            if process.returncode is None:
+                process.kill()
+                await process.wait()
+            if isinstance(e, ShellError):
+                raise
+            raise ShellError(
+                f"Stream execution failed: {e}", CommandResult(exit_code=-1, stdout="", stderr=str(e))
+            ) from e

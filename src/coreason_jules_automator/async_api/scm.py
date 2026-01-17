@@ -1,8 +1,9 @@
 import json
 import shutil
-from typing import Any, Dict, List, Optional
+from typing import Any, AsyncGenerator, List, Optional
 
 from coreason_jules_automator.async_api.shell import AsyncShellExecutor
+from coreason_jules_automator.domain.scm import GitCommit, PullRequestStatus
 from coreason_jules_automator.utils.logger import logger
 from coreason_jules_automator.utils.shell import ShellError
 
@@ -96,7 +97,7 @@ class AsyncGitInterface:
             logger.error(f"Failed to squash merge {source_branch} into {target_branch}: {e}")
             raise RuntimeError(f"Failed to squash merge: {e}") from e
 
-    async def get_commit_log(self, base_branch: str, head_branch: str) -> str:
+    async def get_commit_log(self, base_branch: str, head_branch: str) -> GitCommit:
         """
         Returns the log of commits between base and head.
         """
@@ -105,7 +106,7 @@ class AsyncGitInterface:
             result = await self.shell.run(
                 ["git", "log", f"{base_branch}..{head_branch}", "--pretty=format:%B"], check=True
             )
-            return result.stdout.strip()
+            return GitCommit(message=result.stdout.strip())
         except ShellError as e:
             logger.error(f"Failed to get commit log: {e}")
             raise RuntimeError(f"Failed to get commit log: {e}") from e
@@ -160,7 +161,7 @@ class AsyncGitHubInterface:
             logger.error(str(e))
             raise RuntimeError(f"gh command failed: {e}") from e
 
-    async def get_pr_checks(self) -> List[Dict[str, Any]]:
+    async def get_pr_checks(self) -> List[PullRequestStatus]:
         """
         Polls GitHub Actions status for the current PR.
         Uses `gh pr checks` to get the status.
@@ -176,12 +177,12 @@ class AsyncGitHubInterface:
             parsed: Any = json.loads(output)
             if not isinstance(parsed, list):
                 raise RuntimeError(f"Unexpected format from gh: expected list, got {type(parsed)}")
-            # We assume it's a list of dicts based on gh documentation
-            return parsed
+            # Convert to Pydantic models
+            return [PullRequestStatus(**item) for item in parsed]
         except json.JSONDecodeError as e:
             raise RuntimeError(f"Failed to parse gh output: {output}") from e
 
-    async def get_latest_run_log(self, branch_name: str) -> str:
+    async def get_latest_run_log(self, branch_name: str) -> AsyncGenerator[str, None]:
         """
         Fetches the log of the latest workflow run for the given branch.
         """
@@ -195,25 +196,30 @@ class AsyncGitHubInterface:
 
             if not runs or not isinstance(runs, list):
                 logger.warning(f"No runs found for branch {branch_name}")
-                return "No workflow runs found."
+                yield "No workflow runs found."
+                return
 
             # runs[0] can be a dict
             run_id_val = runs[0].get("databaseId")
             if run_id_val is None:
                 logger.warning("Run ID not found in response.")
-                return "Run ID not found."
+                yield "Run ID not found."
+                return
             run_id = str(run_id_val)
 
-            # 2. Get the log
-            log_output = await self._run_command(["run", "view", run_id, "--log"])
-            return log_output
+            # 2. Get the log (Streaming)
+            # We use the shell executor's stream capability
+            # command: gh run view <run_id> --log
+            command = [self.executable, "run", "view", run_id, "--log"]
+            async for line in self.shell.stream(command):
+                yield line
 
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse gh output: {e}")
-            return f"Failed to parse run list: {e}"
+            yield f"Failed to parse run list: {e}"
         except Exception as e:
             logger.error(f"Failed to fetch run logs: {e}")
-            return f"Failed to fetch run logs: {e}"
+            yield f"Failed to fetch run logs: {e}"
 
 
 class AsyncGeminiInterface:

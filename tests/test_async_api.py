@@ -3,12 +3,21 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from pydantic import BaseModel
 
 from coreason_jules_automator.async_api.agent import AsyncJulesAgent
 from coreason_jules_automator.async_api.llm import AsyncOpenAIAdapter
 from coreason_jules_automator.async_api.shell import AsyncShellExecutor
 from coreason_jules_automator.llm.types import LLMRequest
 from coreason_jules_automator.utils.shell import ShellError
+
+
+# Mock environment variables for all tests in this file to avoid Pydantic Settings validation error
+@pytest.fixture(autouse=True)
+def mock_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("COREASON_REPO_NAME", "dummy/repo")
+    monkeypatch.setenv("COREASON_GITHUB_TOKEN", "dummy_token")
+    monkeypatch.setenv("COREASON_GOOGLE_API_KEY", "dummy_key")
 
 
 @pytest.mark.asyncio
@@ -361,18 +370,42 @@ async def test_async_jules_agent_teleport_failures() -> None:
 @pytest.mark.asyncio
 async def test_async_openai_adapter() -> None:
     mock_client = MagicMock()
-    mock_client.chat.completions.create = AsyncMock()
-    mock_client.chat.completions.create.return_value.choices = [MagicMock(message=MagicMock(content="Hello world"))]
+    # Mock beta.chat.completions.parse
+    mock_client.beta.chat.completions.parse = AsyncMock()
+
+    class DummyModel(BaseModel):
+        content: str
+
+    mock_parsed = DummyModel(content="Hello world")
+    mock_client.beta.chat.completions.parse.return_value.choices = [MagicMock(message=MagicMock(parsed=mock_parsed))]
 
     adapter = AsyncOpenAIAdapter(mock_client, "gpt-4")
     request = LLMRequest(messages=[{"role": "user", "content": "Hi"}], max_tokens=100)
 
-    response = await adapter.execute(request)
+    response = await adapter.execute(request, response_model=DummyModel)
 
     assert response.content == "Hello world"
-    mock_client.chat.completions.create.assert_awaited_once_with(
-        model="gpt-4", messages=request.messages, max_tokens=request.max_tokens
+    mock_client.beta.chat.completions.parse.assert_awaited_once_with(
+        model="gpt-4", messages=request.messages, response_format=DummyModel
     )
+
+
+@pytest.mark.asyncio
+async def test_async_openai_adapter_parse_failure() -> None:
+    mock_client = MagicMock()
+    mock_client.beta.chat.completions.parse = AsyncMock()
+
+    # Simulate parsed is None
+    mock_client.beta.chat.completions.parse.return_value.choices = [MagicMock(message=MagicMock(parsed=None))]
+
+    adapter = AsyncOpenAIAdapter(mock_client, "gpt-4")
+    request = LLMRequest(messages=[], max_tokens=10)
+
+    class DummyModel(BaseModel):
+        pass
+
+    with pytest.raises(ValueError, match="LLM failed to return structured output"):
+        await adapter.execute(request, response_model=DummyModel)
 
 
 @pytest.mark.asyncio
@@ -417,7 +450,8 @@ async def test_launch_session_eof() -> None:
                 ]
             )
             mock_process.stdin = MagicMock()
-            mock_process.returncode = None
+            mock_process.returncode = 0
+            mock_process.wait = AsyncMock()
             mock_exec.return_value = mock_process
 
             # Should return None because SID was never found
@@ -487,11 +521,11 @@ async def test_wait_for_completion_process_exit() -> None:
         mock_process.returncode = 0
         return b"Some output\n"
 
-    mock_process.stdout.readline = AsyncMock(side_effect=set_returncode_side_effect)
+    mock_process.stdout.readline = AsyncMock(side_effect=[b"Some output\n", b""])
 
     agent.process = mock_process
 
     result = await agent.wait_for_completion("sid")
 
     assert result is False
-    mock_process.stdout.readline.assert_called_once()
+    assert mock_process.stdout.readline.call_count == 2

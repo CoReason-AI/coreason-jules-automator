@@ -1,8 +1,10 @@
 import asyncio
 from pathlib import Path
-from typing import Optional
+from types import TracebackType
+from typing import Optional, Type
 
-from coreason_jules_automator.config import get_settings
+from coreason_jules_automator.config import Settings, get_settings
+from coreason_jules_automator.exceptions import AgentProcessError
 from coreason_jules_automator.protocols.jules import (
     JulesProtocol,
     SendStdin,
@@ -18,26 +20,105 @@ class AsyncJulesAgent:
     """
     Async wrapper for the Jules CLI agent.
     Manages the subprocess, parsing output via JulesProtocol, and sending input.
+    Implements Async Context Manager for resource safety.
     """
 
-    def __init__(self, executable: str = "jules", shell: Optional[AsyncShellExecutor] = None):
+    def __init__(
+        self,
+        settings: Optional[Settings] = None,
+        executable: str = "jules",
+        shell: Optional[AsyncShellExecutor] = None,
+    ):
+        self.settings = settings or get_settings()
         self.executable = executable
         self.shell = shell or AsyncShellExecutor()
         self.mission_complete = False
         self.protocol = JulesProtocol()
+        # Keep track of process across method calls
+        self.process: Optional[asyncio.subprocess.Process] = None
 
-    async def launch_session(self, task: str) -> Optional[str]:
+    async def __aenter__(self) -> "AsyncJulesAgent":
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> None:
+        if self.process:
+            logger.info("Cleaning up Jules agent process...")
+            await self._cleanup_process(self.process)
+            self.process = None
+
+    async def _process_output_stream(
+        self, process: asyncio.subprocess.Process, stop_on_sid: bool = False
+    ) -> Optional[str]:
+        """
+        Reads stdout line by line, feeds protocol, handles auto-replies.
+
+        Args:
+            process: The subprocess to monitor.
+            stop_on_sid: If True, returns immediately when SID is detected.
+
+        Returns:
+            The detected SID if found, else None.
+        """
+        if not process.stdout:
+            logger.error("Process has no stdout")
+            return None
+
+        detected_sid = None
+        try:
+            while True:
+                line = await process.stdout.readline()
+                if not line:
+                    break
+
+                text = line.decode("utf-8", errors="replace")
+
+                for action in self.protocol.process_output(text):
+                    if isinstance(action, SendStdin):
+                        logger.info(f"Action SendStdin: {action.text}")
+                        if process.stdin:
+                            process.stdin.write(action.text.encode())
+                            await process.stdin.drain()
+
+                    elif isinstance(action, SignalSessionId):
+                        detected_sid = action.sid
+                        logger.info(f"✨ Captured SID: {detected_sid}")
+
+                    elif isinstance(action, SignalComplete):
+                        self.mission_complete = True
+                        logger.info("✅ Mission Complete signal received.")
+
+                # Stop conditions
+                if stop_on_sid and detected_sid:
+                    return detected_sid
+
+                if not stop_on_sid and self.mission_complete:
+                    return detected_sid
+
+        except Exception as e:
+            logger.error(f"Error processing stream: {e}")
+            raise AgentProcessError(f"Error processing stream: {e}") from e
+
+        return detected_sid
+
+    async def launch(self, task: str) -> str:
+        """
+        Launches the Jules session.
+        Returns:
+            The Session ID (SID).
+        Raises:
+            AgentProcessError: If launch fails or SID not found.
+        """
         self.mission_complete = False
-        settings = get_settings()
-        logger.info(f"Launching Jules session for repo: {settings.repo_name}...")
+        repo_name = self.settings.repo_name
+        logger.info(f"Launching Jules session for repo: {repo_name}...")
 
         # Construct command
-        cmd = [self.executable, "remote", settings.repo_name, "--task", task]
-
-        # Use pexpect-style interaction via the protocol + shell executor?
-        # The AsyncShellExecutor runs commands and returns result. It doesn't support interactive streams yet.
-        # We need to use asyncio.create_subprocess_exec directly or extend ShellExecutor.
-        # For this implementation, we'll use asyncio subprocess directly here for stream handling.
+        cmd = [self.executable, "remote", repo_name, "--task", task]
 
         try:
             process = await asyncio.create_subprocess_exec(
@@ -48,107 +129,44 @@ class AsyncJulesAgent:
                 env=None,  # Inherit env
             )
         except Exception as e:
-            logger.error(f"Failed to launch process: {e}")
-            return None
+            raise AgentProcessError(f"Failed to launch process: {e}") from e
 
         self.process = process
-        detected_sid: Optional[str] = None
 
-        # Read loop
-        # We need to read byte by byte or line by line to feed the protocol
-        # but pexpect logic in protocol might expect chunks.
-        if not process.stdout:
-            logger.error("Failed to capture stdout")
-            return None
-
-        # We'll read line by line for simplicity with the protocol's feed method
         try:
-            while True:
-                line = await process.stdout.readline()
-                if not line:
-                    break
-
-                text = line.decode("utf-8", errors="replace")
-                # Feed protocol
-                for action in self.protocol.process_output(text):
-                    if isinstance(action, SendStdin):
-                        logger.info(f"Action SendStdin: {action.text}")
-                        if self.process.stdin:
-                            self.process.stdin.write(action.text.encode())
-                            await self.process.stdin.drain()
-                    elif isinstance(action, SignalSessionId):
-                        detected_sid = action.sid
-                        logger.info(f"✨ Captured SID: {detected_sid}")
-                        break
-                    elif isinstance(action, SignalComplete):
-                        self.mission_complete = True
-                        logger.info("✅ Mission Complete signal received.")
-
-                if detected_sid:
-                    break
+            detected_sid = await self._process_output_stream(process, stop_on_sid=True)
+            if not detected_sid:
+                raise AgentProcessError("Failed to obtain Session ID (SID). Process might have exited early.")
+            return detected_sid
 
         except Exception as e:
             logger.error(f"Error during launch: {e}")
-            # Ensure cleanup if launch fails
-            await self._cleanup_process(process)
-            return None
+            # If we are in context manager, __aexit__ will handle cleanup, but if we fail here,
+            # we might want to ensure cleanup immediately if the exception bubbles up?
+            # Actually, standard practice is that if __aenter__ succeeds, __aexit__ is called.
+            # But launch is called inside the with block. So exception here will trigger __aexit__.
+            raise e
 
-        # If we have SID, we can detach/kill this process as we just wanted to launch it?
-        # "jules remote" usually stays running?
-        # The 'orchestrator' logic says "Wait for Completion".
-        # If we kill it, the remote session might stop?
-        # For "teleport" workflow, usually the agent runs until it finishes or pauses.
-        # We will keep it running in background or just return SID and let caller handle waiting?
-        # The Orchestrator calls `wait_for_completion`.
-        # So we probably should detach or keep reference.
-        # For this Async version, we might just assume it's running remotely and we can query status?
-        # But 'wait_for_completion' in the sync version checked the 'jules' output?
-        # Actually, in the sync version, it used `pexpect` to wait.
-        # Here we return SID. The `wait_for_completion` method will be called next.
-        return detected_sid
+    # Keep legacy name for compatibility if needed, or just redirect
+    async def launch_session(self, task: str) -> Optional[str]:
+        try:
+            return await self.launch(task)
+        except AgentProcessError:
+            if self.process:
+                await self._cleanup_process(self.process)
+                self.process = None
+            return None
 
     async def wait_for_completion(self, sid: str) -> bool:
         """
         Polls or waits for the session to complete.
-        Since we might have detached or it's a remote session, we need a way to check.
-        If we kept the process open in `launch_session`, we should continue reading it.
-        But `launch_session` returned.
-        In a real implementation, we'd probably have a shared state or re-attach.
-        For now, let's assume we can attach or just rely on the fact that if we have the process handle,
-        we can continue reading.
         """
-        # TODO: Robust implementation of re-attaching or continuing the read loop.
-        # For the purpose of this refactor step, we'll assume we continue monitoring the process started in
-        # launch_session if it's stored in self.process.
-        if not hasattr(self, "process") or self.process.returncode is not None:
-            # Check logic: if it finished, did it finish successfully?
-            # We return self.mission_complete state.
+        # If process is not running or we don't have handle, check flag
+        if not self.process or self.process.returncode is not None:
             return self.mission_complete
 
-        # Continue reading from stdout
-        if not self.process.stdout:
-            return False
-
         try:
-            while True:
-                line = await self.process.stdout.readline()
-                if not line:
-                    break
-                text = line.decode("utf-8", errors="replace")
-                for action in self.protocol.process_output(text):
-                    if isinstance(action, SendStdin):
-                        if self.process.stdin:
-                            self.process.stdin.write(action.text.encode())
-                            await self.process.stdin.drain()
-                    elif isinstance(action, SignalComplete):
-                        self.mission_complete = True
-                        logger.info("✅ Mission Complete signal received.")
-                        return True
-
-                # Check if process exited
-                if self.process.returncode is not None:
-                    break
-
+            await self._process_output_stream(self.process, stop_on_sid=False)
         except Exception as e:
             logger.error(f"Error during wait: {e}")
             return False
