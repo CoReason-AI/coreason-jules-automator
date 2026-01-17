@@ -195,7 +195,13 @@ class CIPollingStep:
                     context.pipeline_data["ci_passed"] = not any_failure
 
                     if not any_failure:
-                        self.event_emitter.emit(AutomationEvent(type=EventType.CHECK_RESULT, message="CI checks passed", payload={"status": "pass"}))
+                        self.event_emitter.emit(
+                            AutomationEvent(
+                                type=EventType.CHECK_RESULT,
+                                message="CI checks passed",
+                                payload={"status": "pass"},
+                            )
+                        )
                     else:
                         self.event_emitter.emit(
                             AutomationEvent(
@@ -255,7 +261,13 @@ class LogAnalysisStep:
         branch_name = context.branch_name
 
         summary = await self._handle_ci_failure(checks, branch_name)
-        self.event_emitter.emit(AutomationEvent(type=EventType.CHECK_RESULT, message=f"CI Failure Analysis: {summary}", payload={"status": "fail", "summary": summary}))
+        self.event_emitter.emit(
+            AutomationEvent(
+                type=EventType.CHECK_RESULT,
+                message=f"CI Failure Analysis: {summary}",
+                payload={"status": "fail", "summary": summary},
+            )
+        )
         return StrategyResult(success=False, message=summary)
 
     async def _handle_ci_failure(self, checks: List[PullRequestStatus], branch_name: str) -> str:
