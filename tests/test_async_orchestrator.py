@@ -1,7 +1,6 @@
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
-from coreason_jules_automator.domain.pipeline import DefenseStep
 from pydantic import SecretStr
 
 from coreason_jules_automator.async_api.agent import AsyncJulesAgent
@@ -10,6 +9,7 @@ from coreason_jules_automator.async_api.orchestrator import AsyncOrchestrator
 from coreason_jules_automator.async_api.scm import AsyncGitInterface
 from coreason_jules_automator.config import Settings
 from coreason_jules_automator.domain.context import StrategyResult
+from coreason_jules_automator.domain.pipeline import DefenseStep
 from coreason_jules_automator.domain.scm import GitCommit
 from coreason_jules_automator.exceptions import AgentProcessError
 from coreason_jules_automator.llm.janitor import JanitorService
