@@ -43,6 +43,19 @@ async def test_professionalize_commit_with_client() -> None:
 
 
 @pytest.mark.asyncio
+async def test_professionalize_commit_error() -> None:
+    """Test exception handling during professionalization."""
+    mock_client = AsyncMock(spec=AsyncLLMClient)
+    mock_client.execute.side_effect = Exception("API Error")
+
+    janitor = JanitorService(llm_client=mock_client)
+    raw = "bad commit"
+    result = await janitor.professionalize_commit(raw)
+
+    assert result == "bad commit"
+
+
+@pytest.mark.asyncio
 async def test_summarize_logs_no_client() -> None:
     janitor = JanitorService()
     logs = "error logs"
@@ -61,3 +74,16 @@ async def test_summarize_logs_with_client() -> None:
 
     assert result == "Short summary"
     mock_client.execute.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_summarize_logs_error() -> None:
+    """Test exception handling during log summarization."""
+    mock_client = AsyncMock(spec=AsyncLLMClient)
+    mock_client.execute.side_effect = Exception("API Error")
+
+    janitor = JanitorService(llm_client=mock_client)
+    logs = "long logs"
+    result = await janitor.summarize_logs(logs)
+
+    assert "failed" in result
