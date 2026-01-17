@@ -30,4 +30,4 @@ class AsyncOpenAIAdapter:
         parsed = response.choices[0].message.parsed
         if parsed is None:
              raise ValueError("LLM failed to return structured output.")
-        return parsed
+        return parsed  # type: ignore[no-any-return]
