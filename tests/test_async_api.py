@@ -391,6 +391,24 @@ async def test_async_openai_adapter() -> None:
 
 
 @pytest.mark.asyncio
+async def test_async_openai_adapter_parse_failure() -> None:
+    mock_client = MagicMock()
+    mock_client.beta.chat.completions.parse = AsyncMock()
+
+    # Simulate parsed is None
+    mock_client.beta.chat.completions.parse.return_value.choices = [MagicMock(message=MagicMock(parsed=None))]
+
+    adapter = AsyncOpenAIAdapter(mock_client, "gpt-4")
+    request = LLMRequest(messages=[], max_tokens=10)
+
+    class DummyModel(BaseModel):
+        pass
+
+    with pytest.raises(ValueError, match="LLM failed to return structured output"):
+        await adapter.execute(request, response_model=DummyModel)
+
+
+@pytest.mark.asyncio
 async def test_launch_session_signal_complete() -> None:
     """Test receiving SignalComplete during launch_session (lines 83-85)."""
     agent = AsyncJulesAgent()

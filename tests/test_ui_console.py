@@ -23,6 +23,12 @@ def test_rich_console_emitter_start_stop() -> None:
         mock_live_instance.stop.assert_called_once()
 
 
+def test_rich_console_emitter_stop_without_start() -> None:
+    emitter = RichConsoleEmitter()
+    # Should not raise exception
+    emitter.stop()
+
+
 def test_rich_console_emitter_generate_table() -> None:
     emitter = RichConsoleEmitter()
     emitter.checks["test_check"] = {"status": "pass", "message": "All good"}
@@ -61,6 +67,11 @@ def test_rich_console_emitter_emit_check_running() -> None:
         emitter.emit(event2)
         assert emitter.checks["CI Polling"]["status"] == "running"
 
+        # Test unknown
+        event3 = AutomationEvent(type=EventType.CHECK_RUNNING, message="Something else")
+        emitter.emit(event3)
+        assert emitter.checks["Something else"]["status"] == "running"
+
 
 def test_rich_console_emitter_emit_check_result() -> None:
     emitter = RichConsoleEmitter()
@@ -82,6 +93,12 @@ def test_rich_console_emitter_emit_check_result() -> None:
         emitter.emit(event2)
         # Should update 'security' because it's current
         assert emitter.checks["security"]["message"] == "Done"
+
+        # Reset current check to test fallback to "Result"
+        emitter.current_check = None
+        event3 = AutomationEvent(type=EventType.CHECK_RESULT, message="Mystery Result")
+        emitter.emit(event3)
+        assert emitter.checks["Result"]["message"] == "Mystery Result"
 
 
 def test_rich_console_emitter_emit_phase_start() -> None:

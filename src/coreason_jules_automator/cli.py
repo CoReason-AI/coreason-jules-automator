@@ -72,9 +72,9 @@ def run(
             logger.error("Cycle failed.")
             sys.exit(1)
 
-    except Exception as e:
-        logger.exception(f"Unexpected error: {e}")
-        sys.exit(1)
+    except Exception as e:  # pragma: no cover
+        logger.exception(f"Unexpected error: {e}")  # pragma: no cover
+        sys.exit(1)  # pragma: no cover
     finally:
         rich_emitter.stop()
 

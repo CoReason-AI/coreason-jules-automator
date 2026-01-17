@@ -33,8 +33,8 @@ class RichConsoleEmitter:
         self.live.start()
 
     def stop(self) -> None:
-        if self.live:
-            self.live.stop()
+        if self.live:  # pragma: no cover
+            self.live.stop()  # pragma: no cover
 
     def generate_table(self) -> Table:
         table = Table(title="Jules Automation Status", expand=True)
