@@ -4,7 +4,6 @@ import pytest
 from pydantic import SecretStr
 
 from coreason_jules_automator.async_api.agent import AsyncJulesAgent
-from coreason_jules_automator.async_api.llm import AsyncLLMClient
 from coreason_jules_automator.async_api.orchestrator import AsyncOrchestrator
 from coreason_jules_automator.async_api.scm import AsyncGitInterface
 from coreason_jules_automator.config import Settings
@@ -239,12 +238,7 @@ async def test_async_orchestrator_run_campaign_success(mock_settings: Settings) 
     mock_git.delete_branch = AsyncMock()
 
     mock_janitor = MagicMock(spec=JanitorService)
-    mock_janitor.sanitize_commit = MagicMock(return_value="feat: cool feature")
-    mock_janitor.build_professionalize_request = MagicMock(return_value=MagicMock(messages=[], max_tokens=100))
-    mock_janitor.parse_professionalize_response = MagicMock(return_value="feat: pro commit")
-
-    mock_llm = MagicMock(spec=AsyncLLMClient)
-    mock_llm.execute = AsyncMock(return_value=MagicMock(content="feat: pro commit"))
+    mock_janitor.professionalize_commit = AsyncMock(return_value="feat: pro commit")
 
     orchestrator = AsyncOrchestrator(
         settings=mock_settings,
@@ -252,7 +246,6 @@ async def test_async_orchestrator_run_campaign_success(mock_settings: Settings) 
         strategies=[mock_strategy],
         git_interface=mock_git,
         janitor_service=mock_janitor,
-        llm_client=mock_llm,
     )
 
     # Execute
@@ -310,10 +303,8 @@ async def test_async_orchestrator_run_campaign_prof_failure(mock_settings: Setti
     mock_git.delete_branch = AsyncMock()
 
     mock_janitor = MagicMock(spec=JanitorService)
-    # Raise error during request build
-    mock_janitor.build_professionalize_request = MagicMock(side_effect=Exception("Prof Fail"))
-
-    mock_llm = MagicMock(spec=AsyncLLMClient)
+    # Raise error during professionalize
+    mock_janitor.professionalize_commit = AsyncMock(side_effect=Exception("Prof Fail"))
 
     orchestrator = AsyncOrchestrator(
         settings=mock_settings,
@@ -321,17 +312,17 @@ async def test_async_orchestrator_run_campaign_prof_failure(mock_settings: Setti
         strategies=[mock_strategy],
         git_interface=mock_git,
         janitor_service=mock_janitor,
-        llm_client=mock_llm,
     )
 
     await orchestrator.run_campaign("Task", "develop", iterations=1)
 
-    mock_git.merge_squash.assert_awaited_with(ANY, ANY, "raw log")
+    mock_git.merge_squash.assert_not_awaited()
+    mock_git.delete_branch.assert_awaited()
 
 
 @pytest.mark.asyncio
-async def test_async_orchestrator_run_campaign_prof_retry_fail(mock_settings: Settings) -> None:
-    # Test retry loop inside professionalize commit
+async def test_async_orchestrator_run_campaign_fallback(mock_settings: Settings) -> None:
+    # Test fallback logic (mocking janitor returning fallback)
     mock_agent = MagicMock(spec=AsyncJulesAgent)
     mock_agent.__aenter__ = AsyncMock(return_value=mock_agent)
     mock_agent.__aexit__ = AsyncMock(return_value=None)
@@ -350,11 +341,7 @@ async def test_async_orchestrator_run_campaign_prof_retry_fail(mock_settings: Se
     mock_git.delete_branch = AsyncMock()
 
     mock_janitor = MagicMock(spec=JanitorService)
-    mock_janitor.build_professionalize_request = MagicMock(return_value=MagicMock())
-
-    mock_llm = MagicMock(spec=AsyncLLMClient)
-    # Fail repeatedly
-    mock_llm.execute = AsyncMock(side_effect=Exception("LLM Timeout"))
+    mock_janitor.professionalize_commit = AsyncMock(return_value="sanitized log")
 
     orchestrator = AsyncOrchestrator(
         settings=mock_settings,
@@ -362,55 +349,12 @@ async def test_async_orchestrator_run_campaign_prof_retry_fail(mock_settings: Se
         strategies=[mock_strategy],
         git_interface=mock_git,
         janitor_service=mock_janitor,
-        llm_client=mock_llm,
     )
 
     await orchestrator.run_campaign("Task", "develop", iterations=1)
 
-    # Assert retry logic: 3 attempts
-    assert mock_llm.execute.call_count == 3
-    # Merges with raw log
-    mock_git.merge_squash.assert_awaited_with(ANY, ANY, "raw log")
-
-
-@pytest.mark.asyncio
-async def test_async_orchestrator_run_campaign_no_llm_fallback(mock_settings: Settings) -> None:
-    # Test fallback logic when LLM client is missing
-    mock_agent = MagicMock(spec=AsyncJulesAgent)
-    mock_agent.__aenter__ = AsyncMock(return_value=mock_agent)
-    mock_agent.__aexit__ = AsyncMock(return_value=None)
-    mock_agent.mission_complete = True
-    mock_agent.launch = AsyncMock(return_value="sid")
-    mock_agent.wait_for_completion = AsyncMock(return_value=True)
-    mock_agent.teleport_and_sync = AsyncMock(return_value=True)
-
-    mock_strategy = MagicMock(spec=DefenseStep)
-    mock_strategy.execute = AsyncMock(return_value=StrategyResult(success=True, message="Success"))
-
-    mock_git = MagicMock(spec=AsyncGitInterface)
-    mock_git.checkout_new_branch = AsyncMock()
-    mock_git.get_commit_log = AsyncMock(return_value=GitCommit(message="raw log"))
-    mock_git.merge_squash = AsyncMock()
-    mock_git.delete_branch = AsyncMock()
-
-    mock_janitor = MagicMock(spec=JanitorService)
-    # Sanitize should be called as fallback
-    mock_janitor.sanitize_commit = MagicMock(return_value="sanitized log")
-
-    # NO LLM CLIENT
-    orchestrator = AsyncOrchestrator(
-        settings=mock_settings,
-        agent=mock_agent,
-        strategies=[mock_strategy],
-        git_interface=mock_git,
-        janitor_service=mock_janitor,
-        llm_client=None,
-    )
-
-    await orchestrator.run_campaign("Task", "develop", iterations=1)
-
-    # Verify fallback to sanitize_commit
-    mock_janitor.sanitize_commit.assert_called_with("raw log")
+    # Verify usage
+    mock_janitor.professionalize_commit.assert_awaited_with("raw log")
     mock_git.merge_squash.assert_awaited_with(ANY, ANY, "sanitized log")
 
 

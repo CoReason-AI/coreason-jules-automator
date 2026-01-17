@@ -6,14 +6,13 @@ from typing import List, Optional, Tuple
 from tenacity import AsyncRetrying, RetryError, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from coreason_jules_automator.async_api.agent import AsyncJulesAgent
-from coreason_jules_automator.async_api.llm import AsyncLLMClient
 from coreason_jules_automator.async_api.scm import AsyncGitInterface
 from coreason_jules_automator.config import Settings
 from coreason_jules_automator.domain.context import OrchestrationContext
 from coreason_jules_automator.domain.pipeline import DefenseStep
 from coreason_jules_automator.events import AutomationEvent, EventEmitter, EventType, LoguruEmitter
 from coreason_jules_automator.exceptions import AgentProcessError, JulesAutomatorError
-from coreason_jules_automator.llm.janitor import CommitMessageResponse, JanitorService
+from coreason_jules_automator.llm.janitor import JanitorService
 from coreason_jules_automator.utils.logger import logger
 
 
@@ -38,7 +37,6 @@ class AsyncOrchestrator:
         event_emitter: Optional[EventEmitter] = None,
         git_interface: Optional[AsyncGitInterface] = None,
         janitor_service: Optional[JanitorService] = None,
-        llm_client: Optional[AsyncLLMClient] = None,
     ) -> None:
         self.settings = settings
         self.agent = agent
@@ -46,7 +44,6 @@ class AsyncOrchestrator:
         self.event_emitter = event_emitter or LoguruEmitter()
         self.git = git_interface
         self.janitor = janitor_service
-        self.llm_client = llm_client
 
     async def run_cycle(self, task_description: str, branch_name: str) -> Tuple[bool, str]:
         """
@@ -269,24 +266,8 @@ class AsyncOrchestrator:
 
                     # Sans-I/O Refactor: Professionalize Commit
                     clean_msg = raw_log  # Default fallback
-                    if self.janitor and self.llm_client:
-                        try:
-                            req = self.janitor.build_professionalize_request(raw_log)
-                            # Simple single attempt for now, bypassing original retry logic for brevity in refactor
-                            # or implementing a simple loop here if needed.
-                            # Replicating simple retry loop here:
-                            for _ in range(3):
-                                try:
-                                    resp = await self.llm_client.execute(req, response_model=CommitMessageResponse)
-                                    clean_msg = resp.commit_text
-                                    break
-                                except Exception:
-                                    continue
-                        except Exception as e:
-                            logger.error(f"Professionalize commit failed: {e}")
-                    else:
-                        if self.janitor:
-                            clean_msg = self.janitor.sanitize_commit(raw_log)
+                    if self.janitor:
+                        clean_msg = await self.janitor.professionalize_commit(raw_log)
 
                     await self.git.merge_squash(iter_branch, agg_branch, clean_msg)
 

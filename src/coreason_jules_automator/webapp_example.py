@@ -83,7 +83,7 @@ async def run_orchestration_background(task: str, branch: str) -> None:
         settings = get_settings()
         llm_client = _get_async_llm_client(settings)
         prompt_manager = PromptManager()
-        janitor = JanitorService(prompt_manager=prompt_manager)
+        janitor = JanitorService(prompt_manager=prompt_manager, llm_client=llm_client)
 
         # Build Pipeline manually
         pipeline: List[DefenseStep] = []
@@ -91,9 +91,7 @@ async def run_orchestration_background(task: str, branch: str) -> None:
         pipeline.append(CodeReviewStep(settings=settings, gemini=gemini, event_emitter=composite_emitter))
         pipeline.append(GitPushStep(janitor=janitor, git=git, event_emitter=composite_emitter))
         pipeline.append(CIPollingStep(github=github, event_emitter=composite_emitter))
-        pipeline.append(
-            LogAnalysisStep(github=github, janitor=janitor, llm_client=llm_client, event_emitter=composite_emitter)
-        )
+        pipeline.append(LogAnalysisStep(github=github, janitor=janitor, event_emitter=composite_emitter))
 
         agent = AsyncJulesAgent(settings=settings)
 
@@ -104,7 +102,6 @@ async def run_orchestration_background(task: str, branch: str) -> None:
             event_emitter=composite_emitter,
             git_interface=git,
             janitor_service=janitor,
-            llm_client=llm_client,
         )
 
         success, msg = await orchestrator.run_cycle(task, branch)
