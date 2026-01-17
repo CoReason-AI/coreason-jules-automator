@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional
 
 from coreason_jules_automator.async_api import (
     AsyncGeminiInterface,
@@ -6,17 +6,78 @@ from coreason_jules_automator.async_api import (
     AsyncGitInterface,
     AsyncJulesAgent,
     AsyncLLMClient,
-    AsyncLocalDefenseStrategy,
     AsyncOpenAIAdapter,
     AsyncOrchestrator,
-    AsyncRemoteDefenseStrategy,
     AsyncShellExecutor,
 )
-from coreason_jules_automator.config import get_settings
-from coreason_jules_automator.events import CompositeEmitter, EventCollector, LoguruEmitter
+from coreason_jules_automator.config import Settings, get_settings
+from coreason_jules_automator.domain.pipeline import DefenseStep
+from coreason_jules_automator.events import CompositeEmitter, EventCollector, EventEmitter, LoguruEmitter
 from coreason_jules_automator.llm.janitor import JanitorService
 from coreason_jules_automator.llm.prompts import PromptManager
+from coreason_jules_automator.strategies.steps import (
+    CIPollingStep,
+    CodeReviewStep,
+    GitPushStep,
+    LogAnalysisStep,
+    SecurityScanStep,
+)
 from coreason_jules_automator.utils.logger import logger
+
+
+class PipelineBuilder:
+    """Builder for the defense pipeline."""
+
+    def __init__(
+        self,
+        settings: Settings,
+        gemini: AsyncGeminiInterface,
+        github: AsyncGitHubInterface,
+        git: AsyncGitInterface,
+        janitor: JanitorService,
+        llm_client: Optional[AsyncLLMClient],
+        event_emitter: Optional[EventEmitter],
+    ):
+        self.settings = settings
+        self.gemini = gemini
+        self.github = github
+        self.git = git
+        self.janitor = janitor
+        self.llm_client = llm_client
+        self.event_emitter = event_emitter
+
+    def build(self) -> List[DefenseStep]:
+        steps: List[DefenseStep] = []
+
+        # 1. Security Scan
+        if "security" in self.settings.extensions_enabled:
+            steps.append(
+                SecurityScanStep(settings=self.settings, gemini=self.gemini, event_emitter=self.event_emitter)
+            )
+
+        # 2. Code Review
+        if "code-review" in self.settings.extensions_enabled:
+            steps.append(
+                CodeReviewStep(settings=self.settings, gemini=self.gemini, event_emitter=self.event_emitter)
+            )
+
+        # 3. Git Push
+        steps.append(GitPushStep(janitor=self.janitor, git=self.git, event_emitter=self.event_emitter))
+
+        # 4. CI Polling
+        steps.append(CIPollingStep(github=self.github, event_emitter=self.event_emitter))
+
+        # 5. Log Analysis
+        steps.append(
+            LogAnalysisStep(
+                github=self.github,
+                janitor=self.janitor,
+                llm_client=self.llm_client,
+                event_emitter=self.event_emitter,
+            )
+        )
+
+        return steps
 
 
 class Container:
@@ -46,18 +107,17 @@ class Container:
         self.prompt_manager = PromptManager()
         self.janitor = JanitorService(prompt_manager=self.prompt_manager)
 
-        # Strategies
-        self.local_strategy = AsyncLocalDefenseStrategy(
-            settings=self.settings, gemini=self.gemini, event_emitter=self.composite_emitter
-        )
-        self.remote_strategy = AsyncRemoteDefenseStrategy(
+        # Pipeline Builder
+        self.pipeline_builder = PipelineBuilder(
             settings=self.settings,
+            gemini=self.gemini,
             github=self.github,
-            janitor=self.janitor,
             git=self.git,
+            janitor=self.janitor,
             llm_client=self.llm_client,
             event_emitter=self.composite_emitter,
         )
+        self.pipeline = self.pipeline_builder.build()
 
         # Agent
         self.agent = AsyncJulesAgent(settings=self.settings)
@@ -66,7 +126,7 @@ class Container:
         self.orchestrator = AsyncOrchestrator(
             settings=self.settings,
             agent=self.agent,
-            strategies=[self.local_strategy, self.remote_strategy],
+            strategies=self.pipeline,
             event_emitter=self.composite_emitter,
             git_interface=self.git,
             janitor_service=self.janitor,

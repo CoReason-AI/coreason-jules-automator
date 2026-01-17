@@ -8,9 +8,9 @@ from tenacity import AsyncRetrying, RetryError, retry_if_exception_type, stop_af
 from coreason_jules_automator.async_api.agent import AsyncJulesAgent
 from coreason_jules_automator.async_api.llm import AsyncLLMClient
 from coreason_jules_automator.async_api.scm import AsyncGitInterface
-from coreason_jules_automator.async_api.strategies import AsyncDefenseStrategy
 from coreason_jules_automator.config import Settings
 from coreason_jules_automator.domain.context import OrchestrationContext
+from coreason_jules_automator.domain.pipeline import DefenseStep
 from coreason_jules_automator.events import AutomationEvent, EventEmitter, EventType, LoguruEmitter
 from coreason_jules_automator.exceptions import AgentProcessError, JulesAutomatorError
 from coreason_jules_automator.llm.janitor import JanitorService
@@ -34,7 +34,7 @@ class AsyncOrchestrator:
         self,
         settings: Settings,
         agent: AsyncJulesAgent,
-        strategies: List[AsyncDefenseStrategy],
+        strategies: List[DefenseStep],
         event_emitter: Optional[EventEmitter] = None,
         git_interface: Optional[AsyncGitInterface] = None,
         janitor_service: Optional[JanitorService] = None,
