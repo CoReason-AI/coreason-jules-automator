@@ -16,7 +16,6 @@ def test_pipeline_builder_extensions() -> None:
         github=MagicMock(),
         git=MagicMock(),
         janitor=MagicMock(),
-        llm_client=MagicMock(),
         event_emitter=MagicMock(),
     )
 

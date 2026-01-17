@@ -2,13 +2,12 @@ from typing import List, Optional, Tuple
 
 from tenacity import AsyncRetrying, RetryError, retry_if_exception_type, stop_after_attempt, wait_exponential
 
-from coreason_jules_automator.async_api.llm import AsyncLLMClient
 from coreason_jules_automator.async_api.scm import AsyncGeminiInterface, AsyncGitHubInterface, AsyncGitInterface
 from coreason_jules_automator.config import Settings
 from coreason_jules_automator.domain.context import OrchestrationContext, StrategyResult
 from coreason_jules_automator.domain.scm import PullRequestStatus
 from coreason_jules_automator.events import AutomationEvent, EventEmitter, EventType, LoguruEmitter
-from coreason_jules_automator.llm.janitor import JanitorService, SummaryResponse
+from coreason_jules_automator.llm.janitor import JanitorService
 from coreason_jules_automator.utils.logger import logger
 
 
@@ -115,8 +114,7 @@ class GitPushStep:
             self.event_emitter.emit(AutomationEvent(type=EventType.CHECK_RUNNING, message="Pushing Code"))
 
             # Traceability: Add SID to commit
-            base_msg = f"feat: implementation for {branch_name} (SID: {sid})"
-            commit_msg = self.janitor.sanitize_commit(base_msg)
+            commit_msg = f"feat: implementation for {branch_name} (SID: {sid})"
 
             changes_pushed = await self.git.push_to_branch(branch_name, commit_msg)
 
@@ -244,12 +242,10 @@ class LogAnalysisStep:
         self,
         github: AsyncGitHubInterface,
         janitor: JanitorService,
-        llm_client: Optional[AsyncLLMClient] = None,
         event_emitter: Optional[EventEmitter] = None,
     ):
         self.github = github
         self.janitor = janitor
-        self.llm_client = llm_client
         self.event_emitter = event_emitter or LoguruEmitter()
 
     async def execute(self, context: OrchestrationContext) -> StrategyResult:
@@ -295,20 +291,8 @@ class LogAnalysisStep:
             full_logs = "\n".join(full_logs_list)
             log_snippet += f"\n\n--- Logs ---\n{full_logs}"
 
-            # Sans-I/O: Build Request -> Execute -> Return
-            if not self.llm_client:
-                logger.warning("No LLM client available for log summarization.")
-                return f"CI checks failed. {log_snippet}"
-
-            try:
-                req = self.janitor.build_summarize_request(log_snippet)
-                # Async execution
-                resp = await self.llm_client.execute(req, response_model=SummaryResponse)
-                summary = resp.summary
-                logger.info(f"Janitor Summary: {summary}")
-                return summary
-            except Exception as e:
-                logger.error(f"Janitor summarization failed: {e}")
-                return "Log summarization failed. Please check the logs directly."
+            summary = await self.janitor.summarize_logs(log_snippet)
+            logger.info(f"Janitor Summary: {summary}")
+            return summary
 
         return "CI checks failed but could not identify specific check failure."

@@ -1,8 +1,9 @@
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from coreason_jules_automator.llm.janitor import JanitorService
+from coreason_jules_automator.async_api.llm import AsyncLLMClient
+from coreason_jules_automator.llm.janitor import JanitorService, CommitMessageResponse, SummaryResponse
 from coreason_jules_automator.llm.prompts import PromptManager
 from coreason_jules_automator.llm.types import LLMRequest
 
@@ -11,55 +12,52 @@ def test_janitor_initialization() -> None:
     """Test JanitorService initializes with default prompt manager."""
     service = JanitorService()
     assert isinstance(service.prompt_manager, PromptManager)
+    assert service.llm_client is None
 
 
-def test_janitor_sanitize_commit() -> None:
-    """Test commit message sanitization."""
+@pytest.mark.asyncio
+async def test_professionalize_commit_no_client() -> None:
     janitor = JanitorService()
-    raw = "feat: add feature\n\nCo-authored-by: bot\nSigned-off-by: me"
-    clean = janitor.sanitize_commit(raw)
-    assert clean == "feat: add feature"
+    raw = "test commit"
+    result = await janitor.professionalize_commit(raw)
+    assert result == "test commit"
 
 
-def test_janitor_build_summarize_request() -> None:
-    """Test build_summarize_request returns correct LLMRequest."""
-    mock_prompt_manager = MagicMock()
-    mock_prompt_manager.render.return_value = "Rendered Prompt"
+@pytest.mark.asyncio
+async def test_professionalize_commit_with_client() -> None:
+    mock_client = AsyncMock(spec=AsyncLLMClient)
+    mock_client.execute.return_value = CommitMessageResponse(commit_text="Professional commit")
 
-    janitor = JanitorService(prompt_manager=mock_prompt_manager)
-    request = janitor.build_summarize_request("long log...")
+    janitor = JanitorService(llm_client=mock_client)
+    raw = "bad commit"
+    result = await janitor.professionalize_commit(raw)
 
+    assert result == "Professional commit"
+    mock_client.execute.assert_called_once()
+
+    # Verify request content roughly
+    call_args = mock_client.execute.call_args
+    request = call_args[0][0]
     assert isinstance(request, LLMRequest)
-    assert request.messages == [{"role": "user", "content": "Rendered Prompt"}]
-    assert request.max_tokens == 150
-    mock_prompt_manager.render.assert_called_once_with("janitor_summarize.j2", logs="long log...")
+    assert "bad commit" in request.messages[0]["content"]
 
 
-def test_janitor_build_summarize_request_template_error() -> None:
-    """Test build_summarize_request raises error on template failure."""
-    mock_prompt_manager = MagicMock()
-    mock_prompt_manager.render.side_effect = Exception("Template Error")
-
-    janitor = JanitorService(prompt_manager=mock_prompt_manager)
-
-    with pytest.raises(Exception, match="Template Error"):
-        janitor.build_summarize_request("log")
+@pytest.mark.asyncio
+async def test_summarize_logs_no_client() -> None:
+    janitor = JanitorService()
+    logs = "error logs"
+    result = await janitor.summarize_logs(logs)
+    assert "unavailable" in result
 
 
-def test_janitor_build_professionalize_request() -> None:
-    """Test build_professionalize_request returns correct LLMRequest."""
-    mock_prompt_manager = MagicMock()
-    mock_prompt_manager.render.return_value = "Professionalize Prompt"
+@pytest.mark.asyncio
+async def test_summarize_logs_with_client() -> None:
+    mock_client = AsyncMock(spec=AsyncLLMClient)
+    mock_client.execute.return_value = SummaryResponse(summary="Short summary")
 
-    janitor = JanitorService(prompt_manager=mock_prompt_manager)
+    janitor = JanitorService(llm_client=mock_client)
+    logs = "long logs"
+    result = await janitor.summarize_logs(logs)
 
-    # Check simple case
-    request = janitor.build_professionalize_request("simple feature")
-    assert isinstance(request, LLMRequest)
-    assert request.messages == [{"role": "user", "content": "Professionalize Prompt"}]
-    assert request.max_tokens == 200
-
-    # Check sanitization
-    raw = "wip feature\nCo-authored-by: bot"
-    janitor.build_professionalize_request(raw)
-    mock_prompt_manager.render.assert_called_with("janitor_professionalize.j2", commit_text="wip feature")
+    assert result == "Short summary"
+    mock_client.execute.assert_called_once()
