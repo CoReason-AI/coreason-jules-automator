@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from coreason_jules_automator.events import AutomationEvent, EventType
 from coreason_jules_automator.ui.console import RichConsoleEmitter
@@ -49,11 +49,7 @@ def test_rich_console_emitter_emit_check_running() -> None:
         emitter.start()
 
         # Test explicit check payload
-        event = AutomationEvent(
-            type=EventType.CHECK_RUNNING,
-            message="Running Scan",
-            payload={"check": "security"}
-        )
+        event = AutomationEvent(type=EventType.CHECK_RUNNING, message="Running Scan", payload={"check": "security"})
         emitter.emit(event)
 
         assert emitter.current_check == "security"
@@ -76,9 +72,7 @@ def test_rich_console_emitter_emit_check_result() -> None:
 
         # Result for explicit check
         event = AutomationEvent(
-            type=EventType.CHECK_RESULT,
-            message="Scan passed",
-            payload={"check": "security", "status": "pass"}
+            type=EventType.CHECK_RESULT, message="Scan passed", payload={"check": "security", "status": "pass"}
         )
         emitter.emit(event)
         assert emitter.checks["security"]["status"] == "pass"
