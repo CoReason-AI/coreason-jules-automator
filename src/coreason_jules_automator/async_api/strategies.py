@@ -1,13 +1,19 @@
-import asyncio
-from typing import AsyncGenerator, List, Optional, Protocol, Tuple, TypedDict, cast
+from typing import List, Optional, Protocol, Tuple
+
+from tenacity import AsyncRetrying, RetryError, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from coreason_jules_automator.async_api.llm import AsyncLLMClient
 from coreason_jules_automator.async_api.scm import AsyncGeminiInterface, AsyncGitHubInterface, AsyncGitInterface
-from coreason_jules_automator.config import get_settings
+from coreason_jules_automator.config import Settings
 from coreason_jules_automator.domain.context import OrchestrationContext, StrategyResult
+from coreason_jules_automator.domain.scm import PullRequestStatus
 from coreason_jules_automator.events import AutomationEvent, EventEmitter, EventType, LoguruEmitter
 from coreason_jules_automator.llm.janitor import JanitorService
 from coreason_jules_automator.utils.logger import logger
+
+class TryAgain(Exception):
+    """Internal exception to trigger retry in tenacity."""
+    pass
 
 
 class AsyncDefenseStrategy(Protocol):
@@ -32,18 +38,18 @@ class AsyncLocalDefenseStrategy:
     Wraps AsyncGeminiInterface.
     """
 
-    def __init__(self, gemini: AsyncGeminiInterface, event_emitter: Optional[EventEmitter] = None):
+    def __init__(self, settings: Settings, gemini: AsyncGeminiInterface, event_emitter: Optional[EventEmitter] = None):
+        self.settings = settings
         self.gemini = gemini
         self.event_emitter = event_emitter or LoguruEmitter()
 
     async def execute(self, context: OrchestrationContext) -> StrategyResult:
-        settings = get_settings()
         self.event_emitter.emit(AutomationEvent(type=EventType.PHASE_START, message="Executing Line 1: Local Defense"))
         passed = True
         errors = []
 
         # Security Scan
-        if "security" in settings.extensions_enabled:
+        if "security" in self.settings.extensions_enabled:
             self.event_emitter.emit(
                 AutomationEvent(
                     type=EventType.CHECK_RUNNING,
@@ -75,7 +81,7 @@ class AsyncLocalDefenseStrategy:
             return StrategyResult(success=False, message="\n".join(errors))
 
         # Code Review
-        if "code-review" in settings.extensions_enabled:
+        if "code-review" in self.settings.extensions_enabled:
             self.event_emitter.emit(
                 AutomationEvent(
                     type=EventType.CHECK_RUNNING,
@@ -110,13 +116,6 @@ class AsyncLocalDefenseStrategy:
             return StrategyResult(success=False, message="\n".join(errors))
 
 
-class GithubCheck(TypedDict):
-    name: str
-    status: str
-    conclusion: Optional[str]
-    url: str
-
-
 class AsyncRemoteDefenseStrategy:
     """
     Implements 'Line 2' of the defense strategy (Remote CI/CD Verification).
@@ -125,12 +124,14 @@ class AsyncRemoteDefenseStrategy:
 
     def __init__(
         self,
+        settings: Settings,
         github: AsyncGitHubInterface,
         janitor: JanitorService,
         git: AsyncGitInterface,
         llm_client: Optional[AsyncLLMClient] = None,
         event_emitter: Optional[EventEmitter] = None,
     ):
+        self.settings = settings
         self.github = github
         self.janitor = janitor
         self.git = git
@@ -181,39 +182,7 @@ class AsyncRemoteDefenseStrategy:
         # 2. Poll Checks
         return await self._run_ci_polling(branch_name)
 
-    async def _fetch_checks_safely(self) -> Optional[List[GithubCheck]]:
-        """Fetches PR checks safely, handling RuntimeErrors."""
-        try:
-            # We cast to List[GithubCheck] as we expect the interface to return dicts matching this shape
-            checks = await self.github.get_pr_checks()
-            return cast(List[GithubCheck], checks)
-        except RuntimeError as e:
-            logger.warning(f"Poll attempt failed: {e}")
-            self.event_emitter.emit(
-                AutomationEvent(type=EventType.ERROR, message=f"Poll attempt failed: {e}", payload={"error": str(e)})
-            )
-            return None
-
-    async def _poll_ci_checks(
-        self, max_attempts: int = 30, interval: int = 10
-    ) -> AsyncGenerator[List[GithubCheck], None]:
-        """Generator that yields check status, handling the sleep and retry logic."""
-        for i in range(max_attempts):
-            self.event_emitter.emit(
-                AutomationEvent(
-                    type=EventType.CHECK_RUNNING,
-                    message="Waiting for checks...",
-                    payload={"attempt": i + 1, "max_attempts": max_attempts},
-                )
-            )
-
-            checks = await self._fetch_checks_safely()
-            if checks is not None:
-                yield checks
-
-            await asyncio.sleep(interval)
-
-    def _analyze_checks(self, checks: List[GithubCheck]) -> Tuple[bool, bool]:
+    def _analyze_checks(self, checks: List[PullRequestStatus]) -> Tuple[bool, bool]:
         """Returns (all_completed, any_failure)."""
         if not checks:
             return False, False
@@ -222,74 +191,103 @@ class AsyncRemoteDefenseStrategy:
         any_failure = False
 
         for check in checks:
-            if check.get("status") != "completed":
+            if check.status != "completed":
                 all_completed = False
-            elif check.get("conclusion") != "success":
+            elif check.conclusion != "success":
                 any_failure = True
 
         return all_completed, any_failure
 
     async def _run_ci_polling(self, branch_name: str) -> StrategyResult:
         """
-        Polls CI checks and returns the result.
+        Polls CI checks and returns the result using tenacity.
         """
-        max_poll_attempts = 30
         self.event_emitter.emit(
             AutomationEvent(
                 type=EventType.CHECK_RUNNING,
                 message="Polling CI Checks",
-                payload={"max_attempts": max_poll_attempts},
             )
         )
 
-        async for checks in self._poll_ci_checks(max_attempts=max_poll_attempts):
-            all_completed, any_failure = self._analyze_checks(checks)
-
-            if all_completed:
-                if not any_failure:
+        try:
+            async for attempt in AsyncRetrying(
+                stop=stop_after_attempt(30),
+                wait=wait_exponential(multiplier=1, min=2, max=10),
+                retry=retry_if_exception_type(TryAgain),
+                reraise=False,
+            ):
+                with attempt:
                     self.event_emitter.emit(
                         AutomationEvent(
-                            type=EventType.CHECK_RESULT,
-                            message="Line 2 defense passed. Success!",
-                            payload={"status": "pass"},
+                            type=EventType.CHECK_RUNNING,
+                            message=f"Polling attempt {attempt.retry_state.attempt_number}",
+                            payload={"attempt": attempt.retry_state.attempt_number},
                         )
                     )
-                    return StrategyResult(success=True, message="CI checks passed")
-                else:
-                    # Red - Get logs and summarize
-                    summary = await self._handle_ci_failure(checks, branch_name)
-                    self.event_emitter.emit(
-                        AutomationEvent(
-                            type=EventType.CHECK_RESULT,
-                            message=f"CI Failure: {summary}",
-                            payload={"status": "fail", "summary": summary},
+
+                    try:
+                        checks = await self.github.get_pr_checks()
+                    except RuntimeError as e:
+                        logger.warning(f"Poll attempt failed: {e}")
+                        raise TryAgain(f"Fetch failed: {e}")
+
+                    all_completed, any_failure = self._analyze_checks(checks)
+
+                    if not all_completed:
+                        raise TryAgain("Checks not completed yet")
+
+                    if not any_failure:
+                        self.event_emitter.emit(
+                            AutomationEvent(
+                                type=EventType.CHECK_RESULT,
+                                message="Line 2 defense passed. Success!",
+                                payload={"status": "pass"},
+                            )
                         )
-                    )
-                    return StrategyResult(success=False, message=summary)
+                        return StrategyResult(success=True, message="CI checks passed")
+                    else:
+                        # Red - Get logs and summarize
+                        summary = await self._handle_ci_failure(checks, branch_name)
+                        self.event_emitter.emit(
+                            AutomationEvent(
+                                type=EventType.CHECK_RESULT,
+                                message=f"CI Failure: {summary}",
+                                payload={"status": "fail", "summary": summary},
+                            )
+                        )
+                        return StrategyResult(success=False, message=summary)
 
-        error_msg = "Line 2 timeout: Checks did not complete."
-        logger.error(error_msg)
-        return StrategyResult(success=False, message=error_msg)
+        except RetryError:
+            error_msg = "Line 2 timeout: Checks did not complete."
+            logger.error(error_msg)
+            return StrategyResult(success=False, message=error_msg)
 
-    async def _handle_ci_failure(self, checks: List[GithubCheck], branch_name: str) -> str:
+    async def _handle_ci_failure(self, checks: List[PullRequestStatus], branch_name: str) -> str:
         """
         Uses Janitor to summarize failure logs.
         """
         logger.info("Analyzing CI failure...")
         # Find failed check
-        failed_check = next((c for c in checks if c.get("conclusion") != "success"), None)
+        failed_check = next((c for c in checks if c.conclusion != "success"), None)
         if failed_check:
             log_snippet = (
-                f"Check {failed_check.get('name', 'unknown')} failed. URL: {failed_check.get('url', 'unknown')}"
+                f"Check {failed_check.name} failed. URL: {failed_check.url}"
             )
 
-            # Get full logs if possible
-            full_logs = await self.github.get_latest_run_log(branch_name)
-            if full_logs:
-                # Truncate if too long (rough check, could be improved)
-                if len(full_logs) > 10000:
-                    full_logs = full_logs[-10000:]
-                log_snippet += f"\n\n--- Logs ---\n{full_logs}"
+            # Get full logs if possible (Streamed)
+            full_logs_list = []
+            try:
+                async for line in self.github.get_latest_run_log(branch_name):
+                    full_logs_list.append(line)
+                    # Limit to avoid RAM issues if very large
+                    if len(full_logs_list) > 2000:
+                        full_logs_list.pop(0)  # Keep tail
+            except Exception as e:
+                logger.error(f"Failed to stream logs: {e}")
+                full_logs_list.append(f"Error streaming logs: {e}")
+
+            full_logs = "\n".join(full_logs_list)
+            log_snippet += f"\n\n--- Logs ---\n{full_logs}"
 
             # Sans-I/O: Build Request -> Execute -> Return
             if not self.llm_client:
