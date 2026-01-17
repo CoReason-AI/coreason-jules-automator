@@ -2,7 +2,6 @@ from typing import Any, AsyncGenerator, Dict
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from pydantic import SecretStr
 
 from coreason_jules_automator.async_api.llm import AsyncLLMClient
