@@ -1,14 +1,20 @@
 import sys
+from typing import Dict, Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from pydantic import SecretStr
 
 from coreason_jules_automator.async_api.agent import AsyncJulesAgent
+from coreason_jules_automator.async_api.llm import AsyncLLMClient
 from coreason_jules_automator.async_api.orchestrator import AsyncOrchestrator
-from coreason_jules_automator.async_api.strategies import AsyncDefenseStrategy
+from coreason_jules_automator.async_api.scm import AsyncGitHubInterface, AsyncGitInterface
+from coreason_jules_automator.async_api.strategies import AsyncDefenseStrategy, AsyncRemoteDefenseStrategy
 from coreason_jules_automator.config import Settings
 from coreason_jules_automator.di import Container
+from coreason_jules_automator.domain.context import OrchestrationContext
+from coreason_jules_automator.domain.scm import PullRequestStatus
+from coreason_jules_automator.llm.janitor import JanitorService
 
 # --- Agent Tests ---
 
@@ -111,6 +117,117 @@ async def test_orchestrator_strategy_exception(mock_settings: Settings) -> None:
 
     assert success is False
     assert "Strategy error: Strategy Boom" in feedback
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_run_cycle_loop_exit(mock_settings: Settings) -> None:
+    """Test run_cycle fallback return if retry loop exits unexpectedly (line 108)."""
+    mock_agent = MagicMock(spec=AsyncJulesAgent)
+
+    class MockAsyncRetrying:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            raise StopAsyncIteration
+
+    orchestrator = AsyncOrchestrator(settings=mock_settings, agent=mock_agent, strategies=[])
+
+    with patch("coreason_jules_automator.async_api.orchestrator.AsyncRetrying", MockAsyncRetrying):
+        success, feedback = await orchestrator.run_cycle("task", "branch")
+        assert success is False
+        assert feedback == "Orchestration loop exited unexpectedly"
+
+
+# --- Strategies Tests ---
+
+
+@pytest.mark.asyncio
+async def test_remote_strategy_poll_loop_exit(mock_settings: Settings) -> None:
+    """Test _run_ci_polling fallback return if retry loop exits unexpectedly (line 269)."""
+    mock_git = MagicMock(spec=AsyncGitInterface)
+    mock_git.push_to_branch = AsyncMock(return_value=True)
+    mock_github = MagicMock(spec=AsyncGitHubInterface)
+    mock_janitor = MagicMock(spec=JanitorService)
+
+    strategy = AsyncRemoteDefenseStrategy(
+        settings=mock_settings, github=mock_github, janitor=mock_janitor, git=mock_git
+    )
+    context = OrchestrationContext(task_id="t1", branch_name="b1", session_id="s1")
+
+    class MockAsyncRetrying:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            raise StopAsyncIteration
+
+    with patch("coreason_jules_automator.async_api.strategies.AsyncRetrying", MockAsyncRetrying):
+        result = await strategy.execute(context)
+        assert result.success is False
+        assert result.message == "Polling loop exited unexpectedly"
+
+
+@pytest.mark.asyncio
+async def test_remote_strategy_handle_ci_failure_no_llm_direct(mock_settings: Settings) -> None:
+    """Test _handle_ci_failure when llm_client is None (lines 289-291)."""
+    mock_git = MagicMock(spec=AsyncGitInterface)
+    mock_github = MagicMock(spec=AsyncGitHubInterface)
+    mock_janitor = MagicMock(spec=JanitorService)
+
+    # Ensure no llm_client
+    strategy = AsyncRemoteDefenseStrategy(
+        settings=mock_settings, github=mock_github, janitor=mock_janitor, git=mock_git, llm_client=None
+    )
+
+    checks = [PullRequestStatus(name="check1", status="completed", conclusion="failure", url="http://fail")]
+
+    # We mock get_latest_run_log to prevent it from doing real work
+    mock_github.get_latest_run_log = MagicMock()
+    mock_github.get_latest_run_log.return_value.__aiter__.return_value = []
+
+    # Call private method directly
+    msg = await strategy._handle_ci_failure(checks, "branch")
+
+    assert "CI checks failed" in msg
+    assert "Check check1 failed" in msg
+    assert "Janitor Summary" not in msg
+
+
+@pytest.mark.asyncio
+async def test_remote_strategy_log_streaming_error(mock_settings: Settings) -> None:
+    """Test exception handling during log streaming (lines 289-291)."""
+    mock_git = MagicMock(spec=AsyncGitInterface)
+    mock_github = MagicMock(spec=AsyncGitHubInterface)
+    mock_janitor = MagicMock(spec=JanitorService)
+    # Mock LLM to avoid "No LLM client" block
+    mock_llm = MagicMock(spec=AsyncLLMClient)
+    mock_llm.execute = AsyncMock(return_value=MagicMock(content="Summary"))
+    mock_janitor.build_summarize_request = MagicMock()
+
+    strategy = AsyncRemoteDefenseStrategy(
+        settings=mock_settings, github=mock_github, janitor=mock_janitor, git=mock_git, llm_client=mock_llm
+    )
+
+    checks = [PullRequestStatus(name="check1", status="completed", conclusion="failure", url="http://fail")]
+
+    # Mock get_latest_run_log to raise exception during iteration
+    async def mock_stream(branch):
+        yield "line1"
+        raise Exception("Stream Failed")
+
+    mock_github.get_latest_run_log = mock_stream
+
+    msg = await strategy._handle_ci_failure(checks, "branch")
+
+    # The exception is caught and appended to the log
+    assert "Error streaming logs: Stream Failed" in str(mock_janitor.build_summarize_request.call_args)
 
 
 # --- CLI Tests ---
