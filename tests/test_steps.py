@@ -139,3 +139,73 @@ async def test_log_analysis_step_skips_on_success(mock_settings: Settings) -> No
     result = await step.execute(context)
     assert result.success is True
     assert "No analysis needed" in result.message
+
+
+@pytest.mark.asyncio
+async def test_log_analysis_step_large_logs(mock_settings: Settings) -> None:
+    mock_github = MagicMock(spec=AsyncGitHubInterface)
+    # Mock log stream
+    async def mock_stream(branch_name: str) -> AsyncGenerator[str, None]:
+        for i in range(2500):
+            yield f"log line {i}"
+
+    mock_github.get_latest_run_log.side_effect = mock_stream
+
+    mock_janitor = MagicMock(spec=JanitorService)
+    mock_janitor.build_summarize_request = MagicMock()
+
+    mock_llm = MagicMock(spec=AsyncLLMClient)
+    # Fix: Return object with summary attribute
+    mock_llm.execute = AsyncMock(return_value=MagicMock(summary="Summary of error"))
+
+    step = LogAnalysisStep(github=mock_github, janitor=mock_janitor, llm_client=mock_llm)
+
+    context = OrchestrationContext(
+        task_id="t1",
+        branch_name="b1",
+        session_id="s1",
+        pipeline_data={
+            "ci_passed": False,
+            "ci_checks": [PullRequestStatus(name="check1", status="completed", conclusion="failure", url="http://url")],
+        },
+    )
+
+    result = await step.execute(context)
+    assert result.success is False
+    mock_janitor.build_summarize_request.assert_called()
+    # Verify truncation happened in arguments passed to janitor
+    args = mock_janitor.build_summarize_request.call_args[0][0]
+    assert "log line 2499" in args
+    assert "log line 0" not in args
+
+
+@pytest.mark.asyncio
+async def test_log_analysis_step_stream_error(mock_settings: Settings) -> None:
+    mock_github = MagicMock(spec=AsyncGitHubInterface)
+
+    async def mock_stream(branch_name: str) -> AsyncGenerator[str, None]:
+        raise Exception("Stream failed")
+        yield "unreachable"
+
+    mock_github.get_latest_run_log.side_effect = mock_stream
+
+    mock_llm = MagicMock(spec=AsyncLLMClient)
+    # Fix: Return object with summary attribute
+    mock_llm.execute = AsyncMock(return_value=MagicMock(summary="Summary of error"))
+
+    step = LogAnalysisStep(github=mock_github, janitor=MagicMock(), llm_client=mock_llm)
+    step.janitor = MagicMock() # Ensure janitor is a mock
+
+    context = OrchestrationContext(
+        task_id="t1",
+        branch_name="b1",
+        session_id="s1",
+        pipeline_data={
+            "ci_passed": False,
+            "ci_checks": [PullRequestStatus(name="check1", status="completed", conclusion="failure", url="http://url")],
+        },
+    )
+
+    result = await step.execute(context)
+    assert result.success is False
+    assert "Summary of error" in result.message
