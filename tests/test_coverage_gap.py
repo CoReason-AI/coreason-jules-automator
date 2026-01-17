@@ -152,8 +152,8 @@ def test_cli_campaign_exception() -> None:
     # Need to also patch RichConsoleEmitter to avoid side effects or errors during init if Container fails
     with patch("coreason_jules_automator.cli.Container", side_effect=Exception("Campaign Error")):
         with patch("coreason_jules_automator.cli.RichConsoleEmitter"):
-             result = runner.invoke(app, ["campaign", "task"])
-             assert result.exit_code == 1
+            result = runner.invoke(app, ["campaign", "task"])
+            assert result.exit_code == 1
 
 
 # --- DI Tests ---

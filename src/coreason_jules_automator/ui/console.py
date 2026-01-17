@@ -114,5 +114,5 @@ class RichConsoleEmitter:
             self.live.update(self.generate_table())
 
         elif event.type == EventType.ERROR:
-             self.checks["Error"] = {"status": "fail", "message": event.message}
-             self.live.update(self.generate_table())
+            self.checks["Error"] = {"status": "fail", "message": event.message}
+            self.live.update(self.generate_table())

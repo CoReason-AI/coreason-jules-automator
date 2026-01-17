@@ -3,7 +3,6 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from pydantic import BaseModel
 
 from coreason_jules_automator.async_api.agent import AsyncJulesAgent

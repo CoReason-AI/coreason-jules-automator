@@ -92,9 +92,7 @@ async def run_orchestration_background(task: str, branch: str) -> None:
         pipeline.append(GitPushStep(janitor=janitor, git=git, event_emitter=composite_emitter))
         pipeline.append(CIPollingStep(github=github, event_emitter=composite_emitter))
         pipeline.append(
-            LogAnalysisStep(
-                github=github, janitor=janitor, llm_client=llm_client, event_emitter=composite_emitter
-            )
+            LogAnalysisStep(github=github, janitor=janitor, llm_client=llm_client, event_emitter=composite_emitter)
         )
 
         agent = AsyncJulesAgent(settings=settings)
