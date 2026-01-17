@@ -94,11 +94,12 @@ class AsyncShellExecutor:
 
             await asyncio.wait_for(process.wait(), timeout=timeout)
 
-            if process.returncode != 0:
+            if process.returncode is None or process.returncode != 0:
                 stderr_output = await process.stderr.read() if process.stderr else b""
+                exit_code = process.returncode if process.returncode is not None else -1
                 raise ShellError(
                     f"Command failed with exit code {process.returncode}",
-                    CommandResult(exit_code=process.returncode, stdout="", stderr=stderr_output.decode()),
+                    CommandResult(exit_code=exit_code, stdout="", stderr=stderr_output.decode()),
                 )
 
         except asyncio.TimeoutError as e:

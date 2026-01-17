@@ -103,6 +103,9 @@ class AsyncOrchestrator:
             self._emit_failure("Max retries reached.")
             return False, last_msg
 
+        # Fallback if loop finishes without returning (should not happen with infinite retries/reraise=False but good for mypy)
+        return False, "Orchestration loop exited unexpectedly"
+
     def _build_task_prompt(self, task: str, last_error: str, attempt: int) -> str:
         """Constructs the prompt, appending feedback if this is a retry."""
         if attempt > 1 and last_error:

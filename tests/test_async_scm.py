@@ -4,6 +4,7 @@ import pytest
 
 from coreason_jules_automator.async_api.scm import AsyncGeminiInterface, AsyncGitHubInterface, AsyncGitInterface
 from coreason_jules_automator.async_api.shell import AsyncShellExecutor
+from coreason_jules_automator.domain.scm import PullRequestStatus
 from coreason_jules_automator.utils.shell import CommandResult, ShellError
 
 # --- AsyncGitInterface Tests ---
@@ -143,8 +144,8 @@ async def test_git_get_commit_log() -> None:
     mock_shell.run = AsyncMock(return_value=CommandResult(0, "Log content", ""))
     git = AsyncGitInterface(shell_executor=mock_shell)
 
-    log = await git.get_commit_log("base", "head")
-    assert log == "Log content"
+    log_commit = await git.get_commit_log("base", "head")
+    assert log_commit.message == "Log content"
 
 
 @pytest.mark.asyncio
@@ -198,12 +199,14 @@ async def test_github_init_no_executable() -> None:
 @pytest.mark.asyncio
 async def test_github_get_pr_checks() -> None:
     mock_shell = MagicMock(spec=AsyncShellExecutor)
-    mock_shell.run = AsyncMock(return_value=CommandResult(0, '[{"name": "check1"}]', ""))
+    # Return valid JSON for Pydantic model
+    mock_shell.run = AsyncMock(return_value=CommandResult(0, '[{"name": "check1", "status": "completed", "url": "http://url"}]', ""))
     gh = AsyncGitHubInterface(shell_executor=mock_shell)
 
     checks = await gh.get_pr_checks()
     assert len(checks) == 1
-    assert checks[0]["name"] == "check1"
+    assert isinstance(checks[0], PullRequestStatus)
+    assert checks[0].name == "check1"
 
 
 @pytest.mark.asyncio
@@ -240,15 +243,22 @@ async def test_github_get_pr_checks_command_error() -> None:
 async def test_github_get_latest_run_log_success() -> None:
     mock_shell = MagicMock(spec=AsyncShellExecutor)
     mock_shell.run = AsyncMock(
-        side_effect=[
-            CommandResult(0, '[{"databaseId": 123}]', ""),  # list
-            CommandResult(0, "Log Content", ""),  # view
-        ]
+        return_value=CommandResult(0, '[{"databaseId": 123}]', "")
     )
+    # Mock stream for view command
+    async def mock_stream(command, timeout=300):
+        yield "Log Line 1"
+        yield "Log Line 2"
+
+    mock_shell.stream = mock_stream  # type: ignore
+
     gh = AsyncGitHubInterface(shell_executor=mock_shell)
 
-    log = await gh.get_latest_run_log("feat")
-    assert log == "Log Content"
+    logs = []
+    async for line in gh.get_latest_run_log("feat"):
+        logs.append(line)
+
+    assert logs == ["Log Line 1", "Log Line 2"]
 
 
 @pytest.mark.asyncio
@@ -257,8 +267,12 @@ async def test_github_get_latest_run_log_no_runs() -> None:
     mock_shell.run = AsyncMock(return_value=CommandResult(0, "[]", ""))
     gh = AsyncGitHubInterface(shell_executor=mock_shell)
 
-    log = await gh.get_latest_run_log("feat")
-    assert "No workflow runs found" in log
+    logs = []
+    async for line in gh.get_latest_run_log("feat"):
+        logs.append(line)
+
+    assert len(logs) == 1
+    assert "No workflow runs found" in logs[0]
 
 
 @pytest.mark.asyncio
@@ -267,8 +281,12 @@ async def test_github_get_latest_run_log_no_id() -> None:
     mock_shell.run = AsyncMock(return_value=CommandResult(0, '[{"databaseId": null}]', ""))
     gh = AsyncGitHubInterface(shell_executor=mock_shell)
 
-    log = await gh.get_latest_run_log("feat")
-    assert "Run ID not found" in log
+    logs = []
+    async for line in gh.get_latest_run_log("feat"):
+        logs.append(line)
+
+    assert len(logs) == 1
+    assert "Run ID not found" in logs[0]
 
 
 @pytest.mark.asyncio
@@ -277,8 +295,12 @@ async def test_github_get_latest_run_log_json_error() -> None:
     mock_shell.run = AsyncMock(return_value=CommandResult(0, "invalid json", ""))
     gh = AsyncGitHubInterface(shell_executor=mock_shell)
 
-    log = await gh.get_latest_run_log("feat")
-    assert "Failed to parse run list" in log
+    logs = []
+    async for line in gh.get_latest_run_log("feat"):
+        logs.append(line)
+
+    assert len(logs) == 1
+    assert "Failed to parse run list" in logs[0]
 
 
 @pytest.mark.asyncio
@@ -287,8 +309,12 @@ async def test_github_get_latest_run_log_error() -> None:
     mock_shell.run = AsyncMock(side_effect=ShellError("Fail", CommandResult(1, "", "")))
     gh = AsyncGitHubInterface(shell_executor=mock_shell)
 
-    log = await gh.get_latest_run_log("feat")
-    assert "Failed to fetch run logs" in log
+    logs = []
+    async for line in gh.get_latest_run_log("feat"):
+        logs.append(line)
+
+    assert len(logs) == 1
+    assert "Failed to fetch run logs" in logs[0]
 
 
 # --- AsyncGeminiInterface Tests ---

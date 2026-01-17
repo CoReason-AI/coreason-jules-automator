@@ -79,8 +79,11 @@ async def run_orchestration_background(task: str, branch: str) -> None:
         prompt_manager = PromptManager()
         janitor = JanitorService(prompt_manager=prompt_manager)
 
-        local_strategy = AsyncLocalDefenseStrategy(gemini=gemini, event_emitter=composite_emitter)
+        local_strategy = AsyncLocalDefenseStrategy(
+            settings=settings, gemini=gemini, event_emitter=composite_emitter
+        )
         remote_strategy = AsyncRemoteDefenseStrategy(
+            settings=settings,
             github=github,
             janitor=janitor,
             git=git,
@@ -88,9 +91,10 @@ async def run_orchestration_background(task: str, branch: str) -> None:
             event_emitter=composite_emitter,
         )
 
-        agent = AsyncJulesAgent()
+        agent = AsyncJulesAgent(settings=settings)
 
         orchestrator = AsyncOrchestrator(
+            settings=settings,
             agent=agent,
             strategies=[local_strategy, remote_strategy],
             event_emitter=composite_emitter,
