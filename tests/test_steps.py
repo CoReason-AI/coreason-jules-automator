@@ -250,10 +250,11 @@ async def test_ci_polling_step_fetch_error_retry_failure(mock_settings: Settings
 async def test_log_analysis_step_janitor_error(mock_settings: Settings) -> None:
     mock_github = MagicMock(spec=AsyncGitHubInterface)
     # Return failure so analysis runs
-    mock_github.get_latest_run_log.side_effect = lambda b: (x for x in ["log"]) # synchronous iterator? No, needs async
+    mock_github.get_latest_run_log.side_effect = lambda b: (x for x in ["log"])  # synchronous iterator? No, needs async
 
     async def mock_stream(branch_name: str) -> AsyncGenerator[str, None]:
         yield "log"
+
     mock_github.get_latest_run_log = mock_stream
 
     mock_janitor = MagicMock(spec=JanitorService)
@@ -397,9 +398,11 @@ async def test_log_analysis_step_stream_error(mock_settings: Settings) -> None:
 @pytest.mark.asyncio
 async def test_log_analysis_step_no_llm_warning(mock_settings: Settings) -> None:
     mock_github = MagicMock(spec=AsyncGitHubInterface)
+
     # Mock log stream
     async def mock_stream(branch_name: str) -> AsyncGenerator[str, None]:
         yield "log"
+
     mock_github.get_latest_run_log.side_effect = mock_stream
 
     # NO LLM CLIENT
