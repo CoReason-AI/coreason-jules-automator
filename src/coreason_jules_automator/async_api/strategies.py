@@ -1,27 +1,27 @@
 import asyncio
-from typing import Any, AsyncGenerator, Dict, List, Optional, Protocol, Tuple, TypedDict, cast
+from typing import AsyncGenerator, List, Optional, Protocol, Tuple, TypedDict, cast
 
 from coreason_jules_automator.async_api.llm import AsyncLLMClient
 from coreason_jules_automator.async_api.scm import AsyncGeminiInterface, AsyncGitHubInterface, AsyncGitInterface
 from coreason_jules_automator.config import get_settings
+from coreason_jules_automator.domain.context import OrchestrationContext, StrategyResult
 from coreason_jules_automator.events import AutomationEvent, EventEmitter, EventType, LoguruEmitter
 from coreason_jules_automator.llm.janitor import JanitorService
-from coreason_jules_automator.strategies.base import DefenseResult
 from coreason_jules_automator.utils.logger import logger
 
 
 class AsyncDefenseStrategy(Protocol):
     """Protocol for async defense strategies."""
 
-    async def execute(self, context: Dict[str, Any]) -> DefenseResult:
+    async def execute(self, context: OrchestrationContext) -> StrategyResult:
         """
         Executes the defense strategy asynchronously.
 
         Args:
-            context: Context dictionary containing necessary information.
+            context: OrchestrationContext containing necessary information.
 
         Returns:
-            DefenseResult indicating success or failure.
+            StrategyResult indicating success or failure.
         """
         ...  # pragma: no cover
 
@@ -36,7 +36,7 @@ class AsyncLocalDefenseStrategy:
         self.gemini = gemini
         self.event_emitter = event_emitter or LoguruEmitter()
 
-    async def execute(self, context: Dict[str, Any]) -> DefenseResult:
+    async def execute(self, context: OrchestrationContext) -> StrategyResult:
         settings = get_settings()
         self.event_emitter.emit(AutomationEvent(type=EventType.PHASE_START, message="Executing Line 1: Local Defense"))
         passed = True
@@ -72,7 +72,7 @@ class AsyncLocalDefenseStrategy:
                 )
 
         if not passed:
-            return DefenseResult(success=False, message="\n".join(errors))
+            return StrategyResult(success=False, message="\n".join(errors))
 
         # Code Review
         if "code-review" in settings.extensions_enabled:
@@ -105,9 +105,9 @@ class AsyncLocalDefenseStrategy:
                 )
 
         if passed:
-            return DefenseResult(success=True, message="Local checks passed")
+            return StrategyResult(success=True, message="Local checks passed")
         else:
-            return DefenseResult(success=False, message="\n".join(errors))
+            return StrategyResult(success=False, message="\n".join(errors))
 
 
 class GithubCheck(TypedDict):
@@ -137,12 +137,9 @@ class AsyncRemoteDefenseStrategy:
         self.llm_client = llm_client
         self.event_emitter = event_emitter or LoguruEmitter()
 
-    async def execute(self, context: Dict[str, Any]) -> DefenseResult:
-        branch_name = context.get("branch_name")
-        if not branch_name:
-            return DefenseResult(success=False, message="Missing branch_name in context")
-
-        sid = context.get("sid", "unknown")
+    async def execute(self, context: OrchestrationContext) -> StrategyResult:
+        branch_name = context.branch_name
+        sid = context.session_id
 
         self.event_emitter.emit(AutomationEvent(type=EventType.PHASE_START, message="Executing Line 2: Remote Defense"))
 
@@ -161,7 +158,7 @@ class AsyncRemoteDefenseStrategy:
                 self.event_emitter.emit(
                     AutomationEvent(type=EventType.CHECK_RESULT, message=msg, payload={"status": "warn"})
                 )
-                return DefenseResult(success=True, message="No changes detected. Task completed.")
+                return StrategyResult(success=True, message="No changes detected. Task completed.")
 
             self.event_emitter.emit(
                 AutomationEvent(
@@ -179,7 +176,7 @@ class AsyncRemoteDefenseStrategy:
                     payload={"status": "fail", "error": str(e)},
                 )
             )
-            return DefenseResult(success=False, message=f"Failed to push code: {e}")
+            return StrategyResult(success=False, message=f"Failed to push code: {e}")
 
         # 2. Poll Checks
         return await self._run_ci_polling(branch_name)
@@ -232,7 +229,7 @@ class AsyncRemoteDefenseStrategy:
 
         return all_completed, any_failure
 
-    async def _run_ci_polling(self, branch_name: str) -> DefenseResult:
+    async def _run_ci_polling(self, branch_name: str) -> StrategyResult:
         """
         Polls CI checks and returns the result.
         """
@@ -257,7 +254,7 @@ class AsyncRemoteDefenseStrategy:
                             payload={"status": "pass"},
                         )
                     )
-                    return DefenseResult(success=True, message="CI checks passed")
+                    return StrategyResult(success=True, message="CI checks passed")
                 else:
                     # Red - Get logs and summarize
                     summary = await self._handle_ci_failure(checks, branch_name)
@@ -268,11 +265,11 @@ class AsyncRemoteDefenseStrategy:
                             payload={"status": "fail", "summary": summary},
                         )
                     )
-                    return DefenseResult(success=False, message=summary)
+                    return StrategyResult(success=False, message=summary)
 
         error_msg = "Line 2 timeout: Checks did not complete."
         logger.error(error_msg)
-        return DefenseResult(success=False, message=error_msg)
+        return StrategyResult(success=False, message=error_msg)
 
     async def _handle_ci_failure(self, checks: List[GithubCheck], branch_name: str) -> str:
         """

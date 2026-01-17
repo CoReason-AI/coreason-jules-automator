@@ -11,6 +11,14 @@ from coreason_jules_automator.llm.types import LLMRequest
 from coreason_jules_automator.utils.shell import ShellError
 
 
+# Mock environment variables for all tests in this file to avoid Pydantic Settings validation error
+@pytest.fixture(autouse=True)
+def mock_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("COREASON_REPO_NAME", "dummy/repo")
+    monkeypatch.setenv("COREASON_GITHUB_TOKEN", "dummy_token")
+    monkeypatch.setenv("COREASON_GOOGLE_API_KEY", "dummy_key")
+
+
 @pytest.mark.asyncio
 async def test_async_shell_executor_run() -> None:
     executor = AsyncShellExecutor()
@@ -417,7 +425,8 @@ async def test_launch_session_eof() -> None:
                 ]
             )
             mock_process.stdin = MagicMock()
-            mock_process.returncode = None
+            mock_process.returncode = 0
+            mock_process.wait = AsyncMock()
             mock_exec.return_value = mock_process
 
             # Should return None because SID was never found

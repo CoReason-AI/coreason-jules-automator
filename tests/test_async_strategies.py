@@ -6,6 +6,7 @@ import pytest
 from coreason_jules_automator.async_api.llm import AsyncLLMClient
 from coreason_jules_automator.async_api.scm import AsyncGeminiInterface, AsyncGitHubInterface, AsyncGitInterface
 from coreason_jules_automator.async_api.strategies import AsyncLocalDefenseStrategy, AsyncRemoteDefenseStrategy
+from coreason_jules_automator.domain.context import OrchestrationContext
 from coreason_jules_automator.llm.janitor import JanitorService
 
 # --- AsyncLocalDefenseStrategy Tests ---
@@ -18,10 +19,11 @@ async def test_local_strategy_success() -> None:
     mock_gemini.code_review = AsyncMock()
 
     strategy = AsyncLocalDefenseStrategy(gemini=mock_gemini)
+    context = OrchestrationContext(task_id="t1", branch_name="b1", session_id="s1")
 
     with patch("coreason_jules_automator.async_api.strategies.get_settings") as mock_settings:
         mock_settings.return_value.extensions_enabled = ["security", "code-review"]
-        result = await strategy.execute({})
+        result = await strategy.execute(context)
 
         assert result.success is True
         mock_gemini.security_scan.assert_awaited_once()
@@ -34,10 +36,11 @@ async def test_local_strategy_security_fail() -> None:
     mock_gemini.security_scan = AsyncMock(side_effect=RuntimeError("Sec Fail"))
 
     strategy = AsyncLocalDefenseStrategy(gemini=mock_gemini)
+    context = OrchestrationContext(task_id="t1", branch_name="b1", session_id="s1")
 
     with patch("coreason_jules_automator.async_api.strategies.get_settings") as mock_settings:
         mock_settings.return_value.extensions_enabled = ["security"]
-        result = await strategy.execute({})
+        result = await strategy.execute(context)
 
         assert result.success is False
         assert "Security Scan failed" in result.message
@@ -49,10 +52,11 @@ async def test_local_strategy_code_review_fail() -> None:
     mock_gemini.code_review = AsyncMock(side_effect=RuntimeError("Lint Fail"))
 
     strategy = AsyncLocalDefenseStrategy(gemini=mock_gemini)
+    context = OrchestrationContext(task_id="t1", branch_name="b1", session_id="s1")
 
     with patch("coreason_jules_automator.async_api.strategies.get_settings") as mock_settings:
         mock_settings.return_value.extensions_enabled = ["code-review"]
-        result = await strategy.execute({})
+        result = await strategy.execute(context)
 
         assert result.success is False
         assert "Code Review failed" in result.message
@@ -71,19 +75,15 @@ def remote_deps() -> Dict[str, MagicMock]:
     }
 
 
-@pytest.mark.asyncio
-async def test_remote_strategy_missing_context(remote_deps: Dict[str, MagicMock]) -> None:
-    strategy = AsyncRemoteDefenseStrategy(**remote_deps)
-    result = await strategy.execute({})
-    assert result.success is False
-    assert "Missing branch_name" in result.message
+# Removed test_remote_strategy_missing_context because Pydantic model ensures fields are present.
 
 
 @pytest.mark.asyncio
 async def test_remote_strategy_push_fail(remote_deps: Dict[str, MagicMock]) -> None:
     remote_deps["git"].push_to_branch = AsyncMock(side_effect=RuntimeError("Push error"))
     strategy = AsyncRemoteDefenseStrategy(**remote_deps)
-    result = await strategy.execute({"branch_name": "feat", "sid": "123"})
+    context = OrchestrationContext(task_id="t1", branch_name="feat", session_id="123")
+    result = await strategy.execute(context)
     assert result.success is False
     assert "Failed to push code" in result.message
 
@@ -92,7 +92,8 @@ async def test_remote_strategy_push_fail(remote_deps: Dict[str, MagicMock]) -> N
 async def test_remote_strategy_no_changes(remote_deps: Dict[str, MagicMock]) -> None:
     remote_deps["git"].push_to_branch = AsyncMock(return_value=False)
     strategy = AsyncRemoteDefenseStrategy(**remote_deps)
-    result = await strategy.execute({"branch_name": "feat", "sid": "123"})
+    context = OrchestrationContext(task_id="t1", branch_name="feat", session_id="123")
+    result = await strategy.execute(context)
     assert result.success is True
     assert "No changes detected" in result.message
 
@@ -103,9 +104,10 @@ async def test_remote_strategy_poll_success(remote_deps: Dict[str, MagicMock]) -
     remote_deps["github"].get_pr_checks = AsyncMock(return_value=[{"status": "completed", "conclusion": "success"}])
 
     strategy = AsyncRemoteDefenseStrategy(**remote_deps)
+    context = OrchestrationContext(task_id="t1", branch_name="feat", session_id="123")
 
     with patch("asyncio.sleep", new_callable=AsyncMock):
-        result = await strategy.execute({"branch_name": "feat", "sid": "123"})
+        result = await strategy.execute(context)
         assert result.success is True
 
 
@@ -118,9 +120,10 @@ async def test_remote_strategy_poll_empty_checks(remote_deps: Dict[str, MagicMoc
     )
 
     strategy = AsyncRemoteDefenseStrategy(**remote_deps)
+    context = OrchestrationContext(task_id="t1", branch_name="feat", session_id="123")
 
     with patch("asyncio.sleep", new_callable=AsyncMock):
-        result = await strategy.execute({"branch_name": "feat", "sid": "123"})
+        result = await strategy.execute(context)
         assert result.success is True
 
 
@@ -133,9 +136,10 @@ async def test_remote_strategy_poll_error(remote_deps: Dict[str, MagicMock]) -> 
     )
 
     strategy = AsyncRemoteDefenseStrategy(**remote_deps)
+    context = OrchestrationContext(task_id="t1", branch_name="feat", session_id="123")
 
     with patch("asyncio.sleep", new_callable=AsyncMock):
-        result = await strategy.execute({"branch_name": "feat", "sid": "123"})
+        result = await strategy.execute(context)
         assert result.success is True
 
 
@@ -146,10 +150,11 @@ async def test_remote_strategy_poll_timeout(remote_deps: Dict[str, MagicMock]) -
     remote_deps["github"].get_pr_checks = AsyncMock(return_value=[{"status": "in_progress", "conclusion": None}])
 
     strategy = AsyncRemoteDefenseStrategy(**remote_deps)
+    context = OrchestrationContext(task_id="t1", branch_name="feat", session_id="123")
 
     with patch("asyncio.sleep", new_callable=AsyncMock):
         # Should loop max_poll_attempts times
-        result = await strategy.execute({"branch_name": "feat", "sid": "123"})
+        result = await strategy.execute(context)
         assert result.success is False
         assert "timeout" in result.message
 
@@ -165,9 +170,10 @@ async def test_remote_strategy_ci_failure_no_llm(remote_deps: Dict[str, MagicMoc
     deps["llm_client"] = None
 
     strategy = AsyncRemoteDefenseStrategy(**deps)
+    context = OrchestrationContext(task_id="t1", branch_name="feat", session_id="123")
 
     with patch("asyncio.sleep", new_callable=AsyncMock):
-        result = await strategy.execute({"branch_name": "feat", "sid": "123"})
+        result = await strategy.execute(context)
         assert result.success is False
         assert "CI checks failed" in result.message
 
@@ -186,9 +192,10 @@ async def test_remote_strategy_long_log_truncation(remote_deps: Dict[str, MagicM
     remote_deps["llm_client"].execute = AsyncMock(return_value=mock_llm_response)
 
     strategy = AsyncRemoteDefenseStrategy(**remote_deps)
+    context = OrchestrationContext(task_id="t1", branch_name="feat", session_id="123")
 
     with patch("asyncio.sleep", new_callable=AsyncMock):
-        await strategy.execute({"branch_name": "feat", "sid": "123"})
+        await strategy.execute(context)
 
     # Check that janitor was called with truncated log
     # The log snippet will contain the end of the log
@@ -212,9 +219,10 @@ async def test_remote_strategy_janitor_exception(remote_deps: Dict[str, MagicMoc
     remote_deps["llm_client"].execute = AsyncMock(side_effect=Exception("LLM Fail"))
 
     strategy = AsyncRemoteDefenseStrategy(**remote_deps)
+    context = OrchestrationContext(task_id="t1", branch_name="feat", session_id="123")
 
     with patch("asyncio.sleep", new_callable=AsyncMock):
-        result = await strategy.execute({"branch_name": "feat", "sid": "123"})
+        result = await strategy.execute(context)
 
     assert result.success is False
     assert "Log summarization failed" in result.message
@@ -236,11 +244,12 @@ async def test_remote_strategy_poll_exception(remote_deps: Dict[str, MagicMock])
     remote_deps["github"].get_pr_checks = AsyncMock(side_effect=RuntimeError("Polling Error"))
 
     strategy = AsyncRemoteDefenseStrategy(**remote_deps)
+    context = OrchestrationContext(task_id="t1", branch_name="feat", session_id="123")
 
     with patch("asyncio.sleep", new_callable=AsyncMock):
         with patch("coreason_jules_automator.async_api.strategies.logger.warning") as mock_log:
             # It will retry until max attempts, so we just check if it fails gracefully
-            result = await strategy.execute({"branch_name": "feat", "sid": "123"})
+            result = await strategy.execute(context)
 
             assert result.success is False
             assert "timeout" in result.message

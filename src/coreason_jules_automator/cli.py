@@ -11,26 +11,10 @@
 import asyncio
 import sys
 from pathlib import Path
-from typing import Optional
 
 import typer
 
-from coreason_jules_automator.async_api import (
-    AsyncGeminiInterface,
-    AsyncGitHubInterface,
-    AsyncGitInterface,
-    AsyncJulesAgent,
-    AsyncLLMClient,
-    AsyncLocalDefenseStrategy,
-    AsyncOpenAIAdapter,
-    AsyncOrchestrator,
-    AsyncRemoteDefenseStrategy,
-    AsyncShellExecutor,
-)
-from coreason_jules_automator.config import Settings, get_settings
-from coreason_jules_automator.events import CompositeEmitter, EventCollector, LoguruEmitter
-from coreason_jules_automator.llm.janitor import JanitorService
-from coreason_jules_automator.llm.prompts import PromptManager
+from coreason_jules_automator.di import Container
 from coreason_jules_automator.reporters.markdown import MarkdownReporter
 from coreason_jules_automator.utils.logger import logger
 
@@ -39,37 +23,6 @@ app = typer.Typer(
     help="Coreason Jules Automator: Autonomous Orchestration Engine",
     add_completion=False,
 )
-
-
-def _get_async_llm_client(settings: Settings) -> Optional[AsyncLLMClient]:
-    """
-    Helper to instantiate an AsyncLLMClient based on settings.
-    Mimics LLMFactory logic but for async.
-    """
-    if settings.llm_strategy == "api":
-        try:
-            from openai import AsyncOpenAI
-        except ImportError:
-            logger.warning("openai package not installed. Skipping Async LLM Client.")
-            return None
-
-        if settings.DEEPSEEK_API_KEY:
-            logger.info("Initializing DeepSeek client (Async)")
-            client = AsyncOpenAI(
-                api_key=settings.DEEPSEEK_API_KEY.get_secret_value(),
-                base_url="https://api.deepseek.com",
-            )
-            return AsyncOpenAIAdapter(client, model_name="deepseek-coder")
-        elif settings.OPENAI_API_KEY:
-            logger.info("Initializing OpenAI client (Async)")
-            client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY.get_secret_value())
-            return AsyncOpenAIAdapter(client, model_name="gpt-3.5-turbo")
-        else:
-            logger.warning("No valid API key found. Skipping Async LLM Client.")
-    else:
-        logger.warning("Local LLM strategy not yet supported in Async CLI. Skipping Async LLM Client.")
-
-    return None
 
 
 @app.command(name="run")
@@ -83,41 +36,10 @@ def run(
     logger.info(f"Coreason Jules Automator started. Task: {task}, Branch: {branch}")
 
     try:
-        # Composition Root
-        shell_executor = AsyncShellExecutor()
-
-        log_emitter = LoguruEmitter()
-        event_collector = EventCollector()
-        composite_emitter = CompositeEmitter([log_emitter, event_collector])
-
-        gemini = AsyncGeminiInterface(shell_executor=shell_executor)
-        git = AsyncGitInterface(shell_executor=shell_executor)
-        github = AsyncGitHubInterface(shell_executor=shell_executor)
-
-        settings = get_settings()
-        llm_client = _get_async_llm_client(settings)
-        prompt_manager = PromptManager()
-        janitor = JanitorService(prompt_manager=prompt_manager)
-
-        local_strategy = AsyncLocalDefenseStrategy(gemini=gemini, event_emitter=composite_emitter)
-        remote_strategy = AsyncRemoteDefenseStrategy(
-            github=github,
-            janitor=janitor,
-            git=git,
-            llm_client=llm_client,
-            event_emitter=composite_emitter,
-        )
-
-        agent = AsyncJulesAgent()
-
-        orchestrator = AsyncOrchestrator(
-            agent=agent,
-            strategies=[local_strategy, remote_strategy],
-            event_emitter=composite_emitter,
-            git_interface=git,
-            janitor_service=janitor,
-            llm_client=llm_client,
-        )
+        # Dependency Injection
+        container = Container()
+        orchestrator = container.orchestrator
+        event_collector = container.event_collector
 
         success, _ = asyncio.run(orchestrator.run_cycle(task, branch))
 
@@ -160,41 +82,9 @@ def campaign(
     logger.info(f"Starting Campaign. Task: {task}, Base: {base}, Count: {count}")
 
     try:
-        # Composition Root
-        shell_executor = AsyncShellExecutor()
-
-        log_emitter = LoguruEmitter()
-        event_collector = EventCollector()
-        composite_emitter = CompositeEmitter([log_emitter, event_collector])
-
-        gemini = AsyncGeminiInterface(shell_executor=shell_executor)
-        git = AsyncGitInterface(shell_executor=shell_executor)
-        github = AsyncGitHubInterface(shell_executor=shell_executor)
-
-        settings = get_settings()
-        llm_client = _get_async_llm_client(settings)
-        prompt_manager = PromptManager()
-        janitor = JanitorService(prompt_manager=prompt_manager)
-
-        local_strategy = AsyncLocalDefenseStrategy(gemini=gemini, event_emitter=composite_emitter)
-        remote_strategy = AsyncRemoteDefenseStrategy(
-            github=github,
-            janitor=janitor,
-            git=git,
-            llm_client=llm_client,
-            event_emitter=composite_emitter,
-        )
-
-        agent = AsyncJulesAgent()
-
-        orchestrator = AsyncOrchestrator(
-            agent=agent,
-            strategies=[local_strategy, remote_strategy],
-            event_emitter=composite_emitter,
-            git_interface=git,
-            janitor_service=janitor,
-            llm_client=llm_client,
-        )
+        # Dependency Injection
+        container = Container()
+        orchestrator = container.orchestrator
 
         asyncio.run(orchestrator.run_campaign(task, base, count))
         logger.info("Campaign completed.")
