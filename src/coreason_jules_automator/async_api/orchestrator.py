@@ -8,11 +8,11 @@ from coreason_jules_automator.async_api.llm import AsyncLLMClient
 from coreason_jules_automator.async_api.scm import AsyncGitInterface
 from coreason_jules_automator.async_api.strategies import AsyncDefenseStrategy
 from coreason_jules_automator.config import get_settings
+from coreason_jules_automator.domain.context import OrchestrationContext
 from coreason_jules_automator.events import AutomationEvent, EventEmitter, EventType, LoguruEmitter
+from coreason_jules_automator.exceptions import AgentProcessError, JulesAutomatorError
 from coreason_jules_automator.llm.janitor import JanitorService
 from coreason_jules_automator.utils.logger import logger
-from coreason_jules_automator.domain.context import OrchestrationContext
-from coreason_jules_automator.exceptions import JulesAutomatorError, AgentProcessError
 
 
 class AsyncOrchestrator:
@@ -71,11 +71,7 @@ class AsyncOrchestrator:
             # Create immutable context
             # We assume task_id is same as branch_name or generated. Using branch_name as simple proxy or random ID.
             task_id = f"task_{branch_name}_{attempt}"
-            context = OrchestrationContext(
-                task_id=task_id,
-                branch_name=branch_name,
-                session_id=sid
-            )
+            context = OrchestrationContext(task_id=task_id, branch_name=branch_name, session_id=sid)
 
             success, feedback = await self._execute_defense_strategies(context)
 

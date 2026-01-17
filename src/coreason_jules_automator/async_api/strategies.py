@@ -1,14 +1,13 @@
 import asyncio
-from typing import Any, AsyncGenerator, Dict, List, Optional, Protocol, Tuple, TypedDict, cast
+from typing import AsyncGenerator, List, Optional, Protocol, Tuple, TypedDict, cast
 
 from coreason_jules_automator.async_api.llm import AsyncLLMClient
 from coreason_jules_automator.async_api.scm import AsyncGeminiInterface, AsyncGitHubInterface, AsyncGitInterface
 from coreason_jules_automator.config import get_settings
+from coreason_jules_automator.domain.context import OrchestrationContext, StrategyResult
 from coreason_jules_automator.events import AutomationEvent, EventEmitter, EventType, LoguruEmitter
 from coreason_jules_automator.llm.janitor import JanitorService
 from coreason_jules_automator.utils.logger import logger
-from coreason_jules_automator.domain.context import OrchestrationContext, StrategyResult
-from coreason_jules_automator.exceptions import StrategyVerificationError
 
 
 class AsyncDefenseStrategy(Protocol):

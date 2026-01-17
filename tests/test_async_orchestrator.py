@@ -7,9 +7,9 @@ from coreason_jules_automator.async_api.llm import AsyncLLMClient
 from coreason_jules_automator.async_api.orchestrator import AsyncOrchestrator
 from coreason_jules_automator.async_api.scm import AsyncGitInterface
 from coreason_jules_automator.async_api.strategies import AsyncDefenseStrategy
-from coreason_jules_automator.llm.janitor import JanitorService
 from coreason_jules_automator.domain.context import StrategyResult
-from coreason_jules_automator.exceptions import AgentProcessError, JulesAutomatorError
+from coreason_jules_automator.exceptions import AgentProcessError
+from coreason_jules_automator.llm.janitor import JanitorService
 
 
 @pytest.fixture(autouse=True)

@@ -11,14 +11,12 @@
 import asyncio
 import sys
 from pathlib import Path
-from typing import Optional
 
 import typer
 
-from coreason_jules_automator.config import get_settings
+from coreason_jules_automator.di import Container
 from coreason_jules_automator.reporters.markdown import MarkdownReporter
 from coreason_jules_automator.utils.logger import logger
-from coreason_jules_automator.di import Container
 
 app = typer.Typer(
     name="coreason-jules-automator",

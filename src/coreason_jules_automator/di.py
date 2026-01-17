@@ -12,17 +12,19 @@ from coreason_jules_automator.async_api import (
     AsyncRemoteDefenseStrategy,
     AsyncShellExecutor,
 )
-from coreason_jules_automator.config import Settings, get_settings
+from coreason_jules_automator.config import get_settings
 from coreason_jules_automator.events import CompositeEmitter, EventCollector, LoguruEmitter
 from coreason_jules_automator.llm.janitor import JanitorService
 from coreason_jules_automator.llm.prompts import PromptManager
 from coreason_jules_automator.utils.logger import logger
+
 
 class Container:
     """
     Dependency Injection Container for Coreason Jules Automator.
     Wires up the application components.
     """
+
     def __init__(self) -> None:
         self.settings = get_settings()
 
@@ -45,10 +47,7 @@ class Container:
         self.janitor = JanitorService(prompt_manager=self.prompt_manager)
 
         # Strategies
-        self.local_strategy = AsyncLocalDefenseStrategy(
-            gemini=self.gemini,
-            event_emitter=self.composite_emitter
-        )
+        self.local_strategy = AsyncLocalDefenseStrategy(gemini=self.gemini, event_emitter=self.composite_emitter)
         self.remote_strategy = AsyncRemoteDefenseStrategy(
             github=self.github,
             janitor=self.janitor,

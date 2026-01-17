@@ -6,7 +6,7 @@ import pytest
 from coreason_jules_automator.async_api.llm import AsyncLLMClient
 from coreason_jules_automator.async_api.scm import AsyncGeminiInterface, AsyncGitHubInterface, AsyncGitInterface
 from coreason_jules_automator.async_api.strategies import AsyncLocalDefenseStrategy, AsyncRemoteDefenseStrategy
-from coreason_jules_automator.domain.context import OrchestrationContext, StrategyResult
+from coreason_jules_automator.domain.context import OrchestrationContext
 from coreason_jules_automator.llm.janitor import JanitorService
 
 # --- AsyncLocalDefenseStrategy Tests ---
@@ -74,7 +74,9 @@ def remote_deps() -> Dict[str, MagicMock]:
         "llm_client": MagicMock(spec=AsyncLLMClient),
     }
 
+
 # Removed test_remote_strategy_missing_context because Pydantic model ensures fields are present.
+
 
 @pytest.mark.asyncio
 async def test_remote_strategy_push_fail(remote_deps: Dict[str, MagicMock]) -> None:

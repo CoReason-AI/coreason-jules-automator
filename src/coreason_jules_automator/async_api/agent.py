@@ -1,9 +1,10 @@
 import asyncio
 from pathlib import Path
-from typing import Optional, Type
 from types import TracebackType
+from typing import Optional, Type
 
-from coreason_jules_automator.config import get_settings, Settings
+from coreason_jules_automator.config import Settings, get_settings
+from coreason_jules_automator.exceptions import AgentProcessError
 from coreason_jules_automator.protocols.jules import (
     JulesProtocol,
     SendStdin,
@@ -11,7 +12,6 @@ from coreason_jules_automator.protocols.jules import (
     SignalSessionId,
 )
 from coreason_jules_automator.utils.logger import logger
-from coreason_jules_automator.exceptions import AgentProcessError
 
 from .shell import AsyncShellExecutor
 
@@ -152,6 +152,9 @@ class AsyncJulesAgent:
         try:
             return await self.launch(task)
         except AgentProcessError:
+            if self.process:
+                await self._cleanup_process(self.process)
+                self.process = None
             return None
 
     async def wait_for_completion(self, sid: str) -> bool:
