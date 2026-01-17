@@ -257,6 +257,7 @@ def test_di_container_llm_creation_deepseek() -> None:
     with patch("coreason_jules_automator.di.get_settings") as mock_settings:
         settings = MagicMock(spec=Settings)
         settings.llm_strategy = "api"
+        settings.extensions_enabled = []
         settings.DEEPSEEK_API_KEY = MagicMock()
         settings.DEEPSEEK_API_KEY.get_secret_value.return_value = "ds-key"
         settings.OPENAI_API_KEY = None
@@ -277,6 +278,7 @@ def test_di_container_llm_creation_openai() -> None:
     with patch("coreason_jules_automator.di.get_settings") as mock_settings:
         settings = MagicMock(spec=Settings)
         settings.llm_strategy = "api"
+        settings.extensions_enabled = []
         settings.DEEPSEEK_API_KEY = None
         settings.OPENAI_API_KEY = MagicMock()
         settings.OPENAI_API_KEY.get_secret_value.return_value = "oa-key"
@@ -295,6 +297,7 @@ def test_di_container_llm_creation_no_keys() -> None:
     with patch("coreason_jules_automator.di.get_settings") as mock_settings:
         settings = MagicMock(spec=Settings)
         settings.llm_strategy = "api"
+        settings.extensions_enabled = []
         settings.DEEPSEEK_API_KEY = None
         settings.OPENAI_API_KEY = None
         mock_settings.return_value = settings
@@ -308,6 +311,7 @@ def test_di_container_llm_creation_local() -> None:
     with patch("coreason_jules_automator.di.get_settings") as mock_settings:
         settings = MagicMock(spec=Settings)
         settings.llm_strategy = "local"
+        settings.extensions_enabled = []
         mock_settings.return_value = settings
 
         container = Container()
@@ -319,6 +323,7 @@ def test_di_container_llm_creation_import_error() -> None:
     with patch("coreason_jules_automator.di.get_settings") as mock_settings:
         settings = MagicMock(spec=Settings)
         settings.llm_strategy = "api"
+        settings.extensions_enabled = []
         mock_settings.return_value = settings
 
         # We need to simulate ImportError when importing openai.
