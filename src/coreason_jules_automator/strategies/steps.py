@@ -240,7 +240,13 @@ class CIPollingStep:
 class LogAnalysisStep:
     """Step to analyze CI failure logs."""
 
-    def __init__(self, github: AsyncGitHubInterface, janitor: JanitorService, llm_client: Optional[AsyncLLMClient] = None, event_emitter: Optional[EventEmitter] = None):
+    def __init__(
+        self,
+        github: AsyncGitHubInterface,
+        janitor: JanitorService,
+        llm_client: Optional[AsyncLLMClient] = None,
+        event_emitter: Optional[EventEmitter] = None,
+    ):
         self.github = github
         self.janitor = janitor
         self.llm_client = llm_client
@@ -249,7 +255,7 @@ class LogAnalysisStep:
     async def execute(self, context: OrchestrationContext) -> StrategyResult:
         ci_passed = context.pipeline_data.get("ci_passed", True)
         if ci_passed:
-             return StrategyResult(success=True, message="No analysis needed")
+            return StrategyResult(success=True, message="No analysis needed")
 
         checks = context.pipeline_data.get("ci_checks", [])
         branch_name = context.branch_name

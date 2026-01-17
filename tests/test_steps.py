@@ -1,22 +1,21 @@
-from typing import Any, Dict
+from typing import AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from pydantic import SecretStr
 
 from coreason_jules_automator.async_api.llm import AsyncLLMClient
-from coreason_jules_automator.async_api.scm import AsyncGeminiInterface, AsyncGitHubInterface, AsyncGitInterface
+from coreason_jules_automator.async_api.scm import AsyncGeminiInterface, AsyncGitHubInterface
 from coreason_jules_automator.config import Settings
 from coreason_jules_automator.domain.context import OrchestrationContext
 from coreason_jules_automator.domain.scm import PullRequestStatus
 from coreason_jules_automator.llm.janitor import JanitorService
 from coreason_jules_automator.strategies.steps import (
-    SecurityScanStep,
-    CodeReviewStep,
-    GitPushStep,
     CIPollingStep,
     LogAnalysisStep,
+    SecurityScanStep,
 )
+
 
 @pytest.fixture
 def mock_settings() -> Settings:
@@ -31,6 +30,7 @@ def mock_settings() -> Settings:
         SSH_PRIVATE_KEY=SecretStr("dummy_key"),
     )
 
+
 @pytest.mark.asyncio
 async def test_security_scan_step(mock_settings: Settings) -> None:
     mock_gemini = MagicMock(spec=AsyncGeminiInterface)
@@ -42,6 +42,7 @@ async def test_security_scan_step(mock_settings: Settings) -> None:
     result = await step.execute(context)
     assert result.success is True
     mock_gemini.security_scan.assert_awaited_once()
+
 
 @pytest.mark.asyncio
 async def test_security_scan_step_disabled(mock_settings: Settings) -> None:
@@ -55,6 +56,7 @@ async def test_security_scan_step_disabled(mock_settings: Settings) -> None:
     assert result.success is True
     assert "disabled" in result.message
     mock_gemini.security_scan.assert_not_awaited()
+
 
 @pytest.mark.asyncio
 async def test_ci_polling_step_success(mock_settings: Settings) -> None:
@@ -72,6 +74,7 @@ async def test_ci_polling_step_success(mock_settings: Settings) -> None:
     assert result.success is True
     assert context.pipeline_data["ci_passed"] is True
     assert len(context.pipeline_data["ci_checks"]) == 1
+
 
 @pytest.mark.asyncio
 async def test_ci_polling_step_failure_sets_context(mock_settings: Settings) -> None:
@@ -91,13 +94,16 @@ async def test_ci_polling_step_failure_sets_context(mock_settings: Settings) -> 
     # But context data shows failure
     assert context.pipeline_data["ci_passed"] is False
 
+
 @pytest.mark.asyncio
 async def test_log_analysis_step_runs_on_failure(mock_settings: Settings) -> None:
     mock_github = MagicMock(spec=AsyncGitHubInterface)
     mock_github.get_latest_run_log = MagicMock()
+
     # Mock log stream
-    async def mock_stream(branch_name):
+    async def mock_stream(branch_name: str) -> AsyncGenerator[str, None]:
         yield "Error log line"
+
     mock_github.get_latest_run_log.side_effect = mock_stream
 
     mock_janitor = MagicMock(spec=JanitorService)
@@ -109,11 +115,13 @@ async def test_log_analysis_step_runs_on_failure(mock_settings: Settings) -> Non
     step = LogAnalysisStep(github=mock_github, janitor=mock_janitor, llm_client=mock_llm)
 
     context = OrchestrationContext(
-        task_id="t1", branch_name="b1", session_id="s1",
+        task_id="t1",
+        branch_name="b1",
+        session_id="s1",
         pipeline_data={
             "ci_passed": False,
-            "ci_checks": [PullRequestStatus(name="check1", status="completed", conclusion="failure", url="http://url")]
-        }
+            "ci_checks": [PullRequestStatus(name="check1", status="completed", conclusion="failure", url="http://url")],
+        },
     )
 
     result = await step.execute(context)
@@ -122,13 +130,11 @@ async def test_log_analysis_step_runs_on_failure(mock_settings: Settings) -> Non
     assert "Summary of error" in result.message
     mock_janitor.build_summarize_request.assert_called()
 
+
 @pytest.mark.asyncio
 async def test_log_analysis_step_skips_on_success(mock_settings: Settings) -> None:
     step = LogAnalysisStep(github=MagicMock(), janitor=MagicMock(), llm_client=MagicMock())
-    context = OrchestrationContext(
-        task_id="t1", branch_name="b1", session_id="s1",
-        pipeline_data={"ci_passed": True}
-    )
+    context = OrchestrationContext(task_id="t1", branch_name="b1", session_id="s1", pipeline_data={"ci_passed": True})
 
     result = await step.execute(context)
     assert result.success is True

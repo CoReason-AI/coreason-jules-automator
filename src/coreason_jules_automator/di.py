@@ -51,15 +51,11 @@ class PipelineBuilder:
 
         # 1. Security Scan
         if "security" in self.settings.extensions_enabled:
-            steps.append(
-                SecurityScanStep(settings=self.settings, gemini=self.gemini, event_emitter=self.event_emitter)
-            )
+            steps.append(SecurityScanStep(settings=self.settings, gemini=self.gemini, event_emitter=self.event_emitter))
 
         # 2. Code Review
         if "code-review" in self.settings.extensions_enabled:
-            steps.append(
-                CodeReviewStep(settings=self.settings, gemini=self.gemini, event_emitter=self.event_emitter)
-            )
+            steps.append(CodeReviewStep(settings=self.settings, gemini=self.gemini, event_emitter=self.event_emitter))
 
         # 3. Git Push
         steps.append(GitPushStep(janitor=self.janitor, git=self.git, event_emitter=self.event_emitter))
