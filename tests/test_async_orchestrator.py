@@ -4,7 +4,6 @@ import pytest
 from pydantic import SecretStr
 
 from coreason_jules_automator.async_api.agent import AsyncJulesAgent
-from coreason_jules_automator.async_api.llm import AsyncLLMClient
 from coreason_jules_automator.async_api.orchestrator import AsyncOrchestrator
 from coreason_jules_automator.async_api.scm import AsyncGitInterface
 from coreason_jules_automator.config import Settings
@@ -319,8 +318,6 @@ async def test_async_orchestrator_run_campaign_prof_failure(mock_settings: Setti
 
     mock_git.merge_squash.assert_not_awaited()
     mock_git.delete_branch.assert_awaited()
-
-
 
 
 @pytest.mark.asyncio

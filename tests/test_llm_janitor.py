@@ -1,9 +1,9 @@
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 
 from coreason_jules_automator.async_api.llm import AsyncLLMClient
-from coreason_jules_automator.llm.janitor import JanitorService, CommitMessageResponse, SummaryResponse
+from coreason_jules_automator.llm.janitor import CommitMessageResponse, JanitorService, SummaryResponse
 from coreason_jules_automator.llm.prompts import PromptManager
 from coreason_jules_automator.llm.types import LLMRequest
 

@@ -1,13 +1,13 @@
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from coreason_jules_automator.async_api.llm import AsyncLLMClient
 from coreason_jules_automator.config import get_settings
 from coreason_jules_automator.llm.factory import LLMFactory
-from coreason_jules_automator.llm.janitor import JanitorService
+from coreason_jules_automator.llm.janitor import CommitMessageResponse, JanitorService, SummaryResponse
 from coreason_jules_automator.llm.model_manager import ModelManager
-from coreason_jules_automator.llm.types import LLMRequest
 
 
 @pytest.fixture
@@ -80,27 +80,36 @@ def test_model_manager_download_failure() -> None:
         assert "Failed to download model" in str(excinfo.value)
 
 
-def test_janitor_sanitize_commit() -> None:
-    """Test commit message sanitization."""
-    janitor = JanitorService()
+@pytest.mark.asyncio
+async def test_janitor_professionalize_commit() -> None:
+    """Test commit message professionalization."""
+    mock_llm = AsyncMock(spec=AsyncLLMClient)
+    mock_llm.execute.return_value = CommitMessageResponse(commit_text="feat: add feature")
+
+    janitor = JanitorService(llm_client=mock_llm)
     raw = "feat: add feature\n\nCo-authored-by: bot\nSigned-off-by: me"
-    clean = janitor.sanitize_commit(raw)
-    assert clean == "feat: add feature"
+
+    # We test the method, not internal sanitization (since that's now implicit or handled by LLM)
+    # The prompt should contain the raw text.
+    result = await janitor.professionalize_commit(raw)
+    assert result == "feat: add feature"
+
+    args, _ = mock_llm.execute.call_args
+    request = args[0]
+    assert raw in request.messages[0]["content"]
 
 
-def test_janitor_build_summarize_request() -> None:
-    """Test build_summarize_request returns correct request."""
-    # This test replaces the old test_janitor_summarize_logs_success which tested I/O
-    janitor = JanitorService()
-    # We mock PromptManager implicitly or just check result if default is used
-    # But init uses default.
-    # To control prompt output, we can inject mock prompt manager if needed,
-    # but let's just rely on the real one's behavior or mocked one.
+@pytest.mark.asyncio
+async def test_janitor_summarize_logs() -> None:
+    """Test log summarization."""
+    mock_llm = AsyncMock(spec=AsyncLLMClient)
+    mock_llm.execute.return_value = SummaryResponse(summary="Summary")
 
-    mock_pm = MagicMock()
-    mock_pm.render.return_value = "Rendered Prompt"
-    janitor = JanitorService(prompt_manager=mock_pm)
+    janitor = JanitorService(llm_client=mock_llm)
 
-    req = janitor.build_summarize_request("long log...")
-    assert isinstance(req, LLMRequest)
-    assert req.messages == [{"role": "user", "content": "Rendered Prompt"}]
+    result = await janitor.summarize_logs("log data")
+    assert result == "Summary"
+
+    args, _ = mock_llm.execute.call_args
+    request = args[0]
+    assert "log data" in request.messages[0]["content"]

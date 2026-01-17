@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from pydantic import SecretStr
 
-from coreason_jules_automator.async_api.llm import AsyncLLMClient
 from coreason_jules_automator.async_api.scm import AsyncGeminiInterface, AsyncGitHubInterface
 from coreason_jules_automator.config import Settings
 from coreason_jules_automator.domain.context import OrchestrationContext
