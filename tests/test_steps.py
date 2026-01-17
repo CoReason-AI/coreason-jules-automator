@@ -471,3 +471,66 @@ async def test_log_analysis_step_no_checks_failed(mock_settings: Settings) -> No
     result = await step.execute(context)
     assert result.success is False
     assert "could not identify specific check failure" in result.message
+
+
+@pytest.mark.asyncio
+async def test_ci_polling_step_empty_checks(mock_settings: Settings) -> None:
+    mock_github = MagicMock(spec=AsyncGitHubInterface)
+    # First call returns empty list, second call returns completed list
+    mock_github.get_pr_checks = AsyncMock(
+        side_effect=[
+            [],
+            [PullRequestStatus(name="check1", status="completed", conclusion="success", url="url")],
+        ]
+    )
+
+    step = CIPollingStep(github=mock_github)
+    context = OrchestrationContext(task_id="t1", branch_name="b1", session_id="s1")
+
+    with patch("asyncio.sleep", new_callable=AsyncMock):
+        result = await step.execute(context)
+
+    assert result.success is True
+    assert mock_github.get_pr_checks.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_log_analysis_step_large_logs(mock_settings: Settings) -> None:
+    mock_github = MagicMock(spec=AsyncGitHubInterface)
+    mock_github.get_latest_run_log = MagicMock()
+
+    async def mock_stream(branch_name: str) -> AsyncGenerator[str, None]:
+        for i in range(2005):
+            yield f"log line {i}"
+
+    mock_github.get_latest_run_log.side_effect = mock_stream
+
+    mock_llm = MagicMock(spec=AsyncLLMClient)
+    mock_llm.execute = AsyncMock(return_value=MagicMock(content="Summary"))
+
+    step = LogAnalysisStep(github=mock_github, janitor=MagicMock(), llm_client=mock_llm)
+    step.janitor = MagicMock()
+
+    context = OrchestrationContext(
+        task_id="t1",
+        branch_name="b1",
+        session_id="s1",
+        pipeline_data={
+            "ci_passed": False,
+            "ci_checks": [PullRequestStatus(name="check1", status="completed", conclusion="failure", url="http://url")],
+        },
+    )
+
+    result = await step.execute(context)
+
+    assert result.success is False
+    # Check if janitor was called with truncated logs
+    # We can inspect the argument passed to build_summarize_request
+    call_args = step.janitor.build_summarize_request.call_args
+    assert call_args is not None
+    log_snippet = call_args[0][0]
+
+    # We expect the last lines to be present, and total lines to be around 2000
+    # The implementation keeps the tail.
+    assert "log line 2004" in log_snippet
+    assert "log line 0" not in log_snippet  # because it should have been popped
