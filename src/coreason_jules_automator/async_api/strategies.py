@@ -264,7 +264,8 @@ class AsyncRemoteDefenseStrategy:
             logger.error(error_msg)
             return StrategyResult(success=False, message=error_msg)
 
-        # Fallback if loop finishes without returning (should not happen with infinite retries/reraise=False but good for mypy)
+        # Fallback if loop finishes without returning
+        # (should not happen with infinite retries/reraise=False but good for mypy)
         return StrategyResult(success=False, message="Polling loop exited unexpectedly")
 
     async def _handle_ci_failure(self, checks: List[PullRequestStatus], branch_name: str) -> str:

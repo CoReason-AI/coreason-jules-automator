@@ -200,7 +200,9 @@ async def test_github_init_no_executable() -> None:
 async def test_github_get_pr_checks() -> None:
     mock_shell = MagicMock(spec=AsyncShellExecutor)
     # Return valid JSON for Pydantic model
-    mock_shell.run = AsyncMock(return_value=CommandResult(0, '[{"name": "check1", "status": "completed", "url": "http://url"}]', ""))
+    mock_shell.run = AsyncMock(
+        return_value=CommandResult(0, '[{"name": "check1", "status": "completed", "url": "http://url"}]', "")
+    )
     gh = AsyncGitHubInterface(shell_executor=mock_shell)
 
     checks = await gh.get_pr_checks()
@@ -242,9 +244,8 @@ async def test_github_get_pr_checks_command_error() -> None:
 @pytest.mark.asyncio
 async def test_github_get_latest_run_log_success() -> None:
     mock_shell = MagicMock(spec=AsyncShellExecutor)
-    mock_shell.run = AsyncMock(
-        return_value=CommandResult(0, '[{"databaseId": 123}]', "")
-    )
+    mock_shell.run = AsyncMock(return_value=CommandResult(0, '[{"databaseId": 123}]', ""))
+
     # Mock stream for view command
     async def mock_stream(command, timeout=300):
         yield "Log Line 1"

@@ -78,7 +78,9 @@ async def test_orchestrator_campaign_missing_deps(mock_settings: Settings) -> No
 
     # Test 3: Git missing
     mock_janitor = MagicMock()
-    orchestrator = AsyncOrchestrator(settings=mock_settings, agent=mock_agent, strategies=[], janitor_service=mock_janitor)
+    orchestrator = AsyncOrchestrator(
+        settings=mock_settings, agent=mock_agent, strategies=[], janitor_service=mock_janitor
+    )
     with pytest.raises(RuntimeError, match="GitInterface and JanitorService are required"):
         await orchestrator.run_campaign("task")
 

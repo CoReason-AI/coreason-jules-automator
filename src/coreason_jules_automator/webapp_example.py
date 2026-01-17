@@ -79,9 +79,7 @@ async def run_orchestration_background(task: str, branch: str) -> None:
         prompt_manager = PromptManager()
         janitor = JanitorService(prompt_manager=prompt_manager)
 
-        local_strategy = AsyncLocalDefenseStrategy(
-            settings=settings, gemini=gemini, event_emitter=composite_emitter
-        )
+        local_strategy = AsyncLocalDefenseStrategy(settings=settings, gemini=gemini, event_emitter=composite_emitter)
         remote_strategy = AsyncRemoteDefenseStrategy(
             settings=settings,
             github=github,

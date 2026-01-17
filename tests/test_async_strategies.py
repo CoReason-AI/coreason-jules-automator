@@ -112,9 +112,7 @@ async def test_remote_strategy_no_changes(remote_deps: Dict[str, MagicMock]) -> 
 async def test_remote_strategy_poll_success(remote_deps: Dict[str, Any]) -> None:
     remote_deps["git"].push_to_branch = AsyncMock(return_value=True)
     remote_deps["github"].get_pr_checks = AsyncMock(
-        return_value=[
-            PullRequestStatus(name="check1", status="completed", conclusion="success", url="http://url")
-        ]
+        return_value=[PullRequestStatus(name="check1", status="completed", conclusion="success", url="http://url")]
     )
 
     strategy = AsyncRemoteDefenseStrategy(**remote_deps)
@@ -130,10 +128,7 @@ async def test_remote_strategy_poll_empty_checks(remote_deps: Dict[str, Any]) ->
     remote_deps["git"].push_to_branch = AsyncMock(return_value=True)
     # First empty, then success
     remote_deps["github"].get_pr_checks = AsyncMock(
-        side_effect=[
-            [],
-            [PullRequestStatus(name="check1", status="completed", conclusion="success", url="http://url")]
-        ]
+        side_effect=[[], [PullRequestStatus(name="check1", status="completed", conclusion="success", url="http://url")]]
     )
 
     strategy = AsyncRemoteDefenseStrategy(**remote_deps)
@@ -151,7 +146,7 @@ async def test_remote_strategy_poll_error(remote_deps: Dict[str, Any]) -> None:
     remote_deps["github"].get_pr_checks = AsyncMock(
         side_effect=[
             RuntimeError("API Error"),
-            [PullRequestStatus(name="check1", status="completed", conclusion="success", url="http://url")]
+            [PullRequestStatus(name="check1", status="completed", conclusion="success", url="http://url")],
         ]
     )
 
@@ -168,9 +163,7 @@ async def test_remote_strategy_poll_timeout(remote_deps: Dict[str, Any]) -> None
     remote_deps["git"].push_to_branch = AsyncMock(return_value=True)
     # Always pending
     remote_deps["github"].get_pr_checks = AsyncMock(
-        return_value=[
-            PullRequestStatus(name="check1", status="in_progress", conclusion=None, url="http://url")
-        ]
+        return_value=[PullRequestStatus(name="check1", status="in_progress", conclusion=None, url="http://url")]
     )
 
     strategy = AsyncRemoteDefenseStrategy(**remote_deps)
@@ -187,9 +180,7 @@ async def test_remote_strategy_poll_timeout(remote_deps: Dict[str, Any]) -> None
 async def test_remote_strategy_ci_failure_no_llm(remote_deps: Dict[str, Any]) -> None:
     remote_deps["git"].push_to_branch = AsyncMock(return_value=True)
     remote_deps["github"].get_pr_checks = AsyncMock(
-        return_value=[
-            PullRequestStatus(name="test", status="completed", conclusion="failure", url="http://url")
-        ]
+        return_value=[PullRequestStatus(name="test", status="completed", conclusion="failure", url="http://url")]
     )
     # Explicitly set llm_client to None for this test, bypassing type check for the mock dict
     deps: Dict[str, Any] = remote_deps.copy()
@@ -208,10 +199,9 @@ async def test_remote_strategy_ci_failure_no_llm(remote_deps: Dict[str, Any]) ->
 async def test_remote_strategy_long_log_truncation(remote_deps: Dict[str, Any]) -> None:
     remote_deps["git"].push_to_branch = AsyncMock(return_value=True)
     remote_deps["github"].get_pr_checks = AsyncMock(
-        return_value=[
-            PullRequestStatus(name="test", status="completed", conclusion="failure", url="http://url")
-        ]
+        return_value=[PullRequestStatus(name="test", status="completed", conclusion="failure", url="http://url")]
     )
+
     # Very long log (streamed)
     # We yield more than 2000 lines to trigger truncation
     async def mock_stream(branch_name):
@@ -247,9 +237,7 @@ async def test_remote_strategy_janitor_exception(remote_deps: Dict[str, Any]) ->
     # Test line 266: logger.error(f"Janitor summarization failed: {e}")
     remote_deps["git"].push_to_branch = AsyncMock(return_value=True)
     remote_deps["github"].get_pr_checks = AsyncMock(
-        return_value=[
-            PullRequestStatus(name="test", status="completed", conclusion="failure", url="http://url")
-        ]
+        return_value=[PullRequestStatus(name="test", status="completed", conclusion="failure", url="http://url")]
     )
 
     async def mock_stream(branch_name):
